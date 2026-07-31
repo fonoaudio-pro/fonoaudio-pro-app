@@ -1,0 +1,406 @@
+{
+  "name": "FonoPro-Final-Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
+        "authentication": "headerAuth",
+        "headerAuth": {
+          "name": "x-goog-api-key",
+          "value": "={{ $env[\"GOOGLE_API_KEY\"] }}"
+        },
+        "options": {
+          "bodyContentType": "json",
+          "queryParameters": {
+            "parameters": []
+          },
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        },
+        "bodyParametersJson": "={\"contents\":[{\"parts\":[{\"text\":\"Eres Fono-Pro AI, un asistente clínico experto. Analiza la siguiente solicitud y determina qué acción tomar. La solicitud es: {{$json.body}}. Debes responder ÚNICAMENTE con un objeto JSON que tenga exactamente estos dos campos:\\n\\n1. 'action': debe ser uno de estos valores exactos: 'supabase', 'calendar', 'telegram', 'obsidian', 'ocr', 'notebooklm', 'event', o 'chat'\\n2. 'response': un mensaje de texto en español que será enviado de vuelta al usuario como respuesta\\n\\nEjemplo de respuesta correcta: {\\\"action\\\": \\\"supabase\\\", \\\"response\\\": \\\"He guardado la información en la base de datos\\\"}\\n\\nNo incluyas texto adicional, solo el JSON puro.\"}]})\"",
+        "responseFormat": "json",
+        "responseFormatJsonParameters": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "action": {
+                "type": "string",
+                "enum": [
+                  "supabase",
+                  "calendar",
+                  "telegram",
+                  "obsidian",
+                  "ocr",
+                  "notebooklm",
+                  "event",
+                  "chat"
+                ]
+              },
+              "response": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "action",
+              "response"
+            ],
+            "additionalProperties": false
+          }
+        }
+      },
+      "id": "2",
+      "name": "Gemini Decision",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        450,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "value1": "={{ $json[\"candidates\"][0][\"content\"][\"parts\"][0][\"text\"] }}",
+          "rules": [
+            {
+              "type": "regex",
+              "name": "Check if response contains action",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"supabase\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains calendar",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"calendar\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains telegram",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"telegram\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains obsidian",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"obsidian\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains ocr",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"ocr\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains notebooklm",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"notebooklm\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains event",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"event\\\"",
+              "value3": ""
+            },
+            {
+              "type": "regex",
+              "name": "Check if response contains chat",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"chat\\\"",
+              "value3": ""
+            }
+          ]
+        },
+        "options": {
+          "caseSensitive": true
+        }
+      },
+      "id": "3",
+      "name": "Route Action",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "additionalFields": {}
+      },
+      "id": "4",
+      "name": "Supabase Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        850,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "insert"
+      },
+      "id": "5",
+      "name": "Calendar Action",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1,
+      "position": [
+        850,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage"
+      },
+      "id": "6",
+      "name": "Telegram Action",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1,
+      "position": [
+        850,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "put",
+        "url": "https://127.0.0.1:27124/vault/={{ $json.body.patientName || 'unknown' }}.md",
+        "headers": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{$env[\"OBSIDIAN_API_KEY\"]}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "text/markdown"
+            }
+          ]
+        },
+        "bodyParametersJson": "={{ `{$json.body.content || ''}` }}"
+      },
+      "id": "7",
+      "name": "Obsidian Action",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 2,
+      "position": [
+        850,
+        700
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "additionalFields": {}
+      },
+      "id": "8",
+      "name": "OCR Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "additionalFields": {}
+      },
+      "id": "9",
+      "name": "NotebookLM Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "upsert",
+        "additionalFields": {}
+      },
+      "id": "10",
+      "name": "Event Action",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1050,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "value1": "={{ $json[\"candidates\"][0][\"content\"][\"parts\"][0][\"text\"] }}",
+          "rules": [
+            {
+              "type": "regex",
+              "name": "Is chat response",
+              "value2": "\\\"action\\\"\\s*:\\s*\\\"chat\\\"",
+              "value3": ""
+            }
+          ]
+        },
+        "options": {
+          "caseSensitive": true
+        }
+      },
+      "id": "11",
+      "name": "Is Chat Response?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        650,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "response",
+              "value": "={{ $json[\"candidates\"][0][\"content\"][\"parts\"][0][\"text\"] | split(\\\"\\n\\\")[0] | replace(\\\"\\\\\\\"\\\", \\\"\\\"\") | replace(\\\"\\{ action: \\\", \\\"\\\"\") | replace(\\\", response: \\\", \\\"\\\"\") | replace(\\\"}\\\", \\\"\\\"\") }}"
+            }
+          ]
+        }
+      },
+      "id": "12",
+      "name": "Extract Response",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [
+        850,
+        900
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Gemini Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Decision": {
+      "main": [
+        [
+          {
+            "node": "Route Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Action": {
+      "main": [
+        [
+          {
+            "node": "Supabase Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendar Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Obsidian Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "OCR Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "NotebookLM Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Event Action",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Is Chat Response?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Chat Response?": {
+      "main": [
+        [
+          {
+            "node": "Extract Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionTimeout": 600
+  },
+  "id": "1"
+}

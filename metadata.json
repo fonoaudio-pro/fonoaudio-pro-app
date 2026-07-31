@@ -1,0 +1,8 @@
+{
+  "description": "Fonoaudio-Pro con integración avanzada de Gemini AI",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ],
+  "name": "Copy of Fonoaudio-Pro AI"
+}
