@@ -3,9 +3,11 @@
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/static",
+      "use": "@vercel/static-build",
       "config": {
-        "distDir": "dist"
+        "distDir": "dist",
+        "installCommand": "npm install --prefer-offline --no-audit --no-fund",
+        "buildCommand": "npm run build"
       }
     },
     {
