@@ -5,9 +5,7 @@
       "src": "package.json",
       "use": "@vercel/static-build",
       "config": {
-        "distDir": "dist",
-        "installCommand": "npm install --prefer-offline --no-audit --no-fund",
-        "buildCommand": "npx vite build"
+        "distDir": "dist"
       }
     },
     {
@@ -27,6 +25,5 @@
   ],
   "env": {
     "VERCEL": "1"
-  },
-  "outputDirectory": "dist"
+  }
 }
