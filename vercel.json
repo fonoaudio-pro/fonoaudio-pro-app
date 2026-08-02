@@ -3,18 +3,20 @@
   "builds": [
     {
       "src": "package.json",
-      "use": "@vercel/static-build",
+      "use": "@vercel/static",
       "config": {
-        "distDir": "dist",
-        "installCommand": "npm install --prefer-offline --no-audit --no-fund",
-        "buildCommand": "npm run build"
+        "distDir": "dist"
       }
+    },
+    {
+      "src": "api/index.js",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/$1.js"
+      "dest": "/api/index.js"
     },
     {
       "src": "/(.*)",
