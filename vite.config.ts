@@ -27,6 +27,9 @@ export default defineConfig(({ mode }) => {
           '@': path.resolve(__dirname, '.'),
         }
       },
+      esbuild: {
+        logLimit: 'silent',
+      },
       build: {
         rollupOptions: {
           output: {
@@ -35,11 +38,17 @@ export default defineConfig(({ mode }) => {
               supabase: ['@supabase/supabase-js'],
               google: ['googleapis'],
             }
+          },
+          output: {
+            chunkFileNames: 'assets/[hash].js',
+            entryFileNames: 'assets/[hash].js',
+            assetFileNames: 'assets/[hash].[ext]',
           }
         },
         target: 'esnext',
         cssCodeSplit: true,
         sourcemap: false,
+        chunkSizeWarningLimit: 2000,
       }
     };
 });
