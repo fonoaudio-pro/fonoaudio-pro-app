@@ -371,6 +371,10 @@ if (process.env.VERCEL !== '1') {
   startBackgroundWorker();
 }
 
-app.listen(PORT, () => {
-  console.log(`\n🧠 FonoAudio Server running on http://localhost:${PORT}`);
-});
+// Export app for Vercel; only listen in local/dev mode
+export { app };
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`\n🧠 FonoAudio Server running on http://localhost:${PORT}`);
+  });
+}
