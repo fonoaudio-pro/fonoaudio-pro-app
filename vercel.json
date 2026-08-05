@@ -7,7 +7,7 @@
       "config": {
         "distDir": "dist",
         "installCommand": "npm install --prefer-offline --no-audit --no-fund",
-        "buildCommand": "NODE_OPTIONS=\"--max-old-space-size=4096\" npx vite build"
+        "buildCommand": "npx vite build"
       }
     },
     {
