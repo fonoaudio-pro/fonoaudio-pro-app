@@ -7,7 +7,7 @@
     "dev": "vite",
     "server": "npx tsx fonoaudio-server.js",
     "import-workflows": "node scripts/import-n8n-workflows.mjs",
-    "build": "CI=false NODE_OPTIONS=--max-old-space-size=4096 vite build",
+    "build": "CI=false vite build",
     "preview": "vite preview",
     "test:e2e": "npx playwright test",
     "test:e2e:ui": "npx playwright test --ui",
