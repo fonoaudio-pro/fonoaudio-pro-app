@@ -44,7 +44,6 @@ dummy_clinical.txt
 scripts/
 *.bat
 *.pyc
-pictogram_engine/
 modal_comfyui.py
 deploy_comfyui.py
 test-*.ts
