@@ -1,4 +1,6 @@
-// Vercel serverless function entry point
-import { app } from '../fonoaudio-server.js';
-
-export default app;
+export default function handler(req) {
+  return new Response(JSON.stringify({ status: 'ok', timestamp: Date.now() }), {
+    status: 200,
+    headers: { 'content-type': 'application/json' }
+  });
+}
