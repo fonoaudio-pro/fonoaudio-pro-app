@@ -145,6 +145,15 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadSources = useCallback(async (nbId: string) => {
+    if (nbId.startsWith('nb-demo-')) {
+      setSources([
+        { id: 'src-1', title: 'Guía Clínica de Desarrollo del Lenguaje Infantil (FGA)', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-2', title: 'Protocolo de Evaluación Audiológica Terapéutica', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-3', title: 'Trastornos Orofaciales y Deglución Atípica', type: 'text', status: 'ready', url: '#' },
+        { id: 'src-4', title: 'Evidencia Científica en Fonoaudiología Basada en la Evidencia', type: 'url', status: 'ready', url: 'https://pubmed.ncbi.nlm.nih.gov' }
+      ]);
+      return;
+    }
     const r = await apiCall(`/notebooks/${nbId}/sources`);
     if (Array.isArray(r)) setSources(r);
     else if (r.sources) setSources(r.sources);
@@ -152,6 +161,15 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadArtifacts = useCallback(async (nbId: string) => {
+    if (nbId.startsWith('nb-demo-')) {
+      setArtifacts([
+        { id: 'art-1', title: 'Podcast Resumen: Hitos del Lenguaje 0-5 Años', type: 'audio', type_id: 'audio', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' },
+        { id: 'art-2', title: 'Quiz Clínico de Autoevaluación en Audiología', type: 'quiz', type_id: 'quiz', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
+        { id: 'art-3', title: 'Mapa Mental: Intervención Miofuncional', type: 'mind-map', type_id: 'mind-map', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
+        { id: 'art-4', title: 'Flashcards de Pares Mínimos Fonológicos', type: 'flashcards', type_id: 'flashcards', status: 'completed', status_id: 2, created_at: new Date().toISOString() }
+      ]);
+      return;
+    }
     const r = await apiCall(`/notebooks/${nbId}/artifacts`);
     const raw = r.artifacts || (Array.isArray(r) ? r : []);
     setArtifacts(raw.map((a: Artifact) => {
