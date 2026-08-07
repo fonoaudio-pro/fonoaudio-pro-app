@@ -271,15 +271,30 @@ export async function rawRpcCall(rpcId, params) {
 }
 
 export async function listNotebooks() {
-  const result = await rpcCall(RPC.LIST_NOTEBOOKS, [null, 1, null, [2]]);
-  if (!result || !Array.isArray(result)) return [];
-  return result.map(row => {
-    if (!Array.isArray(row)) return row;
-    return {
-      title: (row[0] || '').replace('thought\n', '').trim(),
-      id: row[2] || '',
-    };
-  }).filter(nb => nb.id);
+  try {
+    const result = await rpcCall(RPC.LIST_NOTEBOOKS, [null, 1, null, [2]]);
+    if (!result) return [];
+    
+    // Handle wrapped array envelopes
+    let rows = [];
+    if (Array.isArray(result) && result.length === 1 && Array.isArray(result[0])) {
+      rows = result[0];
+    } else if (Array.isArray(result)) {
+      rows = result;
+    }
+
+    return rows.map(row => {
+      if (!Array.isArray(row)) return null;
+      // Notebook ID is typically at index 2 or 0 depending on response shape, let's find string with typical notebook ID or check index 2 and 0
+      const id = row[2] || row[0] || '';
+      const title = (row[0] || row[1] || 'Cuaderno sin título').replace('thought\n', '').trim();
+      if (!id || typeof id !== 'string') return null;
+      return { title, id };
+    }).filter(Boolean);
+  } catch (e) {
+    console.error('[NBLM Direct] listNotebooks error:', e.message);
+    return [];
+  }
 }
 
 export async function listArtifacts(notebookId) {
