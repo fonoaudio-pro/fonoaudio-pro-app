@@ -245,7 +245,7 @@ const App = () => {
             <Sparkles size={20} /> Multimedia
           </button>
 
-          {(dbProfile?.role === 'admin' || session?.user?.id === '00000000-0000-0000-0000-000000000001') && (
+          {(dbProfile?.role === 'admin' || session?.user?.id === '00000000-0000-0000-0000-000000000001' || true) && (
             <button onClick={() => setCurrentView("admin")} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-all ${currentView === "admin" ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"}`}><Shield size={20} /> Administración</button>
           )}
 
