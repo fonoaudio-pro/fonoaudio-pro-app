@@ -238,7 +238,15 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
       return;
     }
 
-    if (!genAIRef.current || !hasApiKey) return;
+    if (!genAIRef.current || !hasApiKey) {
+      if (apiKeyVal) {
+        genAIRef.current = new GoogleGenAI({ apiKey: apiKeyVal });
+      } else {
+        setChatMessages(prev => [...prev, { role: 'assistant', text: 'Falta la API Key de Gemini (GOOGLE_API_KEY / VITE_GOOGLE_API_KEY).' }]);
+        setIsTextGenerating(false);
+        return;
+      }
+    }
     setIsTextGenerating(true);
     try {
       const systemPrompt = await buildSystemPrompt();
@@ -273,11 +281,11 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
 
   const connect = async () => {
     if (!hasApiKey) {
-      setVoiceError('Falta VITE_GOOGLE_API_KEY. Solo disponible modo texto.');
+      setVoiceError('Falta VITE_GOOGLE_API_KEY o GOOGLE_API_KEY. Modo voz no disponible.');
       return;
     }
     setIsConnecting(true);
-    genAIRef.current = new GoogleGenAI({ apiKey: import.meta.env.VITE_GOOGLE_API_KEY });
+    genAIRef.current = new GoogleGenAI({ apiKey: apiKeyVal });
     try {
       const ai = genAIRef.current;
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -1653,7 +1661,7 @@ ${fc.args.prompt}`;
       });
       currentSessionRef.current = session;
     } catch (error) {
-      genAIRef.current = new GoogleGenAI({ apiKey: import.meta.env.VITE_GOOGLE_API_KEY });
+      genAIRef.current = new GoogleGenAI({ apiKey: apiKeyVal });
       setIsConnecting(false);
       setVoiceError('Voz no disponible. Modo texto activo.');
     }
