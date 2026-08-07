@@ -26,6 +26,20 @@ function getStoragePath() {
 }
 
 function loadCookies() {
+  // Check environment variables first (for Vercel serverless deployment)
+  const envCookies = process.env.NOTEBOOKLM_COOKIES;
+  if (envCookies) {
+    try {
+      const parsed = JSON.parse(envCookies);
+      return (parsed.cookies || parsed).filter(c => {
+        const domain = c.domain || '';
+        return domain.includes('google.com') || domain.includes('googleusercontent.com');
+      });
+    } catch (e) {
+      console.error('[NBLM] Failed to parse NOTEBOOKLM_COOKIES env var:', e.message);
+    }
+  }
+
   const storagePath = getStoragePath();
   if (!fs.existsSync(storagePath)) return [];
   const storage = JSON.parse(fs.readFileSync(storagePath, 'utf8'));
