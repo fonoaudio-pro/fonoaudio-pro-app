@@ -61,14 +61,31 @@ export async function exportReportToPdf(options: PdfExportOptions): Promise<void
     const tempDiv = document.createElement('div');
     tempDiv.style.cssText = `
         width: ${contentWidth}mm;
-        font-family: 'Segoe UI', Arial, sans-serif;
-        font-size: 11px;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 13px;
         line-height: 1.6;
         color: #1e293b;
-        padding: 0;
+        padding: 10mm;
         background: white;
+        box-sizing: border-box;
     `;
-    tempDiv.innerHTML = content;
+    tempDiv.innerHTML = `
+        <style>
+            h1, h2, h3, h4 { color: #0f172a; font-weight: bold; margin-top: 1.2em; margin-bottom: 0.5em; }
+            h1 { font-size: 20px; border-bottom: 2px solid #e2e8f0; padding-bottom: 4px; }
+            h2 { font-size: 16px; border-bottom: 1px solid #e2e8f0; padding-bottom: 3px; }
+            h3 { font-size: 14px; }
+            p { margin-bottom: 0.8em; text-align: justify; }
+            ul, ol { margin-left: 20px; margin-bottom: 0.8em; }
+            li { margin-bottom: 0.3em; }
+            strong { color: #0f172a; }
+            blockquote { border-left: 3px solid #6366f1; padding-left: 10px; color: #475569; margin: 1em 0; }
+            table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 12px; }
+            th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; }
+            th { background: #f1f5f9; color: #0f172a; font-weight: bold; }
+        </style>
+        ${content}
+    `;
     document.body.appendChild(tempDiv);
 
     try {
