@@ -1,9 +1,16 @@
 import express from 'express';
-import { supabase } from '../utils/supabaseClient.js';
+import { createClient } from '@supabase/supabase-js';
 import ingestionService from '../server/services/ingestionService.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 const router = express.Router();
+
+function getSupabase() {
+  const url = process.env.VITE_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
 
 // 1. Endpoint para Ingestión (Upload PDF)
 router.post('/ingest', async (req, res) => {
@@ -57,6 +64,9 @@ router.post('/ingest-text', async (req, res) => {
 
 router.get('/history', async (req, res) => {
   try {
+    const supabase = getSupabase();
+    if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+
     const { data, error } = await supabase
       .from('clinical_history')
       .select('*')
@@ -82,6 +92,8 @@ router.post('/retrieve', async (req, res) => {
     const embedResult = await model.embedContent(query);
     const queryEmbedding = embedResult.embedding.values;
 
+    const supabase = getSupabase();
+    if (!supabase) throw new Error('Supabase not configured');
     const { data, error } = await supabase.rpc('match_source_embeddings', {
       query_embedding: queryEmbedding,
       match_threshold: 0.4,
