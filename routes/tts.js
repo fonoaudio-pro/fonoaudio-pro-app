@@ -139,6 +139,14 @@ const VOICE_MAP = {
     'default': { languageCode: 'es-AR', name: 'es-AR-Wavenet-A', ssmlGender: 'FEMALE' },
 };
 
+router.get('/voices', (req, res) => {
+    res.json({
+        voices: [
+            { id: 'es_AR-daniela', name: 'Daniela (Español Argentina - Cloud/Piper)', language: 'es-AR', gender: 'female' }
+        ]
+    });
+});
+
 router.post('/', async (req, res) => {
     const { text, voice = 'es_AR-daniela' } = req.body;
     if (!text || !text.trim()) {

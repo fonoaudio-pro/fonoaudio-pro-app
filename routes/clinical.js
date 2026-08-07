@@ -55,6 +55,21 @@ router.post('/ingest-text', async (req, res) => {
   }
 });
 
+router.get('/history', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('clinical_history')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ status: 'ok', history: data || [] });
+  } catch (error) {
+    console.error('[Clinical History Error]:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // 2. Endpoint para Retrieval (Búsqueda semántica)
 router.post('/retrieve', async (req, res) => {
   const { query, patientId } = req.body;

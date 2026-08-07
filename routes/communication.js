@@ -377,6 +377,17 @@ router.put('/gmail/messages/:id/read', async (req, res) => {
 });
 
 // ══════════════════════════════════════════════════════════════════
+router.get('/channels', (req, res) => {
+  res.json({
+    status: 'ok',
+    channels: [
+      { id: 'gmail', name: 'Gmail', active: true },
+      { id: 'telegram', name: 'Telegram', active: !!process.env.TELEGRAM_BOT_TOKEN },
+      { id: 'whatsapp', name: 'WhatsApp', active: false }
+    ]
+  });
+});
+
 // UNIFIED THREADS
 // ══════════════════════════════════════════════════════════════════
 
