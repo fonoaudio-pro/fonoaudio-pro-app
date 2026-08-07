@@ -147,7 +147,8 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
   const notebookCacheRef = useRef<{ data: string; ts: number } | null>(null);
   const NOTEBOOK_CACHE_TTL = 300000;
 
-  const hasApiKey = !!import.meta.env.VITE_GOOGLE_API_KEY;
+  const apiKeyVal = import.meta.env.VITE_GOOGLE_API_KEY || (typeof process !== 'undefined' && process.env?.GOOGLE_API_KEY) || '';
+  const hasApiKey = !!apiKeyVal;
   const isTextMode = !currentSessionRef.current || !!voiceError;
 
   // Persist chat messages to localStorage
