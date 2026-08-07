@@ -64,19 +64,21 @@ router.post('/ingest-text', async (req, res) => {
 
 router.get('/history', async (req, res) => {
   try {
-    const supabase = getSupabase();
-    if (!supabase) return res.status(500).json({ error: 'Supabase not configured' });
+    const url = process.env.VITE_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!url || !key) return res.status(500).json({ error: 'Missing env vars', url: !!url, key: !!key });
 
+    const supabase = createClient(url, key);
     const { data, error } = await supabase
       .from('clinical_history')
       .select('*')
-      .order('created_at', { ascending: false });
+      .limit(10);
 
     if (error) throw error;
     res.json({ status: 'ok', history: data || [] });
   } catch (error) {
     console.error('[Clinical History Error]:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message, stack: error.stack });
   }
 });
 
