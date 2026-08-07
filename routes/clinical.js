@@ -70,7 +70,7 @@ router.get('/history', async (req, res) => {
 
     const supabase = createClient(url, key);
     const { data, error } = await supabase
-      .from('clinical_history')
+      .from('clinical_history_records')
       .select('*')
       .limit(10);
 
