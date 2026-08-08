@@ -169,10 +169,46 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   const loadArtifacts = useCallback(async (nbId: string) => {
     if (nbId.includes('demo') || nbId.includes('test') || nbId === 'cuaderno-test-real') {
       setArtifacts([
-        { id: 'art-1', title: 'Dossier Clínico: Evaluación Audiológica Integral (Estudio y Resumen)', type: 'slide-deck', type_id: 'slide-deck', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
-        { id: 'art-2', title: 'Podcast de Repaso: Vía Aérea vs Vía Ósea y Enmascaramiento', type: 'audio', type_id: 'audio', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' },
-        { id: 'art-3', title: 'Quiz Clínico: Interpretación de Logoaudiometría', type: 'quiz', type_id: 'quiz', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
-        { id: 'art-4', title: 'Mapa Mental: Protocolos de Calidad ISO 8253-1', type: 'mind-map', type_id: 'mind-map', status: 'completed', status_id: 2, created_at: new Date().toISOString() }
+        { 
+          id: 'art-1', 
+          title: 'Dossier Clínico: Evaluación Audiológica Integral (Estudio y Resumen)', 
+          type: 'slide-deck', 
+          type_id: 'slide-deck', 
+          status: 'completed', 
+          status_id: 2, 
+          created_at: new Date().toISOString(), 
+          url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' 
+        },
+        { 
+          id: 'art-2', 
+          title: 'Podcast de Repaso: Vía Aérea vs Vía Ósea y Enmascaramiento', 
+          type: 'audio', 
+          type_id: 'audio', 
+          status: 'completed', 
+          status_id: 2, 
+          created_at: new Date().toISOString(), 
+          url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' 
+        },
+        { 
+          id: 'art-3', 
+          title: 'Quiz Clínico: Interpretación de Logoaudiometría', 
+          type: 'quiz', 
+          type_id: 'quiz', 
+          status: 'completed', 
+          status_id: 2, 
+          created_at: new Date().toISOString(),
+          content: 'Pregunta 1: ¿Cuál es el umbral normal de audición?\nRespuesta: Entre 0 y 25 dB HL.\n\nPregunta 2: ¿Qué evalúa la logoaudiometría?\nRespuesta: El porcentaje de discriminación y inteligibilidad de la palabra.'
+        },
+        { 
+          id: 'art-4', 
+          title: 'Mapa Mental: Protocolos de Calidad ISO 8253-1', 
+          type: 'mind-map', 
+          type_id: 'mind-map', 
+          status: 'completed', 
+          status_id: 2, 
+          created_at: new Date().toISOString(),
+          content: '• Calibración anual obligatoria\n• Condiciones acústicas de la cabina\n• Uso de enmascaramiento enmascarado\n• Registro clínico estandarizado'
+        }
       ]);
       return;
     }
