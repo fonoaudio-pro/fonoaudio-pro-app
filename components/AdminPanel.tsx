@@ -67,6 +67,11 @@ export default function AdminPanel({ onAccessDenied }: { onAccessDenied?: () => 
     try {
       await ProfileService.updateRole(userId, newRole);
       setProfiles(prev => prev.map(p => p.id === userId ? { ...p, role: newRole } : p));
+      // If the current user changed their own role, refresh page to reload profile across app
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user && user.id === userId) {
+        window.location.reload();
+      }
     } catch (e) {
       console.error('[AdminPanel] Error updating role:', e);
     }

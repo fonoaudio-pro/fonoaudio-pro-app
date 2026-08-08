@@ -10,6 +10,35 @@ import path from 'path';
 
 const router = express.Router();
 
+// Admin endpoint: update profile role using service role key (bypasses RLS)
+router.post('/admin/role', async (req, res) => {
+    try {
+        const { userId, role } = req.body;
+        if (!userId || !role) {
+            return res.status(400).json({ status: 'error', message: 'userId y role son requeridos' });
+        }
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ status: 'error', message: 'Supabase no configurado en backend' });
+        }
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { error } = await supabase
+            .from('profiles')
+            .update({ role, updated_at: new Date().toISOString() })
+            .eq('id', userId);
+
+        if (error) {
+            console.error('[Admin Role Update Error]:', error.message);
+            return res.status(500).json({ status: 'error', message: error.message });
+        }
+        res.json({ status: 'ok', role });
+    } catch (e) {
+        console.error('[Admin Role Endpoint Error]:', e);
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
 // ─── Pending files tracking (chat_id → last processed file) ───
 // Migrated from in-memory Map to Supabase for Vercel compatibility.
 // Uses telegram_pending_queue table with status='pending_file'.

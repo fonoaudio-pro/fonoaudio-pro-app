@@ -54,6 +54,18 @@ export const ProfileService = {
   },
 
   async updateRole(id: string, role: UserRole): Promise<void> {
+    try {
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
+      const resp = await fetch(`${backendUrl}/api/admin/role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: id, role }),
+      });
+      if (resp.ok) return;
+    } catch (e) {
+      console.warn('[ProfileService] Backend updateRole failed, trying direct Supabase:', e);
+    }
+
     const { error } = await supabase
       .from('profiles')
       .update({ role, updated_at: new Date().toISOString() })

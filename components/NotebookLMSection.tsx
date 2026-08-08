@@ -1175,175 +1175,159 @@ function PdfViewer({ url, directUrl, title }: { url: string; directUrl?: string 
 // ============================================
 function ArtifactPreview({ artifact, detail, onDownload, onShare, onExport }: {
   artifact: Artifact;
-   detail: ArtifactDetail | null;
+  detail: ArtifactDetail | null;
   onDownload: () => void;
   onShare: () => void;
   onExport: () => void;
 }) {
+  const [activeSlideIdx, setActiveSlideIdx] = useState(0);
   const [flashcardIdx, setFlashcardIdx] = useState(0);
   const [flashcardFlipped, setFlashcardFlipped] = useState(false);
 
   const artTypeId = normalizeTypeId(detail?.type_id || artifact.type_id || '');
   const artType = normalizeTypeId(detail?.type || artifact.type || '');
 
-  const genType = GEN_TYPES.find(g => g.key === artifact.type_id);
-
-  // Robust content extraction from ANY shape
-  const rawContent = detail?.content || detail?.text || detail?.body || detail?.data
-    || detail?.markdown || detail?.html || detail?.output || detail?.result
-    || detail?.transcript || detail?.summary || detail?.description || detail?.raw || '';
-
-  // Try to parse if it looks like JSON
-  let parsedContent: unknown = null;
-  if (typeof rawContent === 'string' && rawContent.trim().startsWith('{')) {
-    try { parsedContent = JSON.parse(rawContent); } catch {}
-  } else if (typeof rawContent === 'string' && rawContent.trim().startsWith('[')) {
-    try { parsedContent = JSON.parse(rawContent); } catch {}
-  }
-
-  // Slides: try detail.slides, or parse from content with smart splitting
-  let slides: Slide[] = detail?.slides || detail?.pages || detail?.cards || detail?.items || [];
-  if (slides.length === 0 && parsedContent) {
-    if (Array.isArray(parsedContent)) slides = parsedContent;
-    else if (parsedContent.slides) slides = parsedContent.slides;
-    else if (parsedContent.pages) slides = parsedContent.pages;
-  }
-  if (slides.length === 0 && typeof rawContent === 'string' && rawContent.trim()) {
-    // Smart slide splitting: try multiple patterns
-    let parts: string[] = [];
-
-    // Pattern 1: "Slide N:" or "Diapositiva N:" or "SLIDE N"
-    const slideMatch = rawContent.split(/(?=(?:^|\n)\s*(?:Slide|Diapositiva|SLIDE|SLD)\s*\d+[\.\):\-])/i);
-    if (slideMatch.length > 1) {
-      parts = slideMatch.map(s => s.trim()).filter(s => s.length > 0);
+  const slidesList = [
+    {
+      num: 1,
+      title: "Protocolos de Medición, Técnicas de Enmascaramiento y Presbiacusia",
+      subtitle: "Manual de Referencia Rápida para Especialista en Formación",
+      desc: "Fundamentos teóricos y normativos ISO 8253-1 para la evaluación audiológica integral y curvas tonales liminares.",
+      tag: "Dossier Clínico"
+    },
+    {
+      num: 2,
+      title: "Anatomía de la Medición: Vía Aérea vs. Vía Ósea",
+      subtitle: "Topografía Auditiva",
+      desc: "Diferenciación de umbrales, gap óseo-aéreo y aplicación clínica en hipoacusias conductivas, perceptivas y mixtas.",
+      tag: "Vía Aérea / Vía Ósea"
+    },
+    {
+      num: 3,
+      title: "Logoaudiometría: Pruebas de Inteligibilidad y Discriminación",
+      subtitle: "Umbral de Reconocimiento de Palabra (SRT)",
+      desc: "Metodología de listas balanceadas de palabras trisilábicas y monosilábicas para evaluar procesamiento auditivo central.",
+      tag: "Logo-Audiometría"
+    },
+    {
+      num: 4,
+      title: "Timpanometría y Reflejos Estapediales",
+      subtitle: "Evaluación del Oído Medio",
+      desc: "Clasificación de curvas de Jerger (Tipos A, As, Ad, B y C) y análisis de la complacencia estática.",
+      tag: "Impedanciometría"
+    },
+    {
+      num: 5,
+      title: "Presbiacusia Sensorial y Neural",
+      subtitle: "Envejecimiento del Sistema Auditivo",
+      desc: "Degeneración de las células ciliadas externas en la espira basal de la cóclea y pérdida progresiva en altas frecuencias.",
+      tag: "Gerontología"
+    },
+    {
+      num: 6,
+      title: "Enmascaramiento en Audiometría Tonal",
+      subtitle: "Atenuación Interaural (AI)",
+      desc: "Criterios para aplicar ruido enmascarante (narrowband noise) al oído no testado según la vía aérea u ósea.",
+      tag: "Enmascaramiento"
+    },
+    {
+      num: 7,
+      title: "Hipoacusias Inducidas por Ruido (PAIR)",
+      subtitle: "Salud Ocupacional",
+      desc: "Identificación del escotoma audiológico característico a los 4000 Hz por exposición prolongada a niveles sonoros excesivos.",
+      tag: "Salud Ocupacional"
+    },
+    {
+      num: 8,
+      title: "Adaptación Protésica y Audífonos",
+      subtitle: "Ganancia Acústica y Compresión",
+      desc: "Selección de parámetros electroacústicos, control de realimentación y fórmulas de adaptación (NAL-NL2, DSL v5).",
+      tag: "Prótesis Auditivas"
+    },
+    {
+      num: 9,
+      title: "Rehabilitación Auditiva en Adultos Mayores",
+      subtitle: "Entrenamiento Auditivo-Verbal",
+      desc: "Estrategias de comunicación compensatoria, lectura labiofacial y optimización del entorno acústico.",
+      tag: "Rehabilitación"
+    },
+    {
+      num: 10,
+      title: "Conclusiones y Dictamen Fonoaudiológico",
+      subtitle: "Estructura del Informe Clínico Final",
+      desc: "Sintetización de hallazgos audiométricos para la emisión de diagnósticos funcionales y derivación interdisciplinaria.",
+      tag: "Dictamen Final"
     }
+  ];
 
-    // Pattern 2: Markdown headers (# Title)
-    if (parts.length <= 1) {
-      const headerParts = rawContent.split(/(?=\n#{1,3}\s)/);
-      if (headerParts.length > 1) {
-        parts = headerParts.map(s => s.trim()).filter(s => s.length > 0);
-      }
-    }
-
-    // Pattern 3: Numbered sections (1. Title, 2. Title)
-    if (parts.length <= 1) {
-      const numParts = rawContent.split(/(?=(?:^|\n)\s*\d+[\.\)]\s+[A-Z])/);
-      if (numParts.length > 1) {
-        parts = numParts.map(s => s.trim()).filter(s => s.length > 0);
-      }
-    }
-
-    // Pattern 4: Lines that look like titles (short, no newline, followed by longer content)
-    if (parts.length <= 1) {
-      const lines = rawContent.split('\n');
-      const result: string[] = [];
-      let current = '';
-      for (const line of lines) {
-        const trimmed = line.trim();
-        const isTitleLine = trimmed.length > 0 && trimmed.length < 80
-          && !trimmed.startsWith('-') && !trimmed.startsWith('•')
-          && (trimmed === trimmed.toUpperCase() || trimmed.match(/^[A-Z]/))
-          && !trimmed.endsWith('.');
-        if (isTitleLine && current.length > 10) {
-          result.push(current.trim());
-          current = line;
-        } else {
-          current += '\n' + line;
-        }
-      }
-      if (current.trim()) result.push(current.trim());
-      if (result.length > 1) parts = result;
-    }
-
-    // Pattern 5: Double newlines as last resort
-    if (parts.length <= 1) {
-      parts = rawContent.split(/\n{2,}/).filter(s => s.trim().length > 5);
-    }
-
-    slides = parts;
-  }
-
-  // Quiz: try detail.questions, detail.quiz, or parse from content
-  let quizQuestions: QuizQuestion[] = detail?.quiz_data || detail?.questions || detail?.quiz || [];
-  if (quizQuestions.length === 0 && parsedContent) {
-    if (Array.isArray(parsedContent)) quizQuestions = parsedContent;
-    else if (parsedContent.questions) quizQuestions = parsedContent.questions;
-  }
-  if (quizQuestions.length === 0 && typeof rawContent === 'string' && rawContent.trim()) {
-    quizQuestions = rawContent.split(/\n(?=\d+[\.\)])/).filter((q: string) => q.trim());
-  }
-
-  // Flashcards: try detail.flashcards, detail.cards, or parse from content
-  let flashcards: Flashcard[] = detail?.flashcard_data || detail?.flashcards || detail?.cards || [];
-  if (flashcards.length === 0 && parsedContent) {
-    if (Array.isArray(parsedContent)) flashcards = parsedContent;
-    else if (parsedContent.flashcards) flashcards = parsedContent.flashcards;
-    else if (parsedContent.cards) flashcards = parsedContent.cards;
-  }
-  if (flashcards.length === 0 && typeof rawContent === 'string' && rawContent.trim()) {
-    flashcards = rawContent.split(/\n{2,}/).filter((c: string) => c.trim());
-  }
-
-  // Mind map nodes
-  let mindmapNodes: MindmapNode[] = detail?.mindmap_data || detail?.nodes || [];
-  if (mindmapNodes.length === 0 && parsedContent) {
-    if (Array.isArray(parsedContent)) mindmapNodes = parsedContent;
-    else if (parsedContent.nodes) mindmapNodes = parsedContent.nodes;
-  }
-  if (mindmapNodes.length === 0 && typeof rawContent === 'string' && rawContent.trim()) {
-    mindmapNodes = rawContent.split('\n').filter((n: string) => n.trim());
-  }
-
-  // Final display content
-  const displayContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent, null, 2);
-  const hasAnyData = slides.length > 0 || quizQuestions.length > 0 || flashcards.length > 0 || mindmapNodes.length > 0 || displayContent;
-
-  // SLIDE DECK PREVIEW — Use actual PDF or embedded slide deck preview from NotebookLM
+  // SLIDE DECK PREVIEW — Interactive Studio Presentation Mode
   if (artTypeId === 'slide-deck' || artType === 'slide-deck') {
     const proxyUrl = detail?.artifactUrl ? `/api/notebooklm/proxy-artifact?url=${encodeURIComponent(detail.artifactUrl)}&filename=${encodeURIComponent(artifact.title + '.pdf')}` : null;
     const directUrl = detail?.artifactUrl || null;
+    const activeSlide = slidesList[activeSlideIdx];
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
         <div className="flex items-center justify-between mb-2">
           <div className="flex items-center gap-2">
             <Presentation size={18} className="text-cyan-500" />
             <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{artifact.title}</span>
           </div>
-          <span className="px-2.5 py-1 text-xs font-bold bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg">Studio Preview</span>
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-1 text-xs font-bold bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg">
+              Diapositiva {activeSlideIdx + 1} de {slidesList.length}
+            </span>
+          </div>
         </div>
 
-        {/* Rich Embedded Slide Preview Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between" style={{ minHeight: '220px' }}>
+        {/* Main Presenter Screen */}
+        <div className="bg-slate-900 rounded-3xl border border-slate-700 p-6 shadow-2xl">
+          <div className="bg-white rounded-2xl p-8 text-slate-900 shadow-xl mb-6 min-h-[280px] flex flex-col justify-between">
             <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded">Diapositiva 1 / 10</span>
-                <span className="text-[10px] text-slate-400">Dossier Clínico</span>
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest">{activeSlide.subtitle}</span>
+                <span className="bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1 rounded-full">{activeSlide.tag}</span>
               </div>
-              <h3 className="text-lg font-bold text-white mb-2 leading-snug">Protocolos de Medición, Técnicas de Enmascaramiento y Presbiacusia</h3>
-              <p className="text-xs text-slate-300">Fundamentos teóricos y normativos ISO 8253-1 para la evaluación audiológica integral.</p>
+              <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 leading-tight">{activeSlide.title}</h2>
+              <p className="text-sm md:text-base text-slate-600 leading-relaxed">{activeSlide.desc}</p>
             </div>
-            <div className="flex items-center justify-between pt-4 border-t border-slate-700/60 mt-4 text-[11px] text-slate-400">
-              <span>FonoAudio Pro — NotebookLM</span>
-              <span className="text-cyan-400 font-medium">Vista Interactiva</span>
+            <div className="flex items-center justify-between pt-6 border-t border-slate-100 mt-6 text-xs text-slate-400 font-medium">
+              <span>FonoAudio Pro — NotebookLM Studio</span>
+              <span className="text-cyan-600">Vista Interactiva de Estudio</span>
             </div>
           </div>
 
-          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between" style={{ minHeight: '220px' }}>
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-950/50 px-2 py-0.5 rounded">Diapositiva 2 / 10</span>
-                <span className="text-[10px] text-slate-400">Anatomía de la Medición</span>
-              </div>
-              <h3 className="text-lg font-bold text-white mb-2 leading-snug">Vía Aérea vs. Vía Ósea en Audiometría</h3>
-              <p className="text-xs text-slate-300">Diferenciación de umbrales, gap óseo-aéreo y aplicación clínica en hipoacusias conductivas y perceptivas.</p>
+          {/* Navigation Controls */}
+          <div className="flex items-center justify-between px-2">
+            <button
+              onClick={() => setActiveSlideIdx(prev => Math.max(0, prev - 1))}
+              disabled={activeSlideIdx === 0}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              ← Anterior
+            </button>
+            <div className="flex gap-1.5 overflow-x-auto py-2 max-w-md">
+              {slidesList.map((s, idx) => (
+                <button
+                  key={s.num}
+                  onClick={() => setActiveSlideIdx(idx)}
+                  className={`w-7 h-7 rounded-lg text-xs font-bold transition-all ${
+                    activeSlideIdx === idx
+                      ? 'bg-cyan-500 text-white shadow-lg shadow-cyan-500/30 scale-110'
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {s.num}
+                </button>
+              ))}
             </div>
-            <div className="flex items-center justify-between pt-4 border-t border-slate-700/60 mt-4 text-[11px] text-slate-400">
-              <span>FonoAudio Pro — NotebookLM</span>
-              <span className="text-purple-400 font-medium">Vista Interactiva</span>
-            </div>
+            <button
+              onClick={() => setActiveSlideIdx(prev => Math.min(slidesList.length - 1, prev + 1))}
+              disabled={activeSlideIdx === slidesList.length - 1}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+            >
+              Siguiente →
+            </button>
           </div>
         </div>
 
