@@ -1190,73 +1190,83 @@ function ArtifactPreview({ artifact, detail, onDownload, onShare, onExport }: {
   const slidesList = [
     {
       num: 1,
-      title: "Protocolos de Medición, Técnicas de Enmascaramiento y Presbiacusia",
-      subtitle: "Manual de Referencia Rápida para Especialista en Formación",
-      desc: "Fundamentos teóricos y normativos ISO 8253-1 para la evaluación audiológica integral y curvas tonales liminares.",
-      tag: "Dossier Clínico"
+      title: "Dossier Clínico: Evaluación Audiológica Integral",
+      subtitle: "MANUAL DE REFERENCIA RÁPIDA PARA ESPECIALISTA EN FORMACIÓN",
+      desc: "Protocolos de Medición, Técnicas de Enmascaramiento y el Perfil de la Presbiacusia. Fundamentos teóricos y normativos ISO 8253-1 para la evaluación audiológica integral.",
+      tag: "Dossier Clínico",
+      graphicType: "cover"
     },
     {
       num: 2,
       title: "Anatomía de la Medición: Vía Aérea vs. Vía Ósea",
-      subtitle: "Topografía Auditiva",
-      desc: "Diferenciación de umbrales, gap óseo-aéreo y aplicación clínica en hipoacusias conductivas, perceptivas y mixtas.",
-      tag: "Vía Aérea / Vía Ósea"
+      subtitle: "TOPOGRAFÍA AUDITIVA",
+      desc: "Diferenciación de umbrales y gap óseo-aéreo. Vía Aérea: Oído Externo, Medio e Interno (Transductor: Auriculares de inserción). Vía Ósea: Estimulación directa a la cóclea.",
+      tag: "Vía Aérea / Vía Ósea",
+      graphicType: "audiometry_comparison"
     },
     {
       num: 3,
       title: "Logoaudiometría: Pruebas de Inteligibilidad y Discriminación",
-      subtitle: "Umbral de Reconocimiento de Palabra (SRT)",
-      desc: "Metodología de listas balanceadas de palabras trisilábicas y monosilábicas para evaluar procesamiento auditivo central.",
-      tag: "Logo-Audiometría"
+      subtitle: "UMBRAL DE RECONOCIMIENTO DE PALABRA (SRT)",
+      desc: "Metodología de listas balanceadas de palabras trisilábicas y monosilábicas para evaluar procesamiento auditivo central y discriminación.",
+      tag: "Logo-Audiometría",
+      graphicType: "speech"
     },
     {
       num: 4,
       title: "Timpanometría y Reflejos Estapediales",
-      subtitle: "Evaluación del Oído Medio",
-      desc: "Clasificación de curvas de Jerger (Tipos A, As, Ad, B y C) y análisis de la complacencia estática.",
-      tag: "Impedanciometría"
+      subtitle: "EVALUACIÓN DEL OÍDO MEDIO",
+      desc: "Clasificación de curvas de Jerger (Tipos A, As, Ad, B y C) y análisis de la complacencia estática con sonda de 226 Hz.",
+      tag: "Impedanciometría",
+      graphicType: "tympanogram"
     },
     {
       num: 5,
       title: "Presbiacusia Sensorial y Neural",
-      subtitle: "Envejecimiento del Sistema Auditivo",
-      desc: "Degeneración de las células ciliadas externas en la espira basal de la cóclea y pérdida progresiva en altas frecuencias.",
-      tag: "Gerontología"
+      subtitle: "ENVEJECIMIENTO DEL SISTEMA AUDITIVO",
+      desc: "Degeneración de las células ciliadas externas en la espira basal de la cóclea y pérdida progresiva simétrica en altas frecuencias.",
+      tag: "Gerontología",
+      graphicType: "chart"
     },
     {
       num: 6,
       title: "Enmascaramiento en Audiometría Tonal",
-      subtitle: "Atenuación Interaural (AI)",
-      desc: "Criterios para aplicar ruido enmascarante (narrowband noise) al oído no testado según la vía aérea u ósea.",
-      tag: "Enmascaramiento"
+      subtitle: "ATENUACIÓN INTERAURAL (AI)",
+      desc: "Criterios estrictos para aplicar ruido enmascarante (narrowband noise) al oído no testado según la vía aérea (40-70 dB) u ósea (0 dB).",
+      tag: "Enmascaramiento",
+      graphicType: "masking"
     },
     {
       num: 7,
       title: "Hipoacusias Inducidas por Ruido (PAIR)",
-      subtitle: "Salud Ocupacional",
-      desc: "Identificación del escotoma audiológico característico a los 4000 Hz por exposición prolongada a niveles sonoros excesivos.",
-      tag: "Salud Ocupacional"
+      subtitle: "SALUD OCUPACIONAL",
+      desc: "Identificación del escotoma audiológico característico a los 4000 Hz por exposición prolongada a niveles sonoros excesivos en el ámbito laboral.",
+      tag: "Salud Ocupacional",
+      graphicType: "notch"
     },
     {
       num: 8,
       title: "Adaptación Protésica y Audífonos",
-      subtitle: "Ganancia Acústica y Compresión",
-      desc: "Selección de parámetros electroacústicos, control de realimentación y fórmulas de adaptación (NAL-NL2, DSL v5).",
-      tag: "Prótesis Auditivas"
+      subtitle: "GANANCIA ACÚSTICA Y COMPRESIÓN",
+      desc: "Selección de parámetros electroacústicos, control de realimentación y fórmulas de adaptación prescriptiva (NAL-NL2, DSL v5).",
+      tag: "Prótesis Auditivas",
+      graphicType: "hearing_aid"
     },
     {
       num: 9,
       title: "Rehabilitación Auditiva en Adultos Mayores",
-      subtitle: "Entrenamiento Auditivo-Verbal",
-      desc: "Estrategias de comunicación compensatoria, lectura labiofacial y optimización del entorno acústico.",
-      tag: "Rehabilitación"
+      subtitle: "ENTRENAMIENTO AUDITIVO-VERBAL",
+      desc: "Estrategias de comunicación compensatoria, lectura labiofacial, asesoramiento y optimización del entorno acústico cotidiano.",
+      tag: "Rehabilitación",
+      graphicType: "rehab"
     },
     {
       num: 10,
       title: "Conclusiones y Dictamen Fonoaudiológico",
-      subtitle: "Estructura del Informe Clínico Final",
-      desc: "Sintetización de hallazgos audiométricos para la emisión de diagnósticos funcionales y derivación interdisciplinaria.",
-      tag: "Dictamen Final"
+      subtitle: "ESTRUCTURA DEL INFORME CLÍNICO FINAL",
+      desc: "Sintetización de hallazgos audiométricos, impedanciométricos y logoaudiométricos para la emisión de diagnósticos funcionales y derivación médica.",
+      tag: "Dictamen Final",
+      graphicType: "conclusion"
     }
   ];
 
@@ -1282,15 +1292,42 @@ function ArtifactPreview({ artifact, detail, onDownload, onShare, onExport }: {
 
         {/* Main Presenter Screen */}
         <div className="bg-slate-900 rounded-3xl border border-slate-700 p-6 shadow-2xl">
-          <div className="bg-white rounded-2xl p-8 text-slate-900 shadow-xl mb-6 min-h-[300px] flex flex-col justify-between">
+          <div className="bg-white rounded-2xl p-8 text-slate-900 shadow-xl mb-6 min-h-[340px] flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[11px] text-slate-400 uppercase font-bold tracking-widest">{activeSlide.subtitle}</span>
                 <span className="bg-slate-100 text-slate-700 text-xs font-bold px-3 py-1 rounded-full">{activeSlide.tag}</span>
               </div>
               <h2 className="text-2xl md:text-3xl font-black text-slate-900 mb-4 leading-tight">{activeSlide.title}</h2>
-              <p className="text-sm md:text-base text-slate-600 leading-relaxed">{activeSlide.desc}</p>
+              <p className="text-sm md:text-base text-slate-600 leading-relaxed mb-4">{activeSlide.desc}</p>
+              
+              {/* Graphic Mockup / Illustration matching NotebookLM Studio */}
+              {activeSlide.graphicType === 'audiometry_comparison' && (
+                <div className="bg-slate-100 rounded-xl p-4 flex gap-4 items-center justify-center border border-slate-200">
+                  <div className="flex-1 bg-red-50 border border-red-200 rounded-lg p-3 text-center">
+                    <span className="text-xs font-bold text-red-700 uppercase">Vía Aérea (Oído Externo/Medio/Interno)</span>
+                    <p className="text-[11px] text-slate-600 mt-1">Transductor: Auriculares de inserción o supra-aurales.</p>
+                  </div>
+                  <div className="flex-1 bg-blue-50 border border-blue-200 rounded-lg p-3 text-center">
+                    <span className="text-xs font-bold text-blue-700 uppercase">Vía Ósea (Estimulación Directa)</span>
+                    <p className="text-[11px] text-slate-600 mt-1">Vibrador óseo en mastoides sin participación de oído externo/medio.</p>
+                  </div>
+                </div>
+              )}
+              {activeSlide.graphicType === 'tympanogram' && (
+                <div className="bg-slate-100 rounded-xl p-4 flex gap-2 items-center justify-around border border-slate-200 text-center text-xs font-bold">
+                  <span className="bg-green-100 text-green-700 px-3 py-1.5 rounded">Curva Tipo A (Normal)</span>
+                  <span className="bg-amber-100 text-amber-700 px-3 py-1.5 rounded">Curva Tipo B (Derrame)</span>
+                  <span className="bg-red-100 text-red-700 px-3 py-1.5 rounded">Curva Tipo C (Disfunción Tuba)</span>
+                </div>
+              )}
+              {activeSlide.graphicType === 'chart' && (
+                <div className="bg-slate-100 rounded-xl p-4 text-center border border-slate-200 text-xs text-slate-700 font-semibold">
+                  📈 Gráfico Audiométrico: Caída progresiva simétrica en frecuencias agudas (2000Hz - 8000Hz).
+                </div>
+              )}
             </div>
+            
             <div className="flex items-center justify-between pt-6 border-t border-slate-100 mt-6 text-xs text-slate-400 font-medium">
               <span>FonoAudio Pro — NotebookLM Studio</span>
               <span className="text-cyan-600 font-bold">Vista Interactiva de Estudio</span>
