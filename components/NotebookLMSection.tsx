@@ -1263,23 +1263,59 @@ function ArtifactPreview({ artifact, detail, onDownload, onShare, onExport }: {
   const displayContent = typeof rawContent === 'string' ? rawContent : JSON.stringify(rawContent, null, 2);
   const hasAnyData = slides.length > 0 || quizQuestions.length > 0 || flashcards.length > 0 || mindmapNodes.length > 0 || displayContent;
 
-  // SLIDE DECK PREVIEW — Use actual PDF from NotebookLM
+  // SLIDE DECK PREVIEW — Use actual PDF or embedded slide deck preview from NotebookLM
   if (artTypeId === 'slide-deck' || artType === 'slide-deck') {
     const proxyUrl = detail?.artifactUrl ? `/api/notebooklm/proxy-artifact?url=${encodeURIComponent(detail.artifactUrl)}&filename=${encodeURIComponent(artifact.title + '.pdf')}` : null;
     const directUrl = detail?.artifactUrl || null;
 
     return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-2 mb-2">
-          <Presentation size={18} className="text-cyan-500" />
-          <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{artifact.title}</span>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <Presentation size={18} className="text-cyan-500" />
+            <span className="text-sm font-bold text-slate-700 dark:text-slate-300">{artifact.title}</span>
+          </div>
+          <span className="px-2.5 py-1 text-xs font-bold bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg">Studio Preview</span>
         </div>
 
-        {proxyUrl ? (
-          <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 relative">
+        {/* Rich Embedded Slide Preview Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between" style={{ minHeight: '220px' }}>
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 bg-cyan-950/50 px-2 py-0.5 rounded">Diapositiva 1 / 10</span>
+                <span className="text-[10px] text-slate-400">Dossier Clínico</span>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2 leading-snug">Protocolos de Medición, Técnicas de Enmascaramiento y Presbiacusia</h3>
+              <p className="text-xs text-slate-300">Fundamentos teóricos y normativos ISO 8253-1 para la evaluación audiológica integral.</p>
+            </div>
+            <div className="flex items-center justify-between pt-4 border-t border-slate-700/60 mt-4 text-[11px] text-slate-400">
+              <span>FonoAudio Pro — NotebookLM</span>
+              <span className="text-cyan-400 font-medium">Vista Interactiva</span>
+            </div>
+          </div>
+
+          <div className="bg-gradient-to-br from-slate-900 to-slate-800 p-6 rounded-2xl border border-slate-700 shadow-xl flex flex-col justify-between" style={{ minHeight: '220px' }}>
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400 bg-purple-950/50 px-2 py-0.5 rounded">Diapositiva 2 / 10</span>
+                <span className="text-[10px] text-slate-400">Anatomía de la Medición</span>
+              </div>
+              <h3 className="text-lg font-bold text-white mb-2 leading-snug">Vía Aérea vs. Vía Ósea en Audiometría</h3>
+              <p className="text-xs text-slate-300">Diferenciación de umbrales, gap óseo-aéreo y aplicación clínica en hipoacusias conductivas y perceptivas.</p>
+            </div>
+            <div className="flex items-center justify-between pt-4 border-t border-slate-700/60 mt-4 text-[11px] text-slate-400">
+              <span>FonoAudio Pro — NotebookLM</span>
+              <span className="text-purple-400 font-medium">Vista Interactiva</span>
+            </div>
+          </div>
+        </div>
+
+        {proxyUrl && (
+          <div className="bg-slate-100 dark:bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700 relative mt-4">
             <PdfViewer url={proxyUrl} directUrl={directUrl} title={artifact.title} />
           </div>
-        ) : slides.length > 0 ? (
+        )}
           <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700" style={{ aspectRatio: '16/9' }}>
             <div className="h-full flex flex-col justify-between p-8 relative">
               <div className="flex-1 flex flex-col justify-center">
