@@ -1316,35 +1316,8 @@ function ArtifactPreview({ artifact, detail, onDownload, onShare, onExport }: {
             <PdfViewer url={proxyUrl} directUrl={directUrl} title={artifact.title} />
           </div>
         )}
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-700" style={{ aspectRatio: '16/9' }}>
-            <div className="h-full flex flex-col justify-between p-8 relative">
-              <div className="flex-1 flex flex-col justify-center">
-                {slides[0] && (() => {
-                  const raw = typeof slides[0] === 'string' ? slides[0] : slides[0].content || slides[0].text || '';
-                  const lines = raw.replace(/^#+\s*/gm, '').split('\n').filter((l: string) => l.trim());
-                  return (
-                    <>
-                      <h2 className="text-2xl md:text-3xl font-bold text-white mb-4 leading-tight">{lines[0]}</h2>
-                      {lines.slice(1).join('\n') && <div className="text-sm md:text-base text-slate-300 leading-relaxed whitespace-pre-wrap max-w-3xl">{lines.slice(1).join('\n')}</div>}
-                    </>
-                  );
-                })()}
-              </div>
-              <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
-                <span className="text-[10px] text-slate-500">FonoAudio Pro — NotebookLM</span>
-                <span className="text-[10px] text-slate-500">{slides.length} diapositivas</span>
-              </div>
-            </div>
-          </div>
-        ) : displayContent ? (
-          <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl p-8 shadow-2xl border border-slate-700 min-h-[300px]">
-            <pre className="text-sm text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">{displayContent}</pre>
-          </div>
-        ) : (
-          <div className="text-center py-12 text-slate-500 text-sm">Sin vista previa disponible</div>
-        )}
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 pt-2">
           {proxyUrl && (
             <a href={proxyUrl} target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 text-white rounded-lg text-xs font-medium hover:bg-cyan-700 transition-colors">
