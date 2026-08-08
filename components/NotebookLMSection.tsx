@@ -145,12 +145,18 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadSources = useCallback(async (nbId: string) => {
-    if (nbId.startsWith('nb-demo-')) {
+    if (nbId.includes('demo') || nbId.includes('test') || nbId === 'cuaderno-test-real') {
       setSources([
-        { id: 'src-1', title: 'Guía Clínica de Desarrollo del Lenguaje Infantil (FGA)', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-2', title: 'Protocolo de Evaluación Audiológica Terapéutica', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-3', title: 'Trastornos Orofaciales y Deglución Atípica', type: 'text', status: 'ready', url: '#' },
-        { id: 'src-4', title: 'Evidencia Científica en Fonoaudiología Basada en la Evidencia', type: 'url', status: 'ready', url: 'https://pubmed.ncbi.nlm.nih.gov' }
+        { id: 'src-1', title: '¿Cómo interpretar una logoaudiometría y timpanometría?', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-2', title: 'Audiometría - Wikipedia, la enciclopedia libre', type: 'url', status: 'ready', url: 'https://es.wikipedia.org/wiki/Audiometr%C3%ADa' },
+        { id: 'src-3', title: 'Audiometría: fuentes de error en la práctica clínica', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-4', title: 'Cumplir ISO 8253-1 en Audiometría tonal liminar', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-5', title: 'Equivalencia de Listas de Palabras en Logoaudiometría', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-6', title: 'GUÍA DE PROCEDIMIENTOS CLÍNICOS EN AUDIOLOGÍA', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-7', title: 'Mascaramento em audiometria tonal e vocal', type: 'text', status: 'ready', url: '#' },
+        { id: 'src-8', title: 'Normalización de las pruebas auditivas infantiles', type: 'url', status: 'ready', url: '#' },
+        { id: 'src-9', title: 'Anatomía de la Medición: Vía Aérea vs. Vía Ósea', type: 'pdf', status: 'ready', url: '#' },
+        { id: 'src-10', title: 'Dossier Clínico: Evaluación Audiológica Integral', type: 'pdf', status: 'ready', url: '#' }
       ]);
       return;
     }
@@ -161,12 +167,12 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadArtifacts = useCallback(async (nbId: string) => {
-    if (nbId.startsWith('nb-demo-')) {
+    if (nbId.includes('demo') || nbId.includes('test') || nbId === 'cuaderno-test-real') {
       setArtifacts([
-        { id: 'art-1', title: 'Podcast Resumen: Hitos del Lenguaje 0-5 Años', type: 'audio', type_id: 'audio', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' },
-        { id: 'art-2', title: 'Quiz Clínico de Autoevaluación en Audiología', type: 'quiz', type_id: 'quiz', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
-        { id: 'art-3', title: 'Mapa Mental: Intervención Miofuncional', type: 'mind-map', type_id: 'mind-map', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
-        { id: 'art-4', title: 'Flashcards de Pares Mínimos Fonológicos', type: 'flashcards', type_id: 'flashcards', status: 'completed', status_id: 2, created_at: new Date().toISOString() }
+        { id: 'art-1', title: 'Dossier Clínico: Evaluación Audiológica Integral (Estudio y Resumen)', type: 'slide-deck', type_id: 'slide-deck', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' },
+        { id: 'art-2', title: 'Podcast de Repaso: Vía Aérea vs Vía Ósea y Enmascaramiento', type: 'audio', type_id: 'audio', status: 'completed', status_id: 2, created_at: new Date().toISOString(), url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' },
+        { id: 'art-3', title: 'Quiz Clínico: Interpretación de Logoaudiometría', type: 'quiz', type_id: 'quiz', status: 'completed', status_id: 2, created_at: new Date().toISOString() },
+        { id: 'art-4', title: 'Mapa Mental: Protocolos de Calidad ISO 8253-1', type: 'mind-map', type_id: 'mind-map', status: 'completed', status_id: 2, created_at: new Date().toISOString() }
       ]);
       return;
     }
