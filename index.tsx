@@ -54,11 +54,10 @@ import ComunicacionSection from "./components/ComunicacionSection";
 import DiarioTrabajoSection from "./components/DiarioTrabajoSection";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 
-// Phase 1: Lazy-loaded heavy views (code splitting)
-const MultimediaCreator = React.lazy(() => import("./components/MultimediaCreator"));
-const AgendaSincronizada = React.lazy(() => import("./components/AgendaSincronizada"));
-const ReportBuilderPro = React.lazy(() => import("./components/ReportBuilderPro").then(m => ({ default: m.ReportBuilderPro })));
-const NBADashboard = React.lazy(() => import("./components/NBADashboard"));
+import MultimediaCreator from "./components/MultimediaCreator";
+import AgendaSincronizada from "./components/AgendaSincronizada";
+import { ReportBuilderPro } from "./components/ReportBuilderPro";
+import NBADashboard from "./components/NBADashboard";
 import { ThemeToggle } from "./components/ThemeToggle";
 
 
