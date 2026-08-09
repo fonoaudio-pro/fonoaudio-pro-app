@@ -1,27 +1,49 @@
 
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.GROQ_API_KEY;
+
+async function callGroqFallback(prompt: string): Promise<string> {
+    if (!GROQ_API_KEY) throw new Error('Groq API key not configured');
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [{ role: 'user', content: prompt }],
+            temperature: 0.7,
+            max_tokens: 2048,
+        }),
+    });
+    if (!response.ok) throw new Error('Groq fallback error');
+    const data = await response.json();
+    return data.choices[0]?.message?.content || '';
+}
 
 export async function generateText(prompt: string): Promise<string> {
-    if (!API_KEY || API_KEY === 'PLACEHOLDER_API_KEY') {
-        console.warn('[Gemini] API key no configurada');
-        return '';
-    }
-
     try {
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey: API_KEY });
-        const result = await ai.models.generateContent({
-            model: "gemini-2.0-flash",
-            contents: [{ role: "user", parts: [{ text: prompt }] }]
-        });
-        return result.text || '';
+        if (API_KEY && API_KEY !== 'PLACEHOLDER_API_KEY') {
+            const { GoogleGenAI } = await import("@google/genai");
+            const ai = new GoogleGenAI({ apiKey: API_KEY });
+            const result = await ai.models.generateContent({
+                model: "gemini-2.0-flash",
+                contents: [{ role: "user", parts: [{ text: prompt }] }]
+            });
+            if (result.text) return result.text;
+        }
     } catch (error: any) {
         const msg = error?.message || String(error);
-        console.error('[Gemini] Error:', msg);
-        if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota')) {
-            throw new Error('Cuota de Gemini API agotada. Intente más tarde o configure otra API key.');
-        }
-        return '';
+        console.warn('[Gemini] Quota/Error, falling back to Groq:', msg);
+    }
+
+    // Fallback to Groq automatically
+    try {
+        return await callGroqFallback(prompt);
+    } catch (groqErr) {
+        console.error('[AI Fallback] Both Gemini and Groq failed:', groqErr);
+        return 'Asistente clínico temporalmente offline. Por favor intente en unos segundos.';
     }
 }
 

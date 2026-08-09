@@ -993,7 +993,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Resultado generado</h4>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       onClick={async () => {
                         try {
@@ -1071,7 +1071,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               </div>
 
               {/* Sub-modo */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {[
                   { key: 'pictogram' as const, label: 'Pictograma', icon: '🟣' },
                   { key: 'pecs' as const, label: 'PECS', icon: '📋' },
@@ -1106,7 +1106,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                 <label className="text-xs font-bold text-emerald-600 flex items-center gap-1">
                   🌐 Buscar en ARASAAC (Banco Público de Pictogramas)
                 </label>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <input type="text" value={arasaacQuery}
                     onChange={e => setArasaacQuery(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleArasaacSearch()}
@@ -1768,7 +1768,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                   {pictoSource === 'arasaac' ? 'ARASAAC • Fuente externa' : 'Motor Determinístico • Pillow rendering'}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {isEditMode ? (
                   <button onClick={handleUpdateMaterial} disabled={generating} className="flex-1 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1 disabled:opacity-50">
                     {generating ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />} Guardar Cambios
@@ -1842,7 +1842,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                   FLUX 2 Pro • {fluxTemplate?.name || 'Template'}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button onClick={async () => { const asset = await handleFluxSaveToLibrary(); if (asset?.id) await onMaterialCreated?.(asset.id); }} className="flex-1 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-1">
                   <Save size={12} /> Guardar y Ver en Biblioteca
                 </button>
@@ -1916,7 +1916,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                   <p className="text-xs text-slate-500 dark:text-slate-400 whitespace-pre-wrap line-clamp-4">{generatedAsset.prompt_used}</p>
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button onClick={() => onMaterialCreated?.(generatedAsset.material_id || generatedAsset.id)} className="flex-1 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 flex items-center justify-center gap-1">
                   <Eye size={12} /> Ver en Biblioteca
                 </button>
