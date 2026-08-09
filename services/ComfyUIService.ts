@@ -38,8 +38,11 @@ export class ComfyUIService {
   }
 
   async healthCheck(): Promise<boolean> {
+    if (!this.endpoint) return false;
     try {
-      const response = await fetch(`${this.endpoint}/health`);
+      const response = await fetch(`${this.endpoint}/health`, {
+        signal: AbortSignal.timeout(5000),
+      });
       return response.ok;
     } catch {
       return false;
@@ -47,16 +50,26 @@ export class ComfyUIService {
   }
 
   async listWorkflows(): Promise<WorkflowInfo[]> {
-    const response = await fetch(`${this.endpoint}/workflows`);
+    if (!this.endpoint) throw new Error('Endpoint de Modal no configurado');
+    const response = await fetch(`${this.endpoint}/workflows`, {
+      signal: AbortSignal.timeout(10000),
+    });
     if (!response.ok) throw new Error('Error listando workflows');
     const data = await response.json();
     return data.workflows;
   }
 
   async generateImage(params: GenerateImageParams): Promise<GenerateResponse> {
+    if (!this.endpoint) {
+      throw new Error('Endpoint de Modal no configurado (VITE_MODAL_ENDPOINT).');
+    }
+
+    // Optimize prompt for clean fonoaudiological visual materials
+    const optimizedPrompt = `${params.prompt}, clean vector style, professional speech therapy visual support, high contrast, clear pictographic elements, neutral background, no distorted text`;
+
     const queryParams = new URLSearchParams({
-      workflow: params.workflow,
-      prompt: params.prompt,
+      workflow: params.workflow || 'default',
+      prompt: optimizedPrompt,
       width: String(params.width || 512),
       height: String(params.height || 512),
       steps: String(params.steps || 20),
@@ -68,16 +81,24 @@ export class ComfyUIService {
       text_size: String(params.text_size || 48),
     });
 
-    const response = await fetch(`${this.endpoint}/generate?${queryParams}`, {
-      method: 'POST',
-    });
+    try {
+      const response = await fetch(`${this.endpoint}/generate?${queryParams}`, {
+        method: 'POST',
+        signal: AbortSignal.timeout(45000), // 45s timeout safeguard for serverless
+      });
 
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Error generando imagen: ${error}`);
+      if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Error en servidor Modal: ${error || response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (e: any) {
+      if (e.name === 'AbortError' || e.name === 'TimeoutError') {
+        throw new Error('La generación de imagen está tomando más de lo esperado. Por favor reintente en unos segundos.');
+      }
+      throw e;
     }
-
-    return response.json();
   }
 
   getImageUrl(imageId: string): string {

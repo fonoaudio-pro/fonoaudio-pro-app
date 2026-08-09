@@ -703,49 +703,44 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
             {/* MAIN AREA */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* Top Bar */}
-                <div className="px-3 py-1.5 border-b border-slate-200 bg-white flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        {!showSidebar && <button onClick={() => setShowSidebar(true)} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"><PanelLeftOpen size={16} /></button>}
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                            <span className="font-bold text-slate-700">{guide.title}</span>
-                            <ChevronRight size={9} />
-                            <span className="text-indigo-600 font-medium">{section.title}</span>
+                <div className="px-3 py-2 border-b border-slate-200 bg-white flex flex-wrap md:flex-nowrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 overflow-hidden">
+                        {!showSidebar && <button onClick={() => setShowSidebar(true)} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 shrink-0"><PanelLeftOpen size={16} /></button>}
+                        <div className="flex items-center gap-1.5 text-xs text-slate-500 truncate">
+                            <span className="font-bold text-slate-700 truncate">{guide.title}</span>
+                            <ChevronRight size={10} className="shrink-0" />
+                            <span className="text-indigo-600 font-medium truncate">{section.title}</span>
                         </div>
-                        <span className="text-[8px] text-slate-300">|</span>
-                        <span className="text-[8px] text-slate-400"><User size={8} className="inline" /> {patient.name}</span>
-                        {isCurrentApproved && <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[8px] font-bold rounded-full flex items-center gap-0.5"><CircleCheck size={8} />Aprobada</span>}
+                        {isCurrentApproved && <span className="hidden sm:inline-flex px-2 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-full items-center gap-1 shrink-0"><CircleCheck size={10} />Aprobada</span>}
                     </div>
-                    <div className="flex items-center gap-1">
-                        <button onClick={() => runAiAction('generate')} disabled={isAiLoading} className="flex items-center gap-1 px-2 py-1 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg text-[8px] font-bold hover:from-blue-600 hover:to-cyan-600 transition-all disabled:opacity-50">
-                            {isAiLoading && aiAction === 'generate' ? <Loader2 size={8} className="animate-spin" /> : <Wand2 size={8} />}Generar
-                        </button>
-                        <button onClick={() => runAiAction('improve')} disabled={isAiLoading} className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-600 rounded-lg text-[8px] font-bold hover:bg-slate-50 transition-all disabled:opacity-50">
-                            {isAiLoading && aiAction === 'improve' ? <Loader2 size={8} className="animate-spin" /> : <Sparkles size={8} />}Mejorar
-                        </button>
-                        <button onClick={() => runAiAction('complete')} disabled={isAiLoading} className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-600 rounded-lg text-[8px] font-bold hover:bg-slate-50 transition-all disabled:opacity-50">
-                            {isAiLoading && aiAction === 'complete' ? <Loader2 size={8} className="animate-spin" /> : <Brain size={8} />}Completar
-                        </button>
-                        <div className="w-px h-4 bg-slate-200 mx-0.5" />
-                        <button onClick={() => runAiAction('formal')} disabled={isAiLoading} className="px-1.5 py-0.5 text-[7px] font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">Formal</button>
-                        <button onClick={() => runAiAction('tecnico')} disabled={isAiLoading} className="px-1.5 py-0.5 text-[7px] font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">Técnico</button>
-                        <button onClick={() => runAiAction('familiar')} disabled={isAiLoading} className="px-1.5 py-0.5 text-[7px] font-bold text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded">Familiar</button>
-                        <div className="w-px h-4 bg-slate-200 mx-0.5" />
+                    <div className="flex items-center gap-1.5 flex-wrap md:flex-nowrap justify-end w-full md:w-auto">
+                        <div className="hidden lg:flex items-center gap-1">
+                            <button onClick={() => runAiAction('generate')} disabled={isAiLoading} className="flex items-center gap-1 px-2.5 py-1.5 bg-gradient-to-r from-blue-500 to-cyan-500 text-white rounded-lg text-xs font-bold hover:from-blue-600 hover:to-cyan-600 transition-all disabled:opacity-50 min-h-[36px]">
+                                {isAiLoading && aiAction === 'generate' ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}Generar
+                            </button>
+                            <button onClick={() => runAiAction('improve')} disabled={isAiLoading} className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-50 min-h-[36px]">
+                                {isAiLoading && aiAction === 'improve' ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}Mejorar
+                            </button>
+                            <button onClick={() => runAiAction('complete')} disabled={isAiLoading} className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-50 min-h-[36px]">
+                                {isAiLoading && aiAction === 'complete' ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}Completar
+                            </button>
+                        </div>
+                        <div className="w-px h-6 bg-slate-200 mx-1 hidden lg:block" />
                         <button onClick={toggleDictation} disabled={isTranscribing}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] font-bold transition-all ${isListening ? 'bg-red-100 text-red-600 border border-red-200 animate-pulse' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                            {isListening ? <MicOff size={8} /> : <Mic size={8} />}{isListening ? 'Detener' : 'Dictar'}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[36px] ${isListening ? 'bg-red-100 text-red-600 border border-red-200 animate-pulse' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            {isListening ? <MicOff size={12} /> : <Mic size={12} />}{isListening ? 'Detener' : 'Dictar'}
                         </button>
-                        <div className="w-px h-4 bg-slate-200 mx-0.5" />
                         <button onClick={() => setShowSignaturePad(true)}
-                            className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[8px] font-bold transition-all ${signatureImage ? 'bg-indigo-100 text-indigo-700 border border-indigo-300' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-                            <Pen size={8} />{signatureImage ? 'Firmado' : 'Firmar'}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold transition-all min-h-[36px] ${signatureImage ? 'bg-indigo-100 text-indigo-700 border border-indigo-300' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                            <Pen size={12} />{signatureImage ? 'Firmado' : 'Firmar'}
                         </button>
-                        <button onClick={handleExportPdf} disabled={isExporting} className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 text-slate-600 rounded-lg text-[8px] font-bold hover:bg-slate-50 transition-all disabled:opacity-50">
-                            {isExporting ? <Loader2 size={8} className="animate-spin" /> : <Download size={8} />}PDF
+                        <button onClick={handleExportPdf} disabled={isExporting} className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-50 min-h-[36px]">
+                            {isExporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}PDF
                         </button>
-                        <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1 px-2 py-1 bg-indigo-600 text-white rounded-lg text-[8px] font-bold hover:bg-indigo-700 transition-all disabled:opacity-50">
-                            {isSaving ? <Loader2 size={8} className="animate-spin" /> : <Save size={8} />}Guardar
+                        <button onClick={handleSave} disabled={isSaving} className="flex items-center gap-1 px-3.5 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 shadow-sm min-h-[36px]">
+                            {isSaving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}Guardar
                         </button>
-                        <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400"><X size={14} /></button>
+                        <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 min-h-[36px] min-w-[36px] flex items-center justify-center"><X size={18} /></button>
                     </div>
                 </div>
 
