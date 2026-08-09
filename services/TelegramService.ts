@@ -8,7 +8,7 @@ const TELEGRAM_OFFSET_KEY = 'fonoaudio_telegram_offset';
 const MAX_LOG_ENTRIES = 200;
 const POLL_INTERVAL_MS = 5000;
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let onMessageCallback: ((msg: TelegramIncomingMessage) => void) | null = null;
@@ -185,7 +185,7 @@ export class TelegramService {
 
       let notebookBlock = '';
       try {
-        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+        const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
         const nbRes = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=3`);
         const nbData = await nbRes.json();
         const nbList = Array.isArray(nbData) ? nbData : nbData.notebooks || [];

@@ -90,7 +90,7 @@ export async function exportReportToPdf(options: PdfExportOptions): Promise<void
 
     try {
         const canvas = await html2canvas(tempDiv, {
-            scale: 2,
+            scale: 1.5,
             useCORS: true,
             logging: false,
             backgroundColor: '#ffffff',

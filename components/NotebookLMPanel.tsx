@@ -7,7 +7,7 @@ import {
   Search, Volume2, Image, ListOrdered, Lightbulb, File
 } from 'lucide-react';
 
-const API = 'http://localhost:3001/api/notebooklm';
+const API = '/api/notebooklm';
 
 interface Notebook { id: string; title: string; sourceCount?: number; [k: string]: any; }
 interface Source { id: string; title: string; type?: string; url?: string; status?: string; [k: string]: any; }

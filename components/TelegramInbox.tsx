@@ -4,7 +4,7 @@ import { TelegramService, TelegramIncomingMessage } from '../services/TelegramSe
 import { TelegramMessage } from '../types/channels';
 import { useSettings } from '../context/SettingsContext';
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
 interface TelegramInboxProps {
   onNavigateToSettings?: () => void;

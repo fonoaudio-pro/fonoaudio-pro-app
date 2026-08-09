@@ -162,7 +162,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
   useEffect(() => {
     if (!isOpen) return;
     if (notebookCacheRef.current && Date.now() - notebookCacheRef.current.ts < NOTEBOOK_CACHE_TTL) return;
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
     fetch(`${backendUrl}/api/notebooklm/notebooks?limit=3`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
@@ -199,7 +199,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
           return notebookCacheRef.current.data;
         }
         try {
-          const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+          const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 3000);
           const res = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=3`, { signal: controller.signal });
@@ -976,7 +976,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                     case "send_telegram_message": {
                       console.log(`[VoiceAssistant] SENSITIVE: send_telegram_message`);
                       const tgSettings = getTelegramSettings();
-                      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                       const payload: any = { message: fc.args.message as string };
                       if (tgSettings.chatId) payload.chatId = tgSettings.chatId;
                       result = { success: true, message: "Enviando mensaje por Telegram..." };
@@ -1035,7 +1035,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                       if (pSummary.alerts && pSummary.alerts.length > 0) {
                         summaryLines.push(``, `Alertas: ${pSummary.alerts.join(', ')}`);
                       }
-                      const backendUrl2 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                      const backendUrl2 = import.meta.env.VITE_BACKEND_URL || '';
                       const tgPayload: any = { message: summaryLines.join('\n') };
                       if (tgSettings2.chatId) tgPayload.chatId = tgSettings2.chatId;
                       result = { success: true, message: `Enviando resumen de ${pSummary.name} por Telegram...` };
@@ -1059,7 +1059,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                     case "send_telegram_media": {
                       console.log(`[VoiceAssistant] SENSITIVE: send_telegram_media type=${fc.args.mediaType}`);
                       const tgSettings3 = getTelegramSettings();
-                      const backendUrl3 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                      const backendUrl3 = import.meta.env.VITE_BACKEND_URL || '';
                       const mediaPayload: any = {
                         [fc.args.mediaType as string]: fc.args.mediaUrl as string,
                         caption: (fc.args.caption as string) || (fc.args.patientName ? `Paciente: ${fc.args.patientName}` : ''),
@@ -1085,7 +1085,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                     case "send_telegram_reminder": {
                       console.log(`[VoiceAssistant] SENSITIVE: send_telegram_reminder title=${fc.args.title}`);
                       const tgSettings4 = getTelegramSettings();
-                      const backendUrl4 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                      const backendUrl4 = import.meta.env.VITE_BACKEND_URL || '';
                       let reminderText = `🔔 ${fc.args.title}\n\n${fc.args.message}`;
                       if (fc.args.appointmentDate) reminderText += `\n📅 Fecha: ${fc.args.appointmentDate}`;
                       if (fc.args.appointmentTime) reminderText += `\n🕐 Hora: ${fc.args.appointmentTime}`;
@@ -1535,10 +1535,10 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                         // Pull NotebookLM context if available
                         let nbContext = '';
                         try {
-                          const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/notebooklm/notebooks`);
+                          const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks`);
                           const nbData = await nbResp.json();
                           if (nbData.notebooks?.length > 0) {
-                            const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
+                            const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
                             const summaryData = await summaryResp.json();
                             if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
                           }
@@ -1582,7 +1582,7 @@ ${fc.args.prompt}`;
                     }
                     case "sync_google_calendar": {
                       try {
-                        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                        const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                         const resp = await fetch(`${backendUrl}/api/google/calendar/sync`, { method: 'POST' });
                         const data = await resp.json();
                         if (data.status === 'ok') {
@@ -1594,7 +1594,7 @@ ${fc.args.prompt}`;
                     }
                     case "create_meet_link": {
                       try {
-                        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                        const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                         const resp = await fetch(`${backendUrl}/api/google/meet`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ patientName: fc.args.patientName }) });
                         const data = await resp.json();
                         if (data.meetLink) {

@@ -702,7 +702,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
   const addImageToCanvas = useCallback(async (url: string, name: string) => {
     const canvas = fabricRef.current;
     if (!canvas || !url) return;
-    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3001';
+    const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || '';
     const isExternal = url.startsWith('http') && !url.startsWith(backendUrl);
     const finalUrl = isExternal ? `${backendUrl}/api/images/proxy?url=${encodeURIComponent(url)}` : url;
     try {
@@ -757,7 +757,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
     setWebLoading(true);
     setWebError(null);
     try {
-      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || '';
       const resp = await fetch(`${backendUrl}/api/images/search?q=${encodeURIComponent(query)}&per_page=20`);
       const data = await resp.json();
       if (!resp.ok) {
@@ -783,7 +783,7 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
     setAssetLoading(true);
     setAssetError(null);
     try {
-      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || '';
       let endpoint = '';
       switch (source) {
         case 'pexels': endpoint = `/api/images/search?q=${encodeURIComponent(query)}&per_page=20`; break;

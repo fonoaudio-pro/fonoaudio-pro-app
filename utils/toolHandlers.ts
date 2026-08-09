@@ -210,7 +210,7 @@ export async function handleToolCall(
             case "n8n_execute":
                 setAssistantFeedback(`Ejecutando: ${fc.args.workflow}...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     await fetchWithTimeout(`${backendUrl}/api/event`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -481,7 +481,7 @@ export async function handleToolCall(
             case "create_google_meet_link":
                 setAssistantFeedback(`Generando enlace de Google Meet...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const res = await fetchWithTimeout(`${backendUrl}/api/google/meet`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -507,7 +507,7 @@ export async function handleToolCall(
             case "sync_google_calendar":
                 setAssistantFeedback(`Sincronizando con Google Calendar...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const res = await fetchWithTimeout(`${backendUrl}/api/google/calendar/sync`, {
                         method: 'POST'
                     });
@@ -1040,7 +1040,7 @@ export async function handleToolCall(
             case "send_telegram_message":
                 setAssistantFeedback(`Enviando mensaje a Telegram...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const res = await fetchWithTimeout(`${backendUrl}/api/telegram/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1065,7 +1065,7 @@ export async function handleToolCall(
             case "save_to_obsidian":
                 setAssistantFeedback(`Guardando en Obsidian...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const res = await fetchWithTimeout(`${backendUrl}/api/obsidian/save`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1092,7 +1092,7 @@ export async function handleToolCall(
                 const patientForSummary = findPatient(fc.args.patientName);
                 if (patientForSummary) {
                     try {
-                        const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                        const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                         const historyData = patientForSummary.history?.map((h: any) => 
                             `[${h.date}] ${h.type}: ${h.summary} - ${h.observations}`
                         ).join('\n') || "Sin historial disponible.";
@@ -1125,7 +1125,7 @@ export async function handleToolCall(
             case "search_medical_docs":
                 setAssistantFeedback(`Buscando en NotebookLM...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const nbsRes = await fetchWithTimeout(`${backendUrl}/api/notebooklm/notebooks?limit=1`);
                     const nbs = await nbsRes.json();
                     const nbList = Array.isArray(nbs) ? nbs : nbs.notebooks || [];
@@ -1155,7 +1155,7 @@ export async function handleToolCall(
             case "research_scientific_evidence":
                 setAssistantFeedback(`Investigando evidencia científica en NotebookLM...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const nbsRes = await fetchWithTimeout(`${backendUrl}/api/notebooklm/notebooks?limit=1`);
                     const nbs = await nbsRes.json();
                     const nbList = Array.isArray(nbs) ? nbs : nbs.notebooks || [];
@@ -1186,7 +1186,7 @@ export async function handleToolCall(
             case "notebook_list":
                 setAssistantFeedback(`Listando cuadernos de NotebookLM...`);
                 try {
-                    const backendUrlNb = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb = import.meta.env.VITE_BACKEND_URL || '';
                     const nbRes = await fetchWithTimeout(`${backendUrlNb}/api/notebooklm/notebooks`);
                     const nbData = await nbRes.json();
                     const nbList = Array.isArray(nbData) ? nbData : nbData.notebooks || [];
@@ -1203,7 +1203,7 @@ export async function handleToolCall(
             case "notebook_create":
                 setAssistantFeedback(`Creando cuaderno "${fc.args.title}"...`);
                 try {
-                    const backendUrlNb2 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb2 = import.meta.env.VITE_BACKEND_URL || '';
                     const createRes = await fetchWithTimeout(`${backendUrlNb2}/api/notebooklm/notebooks`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1225,7 +1225,7 @@ export async function handleToolCall(
             case "notebook_add_source":
                 setAssistantFeedback(`Agregando fuente al cuaderno...`);
                 try {
-                    const backendUrlNb3 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb3 = import.meta.env.VITE_BACKEND_URL || '';
                     let nbId = fc.args.notebookId;
                     if (!nbId) {
                         const listRes = await fetchWithTimeout(`${backendUrlNb3}/api/notebooklm/notebooks?limit=1`);
@@ -1258,7 +1258,7 @@ export async function handleToolCall(
             case "notebook_ask":
                 setAssistantFeedback(`Consultando NotebookLM...`);
                 try {
-                    const backendUrlNb4 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb4 = import.meta.env.VITE_BACKEND_URL || '';
                     let nbId4 = fc.args.notebookId;
                     if (!nbId4) {
                         const listRes4 = await fetchWithTimeout(`${backendUrlNb4}/api/notebooklm/notebooks?limit=1`);
@@ -1291,7 +1291,7 @@ export async function handleToolCall(
             case "notebook_generate":
                 setAssistantFeedback(`Generando ${fc.args.type} en NotebookLM...`);
                 try {
-                    const backendUrlNb5 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb5 = import.meta.env.VITE_BACKEND_URL || '';
                     let nbId5 = fc.args.notebookId;
                     if (!nbId5) {
                         const listRes5 = await fetchWithTimeout(`${backendUrlNb5}/api/notebooklm/notebooks?limit=1`);
@@ -1324,7 +1324,7 @@ export async function handleToolCall(
             case "notebook_summary":
                 setAssistantFeedback(`Obteniendo resumen del cuaderno...`);
                 try {
-                    const backendUrlNb6 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb6 = import.meta.env.VITE_BACKEND_URL || '';
                     let nbId6 = fc.args.notebookId;
                     if (!nbId6) {
                         const listRes6 = await fetchWithTimeout(`${backendUrlNb6}/api/notebooklm/notebooks?limit=1`);
@@ -1353,7 +1353,7 @@ export async function handleToolCall(
             case "notebook_list_artifacts":
                 setAssistantFeedback(`Listando artefactos del cuaderno...`);
                 try {
-                    const backendUrlNb7 = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrlNb7 = import.meta.env.VITE_BACKEND_URL || '';
                     let nbId7 = fc.args.notebookId;
                     if (!nbId7) {
                         const listRes7 = await fetchWithTimeout(`${backendUrlNb7}/api/notebooklm/notebooks?limit=1`);
@@ -1524,7 +1524,7 @@ export async function handleToolCall(
             case "sync_materials_from_drive":
                 setAssistantFeedback(`Sincronizando materiales desde Google Drive...`);
                 try {
-                    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                    const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                     const res = await fetchWithTimeout(`${backendUrl}/api/google/drive/sync`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1556,7 +1556,7 @@ export async function handleToolCall(
              case "send_material_to_caregiver":
                  setAssistantFeedback(`Preparando envío de material para ${fc.args.patientName}...`);
                  try {
-                     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                     const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                      const res = await fetchWithTimeout(`${backendUrl}/api/external-distribution`, {
                          method: 'POST',
                          headers: { 'Content-Type': 'application/json' },
@@ -1585,7 +1585,7 @@ export async function handleToolCall(
              case "resend_last_material":
                  setAssistantFeedback(`Reenviando último material para ${fc.args.patientName || 'el paciente'}...`);
                  try {
-                     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                     const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                      const res = await fetchWithTimeout(`${backendUrl}/api/resend_last_material`, {
                          method: 'POST',
                          headers: { 'Content-Type': 'application/json' },
@@ -1608,7 +1608,7 @@ export async function handleToolCall(
              case "schedule_reminder":
                  setAssistantFeedback(`Programando recordatorio...`);
                  try {
-                     const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+                     const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
                      const res = await fetchWithTimeout(`${backendUrl}/api/schedule_reminder`, {
                          method: 'POST',
                          headers: { 'Content-Type': 'application/json' },

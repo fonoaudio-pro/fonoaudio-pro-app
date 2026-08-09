@@ -236,10 +236,10 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
       // Pull NotebookLM context
       let nbContext = '';
       try {
-        const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/notebooklm/notebooks`);
+        const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks`);
         const nbData = await nbResp.json();
         if (nbData.notebooks?.length > 0) {
-          const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001'}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
+          const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
           const summaryData = await summaryResp.json();
           if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
         }
@@ -314,7 +314,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
   async function loadNotebookLMArtifacts() {
     setNbLoading(true);
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
       const nbRes = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=5`);
       const nbData = await nbRes.json();
       const notebooks = Array.isArray(nbData) ? nbData : nbData.notebooks || [];
@@ -341,7 +341,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
   async function loadNotebookContext() {
     if (nbNotebooks.length === 0) return '';
     try {
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+      const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
       const sumRes = await fetch(`${backendUrl}/api/notebooklm/notebooks/${nbNotebooks[0].id}/summary`);
       const sumData = await sumRes.json();
       return sumData.summary || sumData.answer || '';
