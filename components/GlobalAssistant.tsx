@@ -1783,15 +1783,15 @@ ${fc.args.prompt}`;
             }}
             placeholder="Escribí un mensaje..."
             disabled={isTextGenerating}
-            className="flex-1 px-3 py-2 text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-400 bg-white dark:bg-slate-800 text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 disabled:opacity-50"
+            className="flex-1 px-3 py-3 min-h-[44px] text-sm border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-400 bg-white dark:bg-slate-800 text-slate-700 dark:text-white placeholder:text-slate-400 dark:placeholder:text-slate-500 disabled:opacity-50"
             data-testid="assistant-text-input"
           />
           <button
             onClick={() => { if (textInput.trim()) { sendTextMessage(textInput); setTextInput(''); } }}
             disabled={!textInput.trim() || isTextGenerating}
-            className="px-3 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-lg transition-colors"
+            className="px-4 py-3 min-h-[44px] min-w-[44px] flex items-center justify-center bg-blue-600 hover:bg-blue-700 disabled:bg-slate-300 dark:disabled:bg-slate-700 text-white rounded-lg transition-colors"
           >
-            <Send size={14} />
+            {isTextGenerating ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
           </button>
         </div>
 

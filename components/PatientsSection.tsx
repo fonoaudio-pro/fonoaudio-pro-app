@@ -188,26 +188,27 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
                 Borradores Rápidos ({quickDrafts.length})
               </span>
             </div>
-            <table className="w-full text-left">
+            <div className="overflow-x-auto w-full">
+            <table className="w-full text-left min-w-[500px]">
               <tbody className="divide-y divide-amber-200/50 dark:divide-amber-800/50">
                 {quickDrafts.map(p => (
                   <tr key={p.id} className="hover:bg-amber-100/30 dark:hover:bg-amber-900/20 cursor-pointer group" onClick={() => onSelectPatient(p)}>
-                    <td className="px-4 py-2.5 font-medium text-slate-900 dark:text-white text-sm">{p.name}</td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300 text-sm">{p.age} años</td>
-                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300 text-sm">{p.diagnosis || '-'}</td>
-                    <td className="px-4 py-2.5 text-right">
+                    <td className="px-4 py-3 font-medium text-slate-900 dark:text-white text-sm">{p.name}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-sm">{p.age} años</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300 text-sm">{p.diagnosis || '-'}</td>
+                    <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={(e) => { e.stopPropagation(); onFormalizeQuick(p.id, {}); }}
-                          className="px-2 py-1 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors"
+                          className="px-3 py-2 min-h-[44px] text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors flex items-center"
                         >
                           Formalizar
                         </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); onDiscardQuick(p.id); }}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         >
-                          <Trash2 size={13} />
+                          <Trash2 size={16} />
                         </button>
                       </div>
                     </td>
@@ -215,13 +216,15 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       )}
 
       {/* Patient table */}
       <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden flex-1 overflow-y-auto">
-        <table className="w-full text-left">
+        <div className="overflow-x-auto w-full">
+        <table className="w-full text-left min-w-[650px]">
           <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 font-medium text-sm sticky top-0 z-10">
             <tr>
               <th className="p-4">Nombre</th>
@@ -242,7 +245,7 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
                   <td className="p-4 text-slate-600 dark:text-slate-300 max-w-[200px] truncate">{p.diagnosis || '-'}</td>
                   <td className="p-4">
                     {c ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                         {c.icon} {c.name}
                       </span>
                     ) : (
@@ -251,15 +254,15 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
                   </td>
                   <td className="p-4 text-slate-500 dark:text-slate-400 text-sm">{p.phone || '-'}</td>
                   <td className="p-4 text-right">
-                    <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex items-center justify-end gap-1">
                       <button
                         onClick={(e) => { e.stopPropagation(); onDeletePatient(p.id); }}
-                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Eliminar"
                       >
-                        <Trash2 size={14} />
+                        <Trash2 size={16} />
                       </button>
-                      <ChevronRight className="text-slate-300 group-hover:text-blue-500" size={16} />
+                      <ChevronRight className="text-slate-300 group-hover:text-blue-500" size={18} />
                     </div>
                   </td>
                 </tr>
@@ -287,6 +290,7 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );
