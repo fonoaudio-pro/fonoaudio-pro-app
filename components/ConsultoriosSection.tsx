@@ -35,7 +35,7 @@ const ConsultoriosSection: React.FC<ConsultoriosSectionProps> = ({
   const totalPatients = patients.filter(p => p.quick_status !== 'active_quick').length;
 
   return (
-    <div className="p-8 h-full overflow-y-auto">
+    <div className="p-4 sm:p-6 lg:p-8 h-full overflow-y-auto">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

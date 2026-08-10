@@ -347,6 +347,26 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
     setArtifactDetail({ ...art, loading: true });
 
     let r: { error?: boolean; message?: string; artifact?: ArtifactType; artifacts?: ArtifactType[] } | null = null;
+
+    // If this is a demo/test notebook, return the artifact directly with its URL
+    if (selectedNb && (selectedNb.id.includes('demo') || selectedNb.id.includes('test') || selectedNb.id === 'cuaderno-test-real')) {
+      const mockUrl = art.url || art.download_url || null;
+      const normalizedType = normalizeTypeId(art.type_id);
+      const isMediaType = ['slide-deck', 'audio', 'video', 'infographic'].includes(normalizedType);
+      const hasContent = art.content || art.text || art.slides || art.questions || art.flashcards;
+      if (mockUrl && isMediaType) {
+        setArtifactDetail({ ...art, artifactUrl: mockUrl, status: 'completed', loading: false });
+        return;
+      }
+      if (hasContent) {
+        setArtifactDetail({ ...art, artifactUrl: mockUrl, status: 'completed', loading: false });
+        return;
+      }
+      // Fallback: set detail with local content if available
+      setArtifactDetail({ ...art, artifactUrl: mockUrl, status: 'completed', loading: false, content: art.content });
+      return;
+    }
+
     try {
       // Step 1: Get artifact metadata including download URL
       r = await apiCall(`/notebooks/${selectedNb!.id}/artifacts/${art.id}`);
@@ -550,7 +570,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
   // AUTH
   if (authOk === false) {
     return (
-      <div className="p-8 space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 space-y-6">
         <div>
           <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-3">
             <BookOpen size={28} className="text-blue-500" /> NotebookLM
@@ -596,7 +616,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
   }
 
   return (
-    <div className="p-8 space-y-6">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

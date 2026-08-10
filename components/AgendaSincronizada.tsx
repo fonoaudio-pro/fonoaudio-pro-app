@@ -1191,7 +1191,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
         <div className="flex items-center gap-2">
           <button 
             onClick={() => navigateDay(-1)} 
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+            className="p-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors flex items-center justify-center"
           >
             <ChevronLeft size={18} />
           </button>
@@ -1207,7 +1207,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
 
           <button 
             onClick={() => navigateDay(1)} 
-            className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors"
+            className="p-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 transition-colors flex items-center justify-center"
           >
             <ChevronRight size={18} />
           </button>

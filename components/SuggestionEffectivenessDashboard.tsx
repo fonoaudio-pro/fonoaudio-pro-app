@@ -63,7 +63,7 @@ const SuggestionEffectivenessDashboard: React.FC<SuggestionEffectivenessDashboar
   }));
 
   return (
-    <div className="p-8 space-y-8 bg-slate-50 min-h-screen overflow-auto">
+    <div className="p-4 sm:p-6 lg:p-8 space-y-8 bg-slate-50 min-h-screen overflow-auto">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Métricas de IA Clínica</h1>

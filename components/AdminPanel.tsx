@@ -164,17 +164,17 @@ export default function AdminPanel({ onAccessDenied }: { onAccessDenied?: () => 
 
   return (
     <div className="flex flex-col h-full">
-      <div className="p-6 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+      <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
           <ShieldCheck size={24} /> Administración
         </h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona usuarios, roles y consultorios</p>
+        <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Gestiona usuarios, roles y consultorios</p>
       </div>
 
-      <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+      <div className="flex border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 overflow-x-auto">
         <button
           onClick={() => setActiveTab('users')}
-          className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+          className={`flex items-center gap-2 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
             activeTab === 'users'
               ? 'border-blue-500 text-blue-600 bg-blue-50'
               : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -184,7 +184,7 @@ export default function AdminPanel({ onAccessDenied }: { onAccessDenied?: () => 
         </button>
             <button
               onClick={() => setActiveTab('consultorios')}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'consultorios'
                   ? 'border-blue-500 text-blue-600 bg-blue-50'
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -194,7 +194,7 @@ export default function AdminPanel({ onAccessDenied }: { onAccessDenied?: () => 
             </button>
             <button
               onClick={() => setActiveTab('templates')}
-              className={`flex items-center gap-2 px-6 py-3 text-sm font-medium border-b-2 transition-colors ${
+              className={`flex items-center gap-2 px-4 sm:px-6 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === 'templates'
                   ? 'border-blue-500 text-blue-600 bg-blue-50'
                   : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -204,7 +204,7 @@ export default function AdminPanel({ onAccessDenied }: { onAccessDenied?: () => 
             </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6">
         {activeTab === 'users' && (
           <UsersTab
             profiles={profiles}

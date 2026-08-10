@@ -71,10 +71,10 @@ const SettingsSection: React.FC<{ isGoogleConnected?: boolean }> = ({ isGoogleCo
 
   return (
     <div className="h-full flex flex-col bg-white dark:bg-slate-950">
-      <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+      <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Configuración</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Personaliza tu experiencia de uso</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">Configuración</h2>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">Personaliza tu experiencia de uso</p>
         </div>
         <SaveIndicator status={status} lastSaved={lastSaved} />
       </div>
@@ -118,7 +118,7 @@ const SettingsSection: React.FC<{ isGoogleConnected?: boolean }> = ({ isGoogleCo
         </div>
 
         {/* Panel de contenido */}
-        <div className="flex-1 overflow-y-auto p-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {activeTab === 'appearance' && <AppearancePanel theme={theme} setTheme={setTheme} density={settings.appearance.density} onDensityChange={(d) => update('appearance', { density: d })} />}
           {activeTab === 'assistant' && <AssistantPanel settings={settings} onUpdate={update} />}
           {activeTab === 'integrations' && <IntegrationsPanel settings={settings} onUpdate={update} isGoogleConnected={isGoogleConnected} />}

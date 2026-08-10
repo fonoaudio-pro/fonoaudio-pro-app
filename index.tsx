@@ -437,7 +437,7 @@ const App = () => {
  
           {currentView === "metrics" && (
             <ErrorBoundary moduleName="Métricas">
-              <div className="p-8 space-y-8">
+              <div className="p-4 sm:p-6 lg:p-8 space-y-8">
                 <SuggestionEffectivenessDashboard />
                 <React.Suspense fallback={<div className="flex items-center justify-center h-64"><Loader2 className="animate-spin text-blue-500" size={24} /></div>}>
                   <NBADashboard />
