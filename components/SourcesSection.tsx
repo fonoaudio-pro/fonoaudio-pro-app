@@ -107,16 +107,16 @@ export default function SourcesSection({ onNavigate }: SourcesSectionProps) {
       if (!embError && embData && embData.length > 0) {
         setSearchResults(embData);
       } else {
-        // Fallback: search clinical_sources directly by title/content
+        // Fallback: search clinical_sources directly by title
         const { data: fallbackData } = await supabase
           .from('clinical_sources')
-          .select('id, title, category, content')
-          .or(`title.ilike.%${searchQuery}%,content.ilike.%${searchQuery}%`)
+          .select('id, title, category')
+          .ilike('title', `%${searchQuery}%`)
           .limit(10);
         
         setSearchResults((fallbackData || []).map(s => ({
           source_id: s.id,
-          content: s.content?.substring(0, 500) || '',
+          content: '',
           clinical_sources: { title: s.title, category: s.category }
         })));
       }
@@ -140,7 +140,6 @@ export default function SourcesSection({ onNavigate }: SourcesSectionProps) {
       const { error } = await supabase.from('clinical_sources').insert({
         title: newTitle.trim(),
         category: newCategory,
-        content: newContent.trim(),
       });
       if (error) throw error;
       setSuccess('Fuente agregada correctamente');

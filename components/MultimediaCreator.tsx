@@ -261,7 +261,7 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
       try {
         const { data: sources } = await supabase.from('clinical_sources').select('id, title, category').limit(3);
         if (sources?.length) {
-          sourcesContext = `\n\nFUENTES CLÍNICAS:\n${sources.map((s: any) => `- ${s.title}: ${(s.content || '').substring(0, 200)}`).join('\n')}`;
+          sourcesContext = `\n\nFUENTES CLÍNICAS:\n${sources.map((s: any) => `- ${s.title}`).join('\n')}`;
         }
       } catch (e) { /* sources not available */ }
 
@@ -312,7 +312,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
     try {
       const { data } = await supabase
         .from('clinical_sources')
-        .select('id, title, content, category')
+        .select('id, title, category')
         .order('created_at', { ascending: false })
         .limit(20);
       if (mountedRef.current) setClinicalSources(data || []);
@@ -877,11 +877,11 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6 overflow-y-auto h-full">
+    <div className="max-w-5xl mx-auto p-3 md:p-6 space-y-4 md:space-y-6 overflow-y-auto h-full">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between gap-2 flex-wrap">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
+          <h2 className="text-base md:text-xl font-bold text-slate-800 dark:text-white flex items-center gap-2">
             {isEditMode ? <Edit3 size={22} className="text-amber-600" /> : <Sparkles size={22} className="text-purple-600" />}
             {isEditMode ? 'Editando Material' : 'Creador de Materiales Multimedia'}
           </h2>
@@ -895,7 +895,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
       </div>
 
       {/* Mode Tabs */}
-      <div className="flex gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+      <div className="grid grid-cols-3 md:flex md:flex-wrap gap-1 md:gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
         {[
           { key: 'canva' as const, label: 'Editor Visual', icon: Palette },
           { key: 'ai_prompt' as const, label: 'IA Generativa', icon: Brain },
@@ -907,7 +907,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-xs font-bold transition-all ${
+            className={`flex-1 flex items-center justify-center gap-1 md:gap-2 py-2 md:py-2.5 px-1.5 md:px-4 rounded-lg text-[9px] md:text-xs font-bold transition-all ${
               activeTab === tab.key
                 ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm'
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
@@ -920,7 +920,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
       </div>
 
       {activeTab === 'canva' ? (
-        <div className="h-[calc(100vh-200px)] min-h-[500px]">
+        <div className="h-[calc(100vh-180px)] min-h-[300px] md:min-h-[500px]">
           <ErrorBoundary moduleName="Editor Visual">
             <VisualEditor
               width={800}
@@ -991,7 +991,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                 className="w-full h-32 px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm text-slate-800 dark:text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
                 onKeyDown={(e) => { if (e.key === 'Enter' && e.metaKey) handleAIGenerate(); }}
               />
-              <div className="absolute bottom-2 right-2 flex items-center gap-2">
+              <div className="absolute bottom-2 right-2 hidden sm:flex items-center gap-2">
                 <span className="text-[9px] text-slate-400">Ctrl+Enter para generar</span>
                 <button
                   onClick={handleAIGenerate}
@@ -1015,7 +1015,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               <div className="mt-4">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">Resultado generado</h4>
-                  <div className="flex flex-wrap gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                     <button
                       onClick={async () => {
                         try {
@@ -1039,13 +1039,13 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                           setError('Error guardando material: ' + err.message);
                         }
                       }}
-                      className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-[10px] font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1"
+                      className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-[10px] md:text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1"
                     >
                       <Save size={10} /> Guardar en Biblioteca
                     </button>
                     <button
                       onClick={() => { navigator.clipboard.writeText(aiResult); }}
-                      className="px-3 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                      className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 rounded-lg text-[10px] md:text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                     >
                       Copiar
                     </button>
@@ -1055,7 +1055,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                         setDescription(aiResult.substring(0, 200));
                         setActiveTab('sequence');
                       }}
-                      className="px-3 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-[10px] font-bold hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                      className="px-3 py-2 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-lg text-[10px] md:text-xs font-bold hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
                     >
                       Usar como secuencia
                     </button>
@@ -1083,11 +1083,11 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               {/* Source Toggle: Local vs ARASAAC */}
               <div className="flex gap-2 bg-slate-50 dark:bg-slate-800 p-1 rounded-lg">
                 <button onClick={() => { setPictoSource('local'); setArasaacSelected([]); setDetPreview(null); }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${pictoSource === 'local' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                  className={`flex-1 py-2 text-[10px] md:text-xs font-bold rounded-md transition-colors ${pictoSource === 'local' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
                   📚 Biblioteca Local
                 </button>
                 <button onClick={() => { setPictoSource('arasaac'); setSelectedPictograms([]); setDetPreview(null); }}
-                  className={`flex-1 py-1.5 text-xs font-bold rounded-md transition-colors ${pictoSource === 'arasaac' ? 'bg-white dark:bg-slate-900 text-emerald-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
+                  className={`flex-1 py-2 text-[10px] md:text-xs font-bold rounded-md transition-colors ${pictoSource === 'arasaac' ? 'bg-white dark:bg-slate-900 text-emerald-700 shadow-sm' : 'text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'}`}>
                   🌐 ARASAAC
                 </button>
               </div>
@@ -1149,7 +1149,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">
                   Seleccionar {detMode === 'pictogram' || detMode === 'card' ? '1 pictograma' : 'pictogramas'} ({selectedPictograms.length} seleccionados)
                 </label>
-                <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                   {pictogramList.map(p => (
                     <button key={p.id} onClick={() => togglePictogram(p.id)}
                       className={`p-2 rounded-lg border text-center transition-all ${selectedPictograms.includes(p.id) ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
@@ -1167,7 +1167,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                   Seleccionar {detMode === 'pictogram' || detMode === 'card' ? '1 pictograma' : 'pictogramas'} ({arasaacSelected.length} seleccionados)
                 </label>
                 {arasaacResults.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-2 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 max-h-48 overflow-y-auto">
                     {arasaacResults.map(p => (
                       <button key={p.id} onClick={() => toggleArasaacPictogram(p)}
                         className={`p-2 rounded-lg border text-center transition-all ${arasaacSelected.find(s => s.id === p.id) ? 'border-emerald-500 bg-emerald-50 ring-2 ring-emerald-200' : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'}`}>
@@ -1265,7 +1265,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               </div>
 
               {/* Template grid */}
-              <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 md:max-h-40 overflow-y-auto">
                 {getTemplatesByCategory(fluxCategory).map(template => (
                   <button
                     key={template.id}
@@ -1300,7 +1300,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                         className="flex-1 p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-xs"
                       />
                       {i > 0 && (
-                        <button onClick={() => setFluxFields(fluxFields.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-500">
+                        <button onClick={() => setFluxFields(fluxFields.filter((_, j) => j !== i))} className="p-1.5 text-slate-400 hover:text-red-500">
                           <X size={14} />
                         </button>
                       )}
@@ -1491,7 +1491,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                     className="w-full p-2 border border-purple-200 dark:border-purple-800 rounded-lg text-sm focus:border-purple-400 outline-none bg-white dark:bg-slate-900 text-slate-700 dark:text-white"
                   />
                 </div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 block">Posición</label>
                     <select value={textPosition} onChange={e => setTextPosition(e.target.value as any)} className="w-full p-1.5 border border-purple-200 dark:border-purple-800 rounded text-xs bg-white dark:bg-slate-900 text-slate-700 dark:text-white">
@@ -1534,7 +1534,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
                 <Camera size={14} /> Subir Imagen para Pictograma
               </h3>
               <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFileSelect} className="hidden" />
-              <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-8 text-center hover:border-blue-400 transition-colors">
+              <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl p-4 md:p-8 text-center hover:border-blue-400 transition-colors">
                 {uploadedPreview ? (
                   <img src={uploadedPreview} alt="Preview" className="max-h-48 mx-auto rounded-lg" />
                 ) : (
@@ -1602,7 +1602,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">Descripción / Notas</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Contexto o instrucciones adicionales..." className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm resize-none focus:border-blue-400 dark:focus:border-blue-500 outline-none" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">Tipo</label>
                 <select value={assetType} onChange={e => setAssetType(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:border-blue-400 dark:focus:border-blue-500 outline-none">
@@ -1691,7 +1691,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">Descripción / Notas</label>
               <textarea value={description} onChange={e => setDescription(e.target.value)} rows={2} placeholder="Contexto o instrucciones adicionales..." className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm resize-none focus:border-blue-400 dark:focus:border-blue-500 outline-none" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1 block">Tipo</label>
                 <select value={assetType} onChange={e => setAssetType(e.target.value)} className="w-full p-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm bg-white dark:bg-slate-900 focus:border-blue-400 dark:focus:border-blue-500 outline-none">
@@ -1914,8 +1914,8 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
               {generatedImageUrl && (
                 <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-3">
                   <img src={generatedImageUrl} alt={title} className="w-full rounded-lg shadow-sm" />
-                  <div className="flex gap-2 mt-2">
-                    <button onClick={handleDownloadImage} className="flex-1 py-1.5 bg-emerald-600 text-white text-[10px] font-bold rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1">
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <button onClick={handleDownloadImage} className="flex-1 py-2 bg-emerald-600 text-white text-[10px] md:text-xs font-bold rounded-lg hover:bg-emerald-700 flex items-center justify-center gap-1">
                       <Download size={10} /> Descargar Imagen
                     </button>
                     <a href={generatedImageUrl} target="_blank" rel="noopener noreferrer" className="py-1.5 px-3 bg-slate-200 text-slate-600 dark:text-slate-300 text-[10px] font-bold rounded-lg hover:bg-slate-300 flex items-center justify-center gap-1">
@@ -2001,7 +2001,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
             </div>
           )}
 
-          <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800 space-y-2">
+          <div className="bg-blue-50 dark:bg-blue-950/20 rounded-xl p-3 md:p-4 border border-blue-100 dark:border-blue-800 space-y-2">
             <h4 className="text-xs font-bold text-blue-700 dark:text-blue-400">Tips</h4>
             <ul className="text-[10px] text-blue-600 dark:text-blue-400 space-y-1">
               <li>• <b>Pictogramas (Sin IA)</b>: Elegí pictogramas locales o ARASAAC → costo $0.00</li>

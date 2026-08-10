@@ -91,7 +91,9 @@ class ReportTemplateService {
 
         const { data, error } = await query;
         if (error) {
-            console.error('[ReportTemplateService] Error fetching templates:', error);
+            if (error.code !== '42P01') {
+                console.error('[ReportTemplateService] Error fetching templates:', error);
+            }
             return this.getFallbackTemplates();
         }
         if (!data || data.length === 0) return this.getFallbackTemplates();
@@ -320,7 +322,7 @@ class ReportTemplateService {
             .single();
 
         if (error) {
-            console.error('[ReportTemplateService] Error fetching template:', error);
+            if (error.code !== '42P01') console.error('[ReportTemplateService] Error fetching template:', error);
             return null;
         }
         return data;
@@ -341,7 +343,9 @@ class ReportTemplateService {
             .single();
 
         if (error) {
-            console.error('[ReportTemplateService] Error saving template:', error);
+            if (error.code !== '42P01') {
+                console.error('[ReportTemplateService] Error saving template:', error);
+            }
             return null;
         }
         return data;
@@ -357,7 +361,7 @@ class ReportTemplateService {
             .eq('id', id);
 
         if (error) {
-            console.error('[ReportTemplateService] Error updating template:', error);
+            if (error.code !== '42P01') console.error('[ReportTemplateService] Error updating template:', error);
             return false;
         }
         return true;
@@ -373,7 +377,7 @@ class ReportTemplateService {
             .eq('id', id);
 
         if (error) {
-            console.error('[ReportTemplateService] Error deleting template:', error);
+            if (error.code !== '42P01') console.error('[ReportTemplateService] Error deleting template:', error);
             return false;
         }
         return true;
@@ -395,7 +399,7 @@ class ReportTemplateService {
 
         const { data, error } = await query;
         if (error) {
-            console.error('[ReportTemplateService] Error fetching examples:', error);
+            if (error.code !== '42P01') console.error('[ReportTemplateService] Error fetching examples:', error);
             return [];
         }
         return data || [];
@@ -412,7 +416,7 @@ class ReportTemplateService {
             .single();
 
         if (error) {
-            console.error('[ReportTemplateService] Error saving example:', error);
+            if (error.code !== '42P01') console.error('[ReportTemplateService] Error saving example:', error);
             return null;
         }
         return data;

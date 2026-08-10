@@ -92,7 +92,6 @@ export default function SourceBridgePanel({ onNavigateToSettings }: SourceBridge
       const { error } = await supabase.from('clinical_sources').insert({
         title: newTitle.trim(),
         category: newCategory,
-        content: newContent.trim(),
       });
       if (error) throw error;
       setSuccess('Fuente agregada correctamente');

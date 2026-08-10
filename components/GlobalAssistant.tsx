@@ -1763,7 +1763,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                         try {
                           const { data: sources } = await supabase.from('clinical_sources').select('id, title, category').limit(3);
                           if (sources?.length) {
-                            sourcesContext = `\n\nFUENTES CLÍNICAS DISPONIBLES:\n${sources.map((s: any) => `- ${s.title}: ${(s.content || '').substring(0, 200)}`).join('\n')}`;
+                            sourcesContext = `\n\nFUENTES CLÍNICAS DISPONIBLES:\n${sources.map((s: any) => `- ${s.title}`).join('\n')}`;
                           }
                         } catch (e) { /* sources not available */ }
 
