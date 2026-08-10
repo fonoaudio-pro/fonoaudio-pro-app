@@ -8,6 +8,7 @@ import {
 import { useTheme } from '../context/ThemeContext';
 import { useSettings } from '../context/SettingsContext';
 import { TelegramService } from '../services/TelegramService';
+import { GoogleAuthService } from '../services/GoogleAuthService';
 
 type TabId = 'appearance' | 'assistant' | 'integrations' | 'profile';
 
@@ -384,9 +385,18 @@ function IntegrationsPanel({ settings, onUpdate, isGoogleConnected }: { settings
                 <Wifi size={12} /> Conectado
               </span>
             ) : (
-              <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full">
-                <WifiOff size={12} /> Desconectado
-              </span>
+              <button
+                onClick={async () => {
+                  try {
+                    await GoogleAuthService.signInWithGoogle();
+                  } catch (e: any) {
+                    alert('Error conectando con Google: ' + e.message);
+                  }
+                }}
+                className="flex items-center gap-1.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-xl transition-colors shadow-sm"
+              >
+                Conectar Google (Gmail / Calendar)
+              </button>
             )}
           </div>
         </div>
