@@ -248,7 +248,13 @@ Reglas:
       try {
         const offset = parseInt(localStorage.getItem(TELEGRAM_OFFSET_KEY) || '0', 10);
         const resp = await fetch(`${BACKEND_URL}/api/telegram/poll?offset=${offset}`);
-        const data = await resp.json();
+        if (!resp.ok) {
+          console.warn('[Telegram] Poll returned', resp.status, '- retrying in 30s');
+          return;
+        }
+        const text = await resp.text();
+        let data: any;
+        try { data = JSON.parse(text); } catch { console.warn('[Telegram] Non-JSON response'); return; }
         if (data.ok && data.result?.length > 0) {
           for (const update of data.result) {
             const msg = update.message;

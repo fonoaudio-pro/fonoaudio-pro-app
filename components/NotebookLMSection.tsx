@@ -92,7 +92,11 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
         headers: { 'Content-Type': 'application/json' },
         ...opts,
       });
-      return await res.json();
+      if (!res.ok) {
+        return { error: true, message: `API ${res.status}: ${res.statusText}` };
+      }
+      const text = await res.text();
+      try { return JSON.parse(text); } catch { return { error: true, message: 'Respuesta no válida del servidor' }; }
     } catch (e: unknown) {
       return { error: true, message: e.message };
     }

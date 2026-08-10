@@ -69,7 +69,9 @@ export default function NotebookLMPanel() {
         headers: { 'Content-Type': 'application/json' },
         ...opts,
       });
-      return await res.json();
+      if (!res.ok) return { error: true, message: `API ${res.status}` };
+      const text = await res.text();
+      try { return JSON.parse(text); } catch { return { error: true, message: 'Respuesta no válida' }; }
     } catch (e: any) {
       return { error: true, message: e.message };
     }

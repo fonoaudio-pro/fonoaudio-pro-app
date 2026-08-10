@@ -1,7 +1,6 @@
 import React, { useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import Underline from '@tiptap/extension-underline';
 import TextAlign from '@tiptap/extension-text-align';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
@@ -73,7 +72,6 @@ interface EditorProps {
 const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAssistantActive }) => {
   const extensions = useMemo(() => [
     StarterKit,
-    Underline,
     TextAlign.configure({
       types: ['heading', 'paragraph'],
     }),

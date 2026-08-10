@@ -68,8 +68,10 @@ export default function DiarioTrabajoSection({ userId, patients, onSelectPatient
       if (selectedType) params.set('event_type', selectedType);
 
       const resp = await fetch(`/api/work-journal?${params}`);
-      if (!resp.ok) throw new Error('Error loading work journal');
-      const data = await resp.json();
+      if (!resp.ok) { setEvents([]); setStats(null); return; }
+      const text = await resp.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch { setEvents([]); setStats(null); return; }
       setEvents(data.events || []);
       setStats(data.stats || null);
     } catch (e: any) {

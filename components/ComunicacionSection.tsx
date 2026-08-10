@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Mail, MessageSquare, Send, Search, RefreshCw, Loader2, User, Clock,
-  ArrowLeft, Plus, ExternalLink, FileText, CheckCircle2,
+  ArrowLeft, Plus, ExternalLink, FileText, CheckCircle2, AlertCircle,
   Phone, Stethoscope, Heart, Brain, Ear, Mic, Inbox
 } from 'lucide-react';
 import { GmailService, GmailMessage, GmailMessageDetail, EmailTemplate } from '../services/gmailService';

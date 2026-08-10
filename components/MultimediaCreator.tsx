@@ -242,11 +242,17 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
       let nbContext = '';
       try {
         const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks`);
-        const nbData = await nbResp.json();
-        if (nbData.notebooks?.length > 0) {
-          const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
-          const summaryData = await summaryResp.json();
-          if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
+        if (nbResp.ok) {
+          const nbText = await nbResp.text();
+          const nbData = JSON.parse(nbText);
+          if (nbData.notebooks?.length > 0) {
+            const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
+            if (summaryResp.ok) {
+              const summaryText = await summaryResp.text();
+              const summaryData = JSON.parse(summaryText);
+              if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
+            }
+          }
         }
       } catch (e) { /* NotebookLM not available */ }
 
@@ -322,22 +328,27 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
       const nbRes = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=5`);
-      const nbData = await nbRes.json();
+      if (!nbRes.ok) { setNbNotebooks([]); return; }
+      const nbText = await nbRes.text();
+      const nbData = JSON.parse(nbText);
       const notebooks = Array.isArray(nbData) ? nbData : nbData.notebooks || [];
       if (!mountedRef.current) return;
       setNbNotebooks(notebooks);
 
       if (notebooks.length > 0) {
         const artRes = await fetch(`${backendUrl}/api/notebooklm/notebooks/${notebooks[0].id}/artifacts`);
-        const artData = await artRes.json();
-        const artifacts = Array.isArray(artData) ? artData : artData.artifacts || [];
-        if (mountedRef.current) {
-          setNbArtifacts(artifacts.map((a: any) => ({
-            id: a.id,
-            type: a.type || 'unknown',
-            title: a.title || a.type,
-            status: a.status || 'completed'
-          })));
+        if (artRes.ok) {
+          const artText = await artRes.text();
+          const artData = JSON.parse(artText);
+          const artifacts = Array.isArray(artData) ? artData : artData.artifacts || [];
+          if (mountedRef.current) {
+            setNbArtifacts(artifacts.map((a: any) => ({
+              id: a.id,
+              type: a.type || 'unknown',
+              title: a.title || a.type,
+              status: a.status || 'completed'
+            })));
+          }
         }
       }
     } catch (e) {
@@ -352,7 +363,9 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
     try {
       const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
       const sumRes = await fetch(`${backendUrl}/api/notebooklm/notebooks/${nbNotebooks[0].id}/summary`);
-      const sumData = await sumRes.json();
+      if (!sumRes.ok) return '';
+      const sumText = await sumRes.text();
+      const sumData = JSON.parse(sumText);
       return sumData.summary || sumData.answer || '';
     } catch {
       return '';

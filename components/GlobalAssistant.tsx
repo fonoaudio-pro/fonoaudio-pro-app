@@ -165,14 +165,17 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
     if (notebookCacheRef.current && Date.now() - notebookCacheRef.current.ts < NOTEBOOK_CACHE_TTL) return;
     const backendUrl = import.meta.env.VITE_BACKEND_URL || '';
     fetch(`${backendUrl}/api/notebooklm/notebooks?limit=3`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
-        const nbList = Array.isArray(data) ? data : data.notebooks || [];
-        if (nbList.length > 0) {
-          const ctx = `\n--- NOTEBOOKLM ---\nCuadernos: ${nbList.map((n: any) => n.title).join(', ')}`;
-          notebookCacheRef.current = { data: ctx, ts: Date.now() };
-        }
+      .then(r => r.ok ? r.text() : null)
+      .then(text => {
+        if (!text) return;
+        try {
+          const data = JSON.parse(text);
+          const nbList = Array.isArray(data) ? data : data.notebooks || [];
+          if (nbList.length > 0) {
+            const ctx = `\n--- NOTEBOOKLM ---\nCuadernos: ${nbList.map((n: any) => n.title).join(', ')}`;
+            notebookCacheRef.current = { data: ctx, ts: Date.now() };
+          }
+        } catch { /* ignore non-JSON */ }
       })
       .catch(() => {});
   }, [isOpen]);
@@ -210,7 +213,8 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
           const res = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=3`, { signal: controller.signal });
           clearTimeout(timer);
           if (!res.ok) return '';
-          const data = await res.json();
+          const text = await res.text();
+          const data = JSON.parse(text);
           const nbList = Array.isArray(data) ? data : data.notebooks || [];
           if (nbList.length > 0) {
             const ctx = `\n--- NOTEBOOKLM ---\nCuadernos: ${nbList.map((n: any) => n.title).join(', ')}`;
@@ -1740,11 +1744,17 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                         let nbContext = '';
                         try {
                           const nbResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks`);
-                          const nbData = await nbResp.json();
-                          if (nbData.notebooks?.length > 0) {
-                            const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
-                            const summaryData = await summaryResp.json();
-                            if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
+                          if (nbResp.ok) {
+                            const nbText = await nbResp.text();
+                            const nbData = JSON.parse(nbText);
+                            if (nbData.notebooks?.length > 0) {
+                              const summaryResp = await fetch(`${import.meta.env.VITE_BACKEND_URL || ''}/api/notebooklm/notebooks/${nbData.notebooks[0].id}/summary`);
+                              if (summaryResp.ok) {
+                                const summaryText = await summaryResp.text();
+                                const summaryData = JSON.parse(summaryText);
+                                if (summaryData.summary) nbContext = `\n\nCONTEXTO DE INVESTIGACIÓN (NotebookLM):\n${summaryData.summary}`;
+                              }
+                            }
                           }
                         } catch (e) { /* NotebookLM not available, continue without */ }
 

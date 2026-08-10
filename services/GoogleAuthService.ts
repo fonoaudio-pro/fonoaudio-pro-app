@@ -91,8 +91,11 @@ export const GoogleAuthService = {
         body: JSON.stringify({ refresh_token: refreshToken }),
       });
       if (!response.ok) return null;
-      const data = await response.json();
-      return { accessToken: data.access_token, expiresAt: data.expires_at };
+      const text = await response.text();
+      try {
+        const data = JSON.parse(text);
+        return { accessToken: data.access_token, expiresAt: data.expires_at };
+      } catch { return null; }
     } catch {
       return null;
     }
