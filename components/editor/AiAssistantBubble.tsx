@@ -128,7 +128,7 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
     };
 
     return (
-        <div className={`fixed bottom-0 right-4 z-40 transition-all duration-300 ${isExpanded ? 'w-[420px]' : 'w-80'}`}>
+        <div className={`fixed bottom-0 right-2 sm:right-4 z-40 transition-all duration-300 ${isExpanded ? 'w-[calc(100vw-16px)] sm:w-[420px]' : 'w-80'}`}>
             {/* Toggle Button */}
             <button
                 onClick={() => setIsExpanded(!isExpanded)}

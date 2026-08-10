@@ -79,7 +79,7 @@ const SettingsSection: React.FC<{ isGoogleConnected?: boolean }> = ({ isGoogleCo
         <SaveIndicator status={status} lastSaved={lastSaved} />
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
         {/* Sidebar de tabs */}
         <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 shrink-0">
           <div className="md:hidden p-3">

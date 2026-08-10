@@ -233,7 +233,7 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+      <div className="flex border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 overflow-x-auto min-h-[44px]">
         {[
           { id: 'gmail' as TabType, icon: <Mail size={16} />, label: 'Gmail', count: gmailMessages.filter(m => !m.isRead).length },
           { id: 'telegram' as TabType, icon: <MessageSquare size={16} />, label: 'Telegram' },
@@ -259,13 +259,13 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-hidden flex">
+      <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
         {activeTab === 'gmail' && (
           <>
             {/* Message List */}
-            <div className="w-[380px] border-r border-slate-200 dark:border-slate-700 flex flex-col">
+            <div className="w-full md:w-[380px] border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-700 flex flex-col">
               {/* Gmail sub-tabs */}
-              <div className="flex border-b border-slate-200 dark:border-slate-700">
+              <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto min-h-[40px]">
                 <button onClick={() => { setGmailView('inbox'); loadGmailMessages('in:inbox'); }}
                   className={`flex-1 py-2 text-xs font-bold transition-colors ${gmailView === 'inbox' ? 'text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 dark:bg-blue-900/10' : 'text-slate-500 hover:text-slate-700'}`}>
                   <Inbox size={12} className="inline mr-1" /> Bandeja de entrada

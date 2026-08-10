@@ -581,7 +581,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
           </h2>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Investigación con IA de Google</p>
         </div>
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-6 sm:p-12 text-center">
           <AlertCircle size={48} className="text-amber-400 mx-auto mb-4" />
           <p className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-2">Conectar con NotebookLM</p>
           {loading ? (
@@ -613,7 +613,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
 
   if (authOk === null) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[400px]">
+      <div className="p-4 sm:p-8 flex items-center justify-center min-h-[400px]">
         <Loader2 size={32} className="animate-spin text-blue-500" />
       </div>
     );
@@ -651,9 +651,9 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
         </div>
       )}
 
-      <div className="flex gap-6 min-h-[600px]">
+      <div className="flex flex-col md:flex-row gap-4 md:gap-6 min-h-[400px] md:min-h-[600px]">
         {/* Notebooks Sidebar */}
-        <div className="w-64 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col shrink-0">
+        <div className="w-full md:w-64 bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden flex flex-col shrink-0">
           <div className="p-3 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Notebooks</span>
             <button onClick={() => setShowCreate(!showCreate)}
@@ -701,7 +701,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
           {selectedNb ? (
             <>
               {/* Tabs */}
-              <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 px-4">
+              <div className="flex border-b border-slate-200 dark:border-slate-700 shrink-0 px-4 overflow-x-auto">
                 {[
                   { key: 'sources', label: 'Fuentes', icon: FileText, count: sources.length },
                   { key: 'artifacts', label: 'Contenidos', icon: Presentation, count: artifacts.length },
@@ -895,7 +895,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
                       <span className="text-xs text-slate-400">{selectedArtifact.type}</span>
                       <div className="flex-1" />
                       {selectedArtifact.status === 'completed' && (
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                           <button onClick={() => downloadArtifactCorrectFormat(selectedArtifact, artifactDetail)}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 rounded-lg text-xs font-medium hover:bg-emerald-200 transition-colors">
                             <ArrowDownToLine size={12} /> Descargar
@@ -1040,7 +1040,7 @@ ${slides.split('\n').filter((l: string) => l.trim()).map((line: string, i: numbe
               </div>
             </>
           ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-12 text-center">
+            <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-12 text-center">
               <BookOpen size={48} className="text-blue-300 dark:text-blue-600 mb-4" />
               <p className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">Seleccioná un notebook</p>
               <p className="text-sm text-slate-400">Elegí uno de la izquierda o creá uno nuevo</p>
