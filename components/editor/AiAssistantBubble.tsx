@@ -50,7 +50,7 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
         };
         setMessages([greeting]);
         generateQuickActions();
-    }, [sectionTitle]);
+    }, [sectionTitle, patient.name, patient.diagnosis]);
 
     const getInitialTip = (): string => {
         const tips: Record<string, string> = {
@@ -141,20 +141,20 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
 
             {/* Bubble Container */}
             {isExpanded && (
-                <div className="bg-white border border-slate-200 rounded-t-2xl shadow-2xl flex flex-col"
+                <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-t-2xl shadow-2xl flex flex-col"
                      style={{ height: '380px' }}>
                     {/* Header */}
-                    <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-slate-100 flex items-center justify-between rounded-t-2xl">
+                    <div className="px-4 py-2.5 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between rounded-t-2xl">
                         <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 flex items-center justify-center">
                                 <Sparkles size={10} className="text-white" />
                             </div>
                             <div>
-                                <p className="text-[11px] font-bold text-slate-700">Asistente FonoAudio</p>
-                                <p className="text-[9px] text-slate-400">IA para informes clínicos</p>
+                                <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">Asistente FonoAudio</p>
+                                <p className="text-[9px] text-slate-400 dark:text-slate-500">IA para informes clínicos</p>
                             </div>
                         </div>
-                        <button onClick={() => setIsExpanded(false)} className="p-1 hover:bg-white rounded text-slate-400">
+                        <button onClick={() => setIsExpanded(false)} className="p-1 hover:bg-white dark:hover:bg-slate-800 rounded text-slate-400">
                             <X size={14} />
                         </button>
                     </div>
@@ -167,10 +167,10 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
                                     msg.role === 'user'
                                         ? 'bg-indigo-600 text-white rounded-br-md'
                                         : msg.type === 'warning'
-                                        ? 'bg-amber-50 text-amber-800 border border-amber-200 rounded-bl-md'
+                                        ? 'bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800 rounded-bl-md'
                                         : msg.type === 'tip'
-                                        ? 'bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-bl-md'
-                                        : 'bg-slate-100 text-slate-700 rounded-bl-md'
+                                        ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 rounded-bl-md'
+                                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-bl-md'
                                 }`}>
                                     {msg.type === 'tip' && (
                                         <div className="flex items-center gap-1 mb-1">
@@ -206,9 +206,9 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
                         ))}
                         {isLoading && (
                             <div className="flex justify-start">
-                                <div className="bg-slate-100 rounded-2xl rounded-bl-md px-3 py-2 flex items-center gap-2">
+                                <div className="bg-slate-100 dark:bg-slate-800 rounded-2xl rounded-bl-md px-3 py-2 flex items-center gap-2">
                                     <Loader2 size={12} className="animate-spin text-indigo-500" />
-                                    <span className="text-[11px] text-slate-500">Redactando...</span>
+                                    <span className="text-[11px] text-slate-500 dark:text-slate-400">Redactando...</span>
                                 </div>
                             </div>
                         )}
@@ -222,7 +222,7 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
                                 <button
                                     key={idx}
                                     onClick={() => handleSend(action)}
-                                    className="px-2 py-1 bg-white border border-slate-200 rounded-full text-[9px] font-bold text-slate-500 hover:border-indigo-300 hover:text-indigo-600 transition-all"
+                                    className="px-2 py-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-full text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all"
                                 >
                                     {action}
                                 </button>
@@ -231,7 +231,7 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
                     )}
 
                     {/* Input */}
-                    <div className="p-3 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl">
+                    <div className="p-3 border-t border-slate-100 dark:border-slate-700 bg-slate-50/50 dark:bg-slate-800/50 rounded-b-2xl">
                         <div className="flex items-center gap-2">
                             <input
                                 ref={inputRef}
@@ -240,7 +240,7 @@ export const AiAssistantBubble: React.FC<AiAssistantBubbleProps> = ({
                                 onChange={(e) => setInputValue(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleSend()}
                                 placeholder="Pedile a la IA que redacte, mejore o complete..."
-                                className="flex-1 px-3 py-2 bg-white border border-slate-200 rounded-xl text-[11px] outline-none focus:border-indigo-400 transition-colors"
+                                className="flex-1 px-3 py-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-[11px] outline-none focus:border-indigo-400 transition-colors text-slate-800 dark:text-slate-200"
                                 disabled={isLoading}
                             />
                             <button

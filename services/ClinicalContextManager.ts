@@ -119,10 +119,11 @@ class ClinicalContextManager {
     }
 
     public addMessage(message: ConversationMessage): void {
-        this.context.conversationHistory.push(message);
-        if (this.context.conversationHistory.length > 10) {
-            this.context.conversationHistory.shift();
+        const newHistory = [...this.context.conversationHistory, message];
+        if (newHistory.length > 10) {
+            newHistory.shift();
         }
+        this.context = { ...this.context, conversationHistory: newHistory };
         this.notify();
     }
 

@@ -102,12 +102,15 @@ const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAss
   // Sync editor content when prop changes (e.g. from voice assistant)
   React.useEffect(() => {
     if (editor && content !== editor.getHTML()) {
-      // Only update if content is different to avoid cursor jumping/loops
-      // We check if the difference is significant (sometimes HTML structure varies slightly)
-      const currentContent = editor.getHTML();
-      if (currentContent !== content) {
-        editor.commands.setContent(content);
-        editor.commands.setTextSelection(editor.state.doc.content.size);
+      // Save current cursor position
+      const { from, to } = editor.state.selection;
+      editor.commands.setContent(content, false);
+      // Restore cursor position (clamp to new content length)
+      const newDocSize = editor.state.doc.content.size;
+      const safeFrom = Math.min(from, newDocSize);
+      const safeTo = Math.min(to, newDocSize);
+      if (safeFrom <= safeTo) {
+        editor.commands.setTextSelection({ from: safeFrom, to: safeTo });
       }
     }
   }, [content, editor]);

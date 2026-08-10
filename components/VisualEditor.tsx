@@ -528,14 +528,15 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
     if (!canvas) return;
     const json = JSON.stringify(canvas.toJSON(['id', 'name', 'selectable', 'hasControls']));
     setHistory(prev => {
-      const newHistory = [...prev.slice(0, prev.length), { json, timestamp: Date.now() }];
+      // Truncate redo history when new action occurs
+      const newHistory = [...prev.slice(0, historyIndex + 1), { json, timestamp: Date.now() }];
       if (newHistory.length > 50) newHistory.shift();
       return newHistory;
     });
     setHistoryIndex(prev => prev + 1);
     setCanUndo(true);
     setCanRedo(false);
-  }, []);
+  }, [historyIndex]);
 
   const undo = useCallback(() => {
     if (historyIndex <= 0) return;
@@ -849,11 +850,15 @@ const VisualEditor: React.FC<VisualEditorProps> = ({
       link.href = dataUrl;
       link.click();
     } else if (format === 'pdf') {
+      // PDF export - use PNG format with proper naming
       const dataUrl = canvas.toDataURL({ format: 'png', quality: 1, multiplier: 2 });
       const link = document.createElement('a');
-      link.download = `${title}.pdf`;
+      link.download = `${title}_imagen.png`;
       link.href = dataUrl;
       link.click();
+      window.dispatchEvent(new CustomEvent('fonoaudio-toast', {
+        detail: { message: 'Imagen exportada. Para PDF, usá un conversor externo.', type: 'info' }
+      }));
     }
   }, [title]);
 

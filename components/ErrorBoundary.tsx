@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<Props, State> {
             Reintentar
           </button>
           
-          {process.env.NODE_ENV === 'development' && this.state.errorInfo && (
+          {import.meta.env.DEV && this.state.errorInfo && (
             <details className="mt-6 w-full text-left bg-white/50 dark:bg-black/20 p-4 rounded-lg overflow-auto text-xs text-slate-500">
               <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-300 mb-2">
                 Detalles técnicos (Stack trace)
