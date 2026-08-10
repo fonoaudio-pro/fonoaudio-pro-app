@@ -42,12 +42,15 @@ export const GmailService = {
     const params = new URLSearchParams({ userId, query, maxResults: maxResults.toString() });
     if (pageToken) params.set('pageToken', pageToken);
 
-    const resp = await fetch(`${API_BASE}/gmail/messages?${params}`);
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.message || 'Error listing Gmail messages');
+    try {
+      const resp = await fetch(`${API_BASE}/gmail/messages?${params}`);
+      if (!resp.ok) {
+        return { messages: [], nextPageToken: null, total: 0 };
+      }
+      return resp.json();
+    } catch {
+      return { messages: [], nextPageToken: null, total: 0 };
     }
-    return resp.json();
   },
 
   async getMessage(userId: string, messageId: string): Promise<{ message: GmailMessageDetail; patient: any }> {
