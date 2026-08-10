@@ -25,21 +25,21 @@ const colorMap: Record<string, { bg: string; text: string; hover: string; iconBg
 
 const ReportsSection: React.FC<ReportsSectionProps> = ({ onStartReport }) => {
   return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-6 text-slate-800 dark:text-white">Centro de Informes</h2>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <h2 className="text-xl sm:text-2xl font-bold mb-6 text-slate-800 dark:text-white">Centro de Informes</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
         {reports.map(({ type, icon: Icon, color, title, desc }) => {
           const c = colorMap[color];
           return (
             <button
               key={type}
               onClick={() => onStartReport(type)}
-              className={`${c.bg} p-8 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ${c.hover} transition-all text-left group`}
+              className={`${c.bg} p-4 sm:p-6 lg:p-8 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ${c.hover} transition-all text-left group min-h-[44px]`}
             >
-              <div className={`w-12 h-12 ${c.iconBg} ${c.iconText} rounded-lg flex items-center justify-center mb-4`}>
-                <Icon size={24} />
+              <div className={`w-10 h-10 sm:w-12 sm:h-12 ${c.iconBg} ${c.iconText} rounded-lg flex items-center justify-center mb-3 sm:mb-4`}>
+                <Icon size={20} />
               </div>
-              <h3 className={`font-bold text-lg ${c.text}`}>{title}</h3>
+              <h3 className={`font-bold text-base sm:text-lg ${c.text}`}>{title}</h3>
               <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">{desc}</p>
             </button>
           );

@@ -79,9 +79,9 @@ const DashboardSection: React.FC<DashboardSectionProps> = ({
     onDismissRedFlag(id);
   };
   return (
-    <div className="p-8 space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-slate-800 dark:text-white">Resumen General</h2>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+      <div className="flex flex-wrap justify-between items-center gap-4">
+        <h2 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">Resumen General</h2>
       </div>
 
       {proactiveSuggestions.length > 0 && (

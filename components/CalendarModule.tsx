@@ -141,7 +141,7 @@ const CalendarModule: React.FC<CalendarModuleProps> = ({ patients, appointments,
                         <button
                             key={v}
                             onClick={() => setView(v)}
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all ${
+                            className={`px-3 py-1.5 min-h-[36px] rounded text-[10px] font-bold transition-all ${
                                 view === v
                                     ? 'bg-blue-600 text-white'
                                     : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
@@ -154,20 +154,20 @@ const CalendarModule: React.FC<CalendarModuleProps> = ({ patients, appointments,
             </div>
 
             <div className="flex items-center justify-between">
-                <button onClick={() => navigate(-1)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
-                    <ChevronLeft size={16} />
+                <button onClick={() => navigate(-1)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
+                    <ChevronLeft size={18} />
                 </button>
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-slate-700 dark:text-slate-200">{getTitle()}</span>
                     <button
                         onClick={() => { setSelectedDate(new Date()); setView('day'); }}
-                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                        className="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline min-h-[36px] px-2"
                     >
                         Hoy
                     </button>
                 </div>
-                <button onClick={() => navigate(1)} className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
-                    <ChevronRight size={16} />
+                <button onClick={() => navigate(1)} className="p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 transition-colors">
+                    <ChevronRight size={18} />
                 </button>
             </div>
 
@@ -188,7 +188,7 @@ const CalendarModule: React.FC<CalendarModuleProps> = ({ patients, appointments,
                             <button
                                 key={dk}
                                 onClick={() => { setSelectedDate(cell); setView('day'); }}
-                                className={`relative p-1 rounded-lg text-center transition-all ${
+                                className={`relative p-1.5 min-h-[40px] rounded-lg text-center transition-all ${
                                     isSelected
                                         ? 'bg-blue-600 text-white font-bold'
                                         : isToday

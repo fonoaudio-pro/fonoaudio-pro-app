@@ -188,7 +188,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
     };
 
     return (
-        <div className="p-8 h-full flex flex-col overflow-y-auto bg-[#f3f4f6] dark:bg-slate-950">
+        <div className="p-4 sm:p-8 h-full flex flex-col overflow-y-auto bg-[#f3f4f6] dark:bg-slate-950">
             <button 
                 onClick={onBack || (() => window.history.back())} 
                 className="flex items-center gap-2 text-slate-500 dark:text-slate-400 mb-4 hover:text-blue-600 w-fit transition-colors"
@@ -196,54 +196,54 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 <ArrowLeft size={18} /> Volver a la lista
             </button>
 
-            <div className="flex justify-between items-start mb-6">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-4 mb-6">
                 <div className="space-y-1">
-                    <h1 className="text-3xl font-bold text-slate-900 dark:text-white">{patient.name}</h1>
-                    <div className="flex items-center gap-3 text-slate-500 dark:text-slate-400">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">{patient.name}</h1>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-slate-500 dark:text-slate-400 text-sm">
                         <span className="flex items-center gap-1"><Info size={14} /> {patient.diagnosis || 'Sin diagnóstico'}</span>
-                        <span>•</span>
+                        <span className="hidden sm:inline">•</span>
                         <span>{patient.age} años</span>
-                        {patient.phone && <span>• {patient.phone}</span>}
+                        {patient.phone && <><span className="hidden sm:inline">•</span> <span>{patient.phone}</span></>}
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <button 
                         onClick={() => onScheduleAppointment?.(patient)} 
-                        className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all"
+                        className="bg-emerald-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
-                        <Calendar size={18} /> Agendar Cita
+                        <Calendar size={16} /> <span className="hidden xs:inline">Agendar</span> Cita
                     </button>
                     <button 
                         onClick={() => handleWizardOpen(patient.id)} 
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm transition-all"
+                        className="bg-blue-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-blue-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
-                        <ClipboardList size={18} /> Nueva Sesión
+                        <ClipboardList size={16} /> Nueva Sesión
                     </button>
-                    <button onClick={() => setIsReportOpen(true)} className="border border-slate-300 dark:border-slate-600 px-4 py-2 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-all">
-                        <FilePlus size={18} /> Informe
+                    <button onClick={() => setIsReportOpen(true)} className="border border-slate-300 dark:border-slate-600 px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-all text-sm">
+                        <FilePlus size={16} /> Informe
                     </button>
                     <button 
                         onClick={() => onGenerateHomeGuideDraft(patient)} 
-                        className="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 flex items-center gap-2 shadow-sm transition-all"
+                        className="bg-purple-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-purple-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
-                        <Sparkles size={18} /> Guía Hogar
+                        <Sparkles size={16} /> Guía
+                    </button>
+                     {onDeletePatient && patient.quick_status !== 'active_quick' && (
+                     <button 
+                         onClick={() => { if (window.confirm(`¿Eliminar al paciente ${patient.name}?`)) onDeletePatient(patient.id); }} 
+                         className="border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center gap-2 transition-all"
+                         title="Eliminar paciente"
+                     >
+                         <Trash2 size={16} />
                      </button>
-                         {onDeletePatient && patient.quick_status !== 'active_quick' && (
-                         <button 
-                             onClick={() => onDeletePatient(patient.id)} 
-                             className="border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-all"
-                             title="Eliminar paciente"
-                         >
-                             <Trash2 size={16} />
-                         </button>
-                     )}
+                 )}
                      {patient.quick_status === 'active_quick' && (
                          <>
                              <button
                                  onClick={() => setShowFormalizeModal(true)}
-                                 className="bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all"
+                                 className="bg-emerald-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                              >
-                                 <CheckCircle2 size={18} /> Formalizar Caso
+                                 <CheckCircle2 size={16} /> Formalizar
                              </button>
                              {onDiscardQuick && (
                                  <button
@@ -252,7 +252,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                                              onDiscardQuick(patient.id);
                                          }
                                      }}
-                                     className="border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-2 transition-all"
+                                     className="border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-3 py-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center justify-center gap-2 transition-all"
                                      title="Descartar borrador"
                                  >
                                      <Trash2 size={16} />
@@ -281,61 +281,61 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </div>
 
             {/* Tab Navigation */}
-            <div className="flex gap-1 bg-white dark:bg-slate-900 rounded-xl p-1 mb-6 shadow-sm border border-slate-200 dark:border-slate-700">
+            <div className="flex gap-1 bg-white dark:bg-slate-900 rounded-xl p-1 mb-6 shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto">
                 <button
                     onClick={() => setActiveTab('resumen')}
-                    className={`flex items-center gap-2 flex-1 py-2.5 px-4 rounded-lg text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'resumen'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                 >
-                    <ClipboardList size={16} />
+                    <ClipboardList size={14} />
                     Resumen
                 </button>
                 <button
                     onClick={() => setActiveTab('ficha')}
-                    className={`flex items-center gap-2 flex-1 py-2.5 px-4 rounded-lg text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'ficha'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                 >
-                    <Stethoscope size={16} />
-                    Ficha Clínica
+                    <Stethoscope size={14} />
+                    Ficha
                 </button>
                 <button
                     onClick={() => setActiveTab('tests')}
-                    className={`flex items-center gap-2 flex-1 py-2.5 px-4 rounded-lg text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'tests'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                 >
-                    <Target size={16} />
+                    <Target size={14} />
                     Tests
                 </button>
                 <button
                     onClick={() => setActiveTab('analisis')}
-                    className={`flex items-center gap-2 flex-1 py-2.5 px-4 rounded-lg text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'analisis'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                 >
-                    <Stethoscope size={16} />
+                    <Stethoscope size={14} />
                     Análisis
                 </button>
                 <button
                     onClick={() => setActiveTab('historia')}
-                    className={`flex items-center gap-2 flex-1 py-2.5 px-4 rounded-lg text-sm font-bold transition-colors ${
+                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'historia'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                     }`}
                 >
-                    <FileText size={16} />
-                    Historia Clínica
+                    <FileText size={14} />
+                    Historia
                 </button>
             </div>
 

@@ -260,19 +260,214 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
         parts: [{ text: m.text }],
       }));
 
+      // Include function tools for text mode (same as voice mode)
+      const textModeTools = [
+        {
+          functionDeclarations: [
+            {
+              name: "navigate",
+              description: "Navega a una sección de la app.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  view: { type: GenAIType.STRING, enum: ["dashboard", "consultorios", "patients", "agenda", "telegram", "followup", "metrics", "analytics", "reports", "library", "multimedia", "admin", "settings", "sources", "notebooklm"] },
+                  patientName: { type: GenAIType.STRING }
+                },
+                required: ["view"]
+              }
+            },
+            {
+              name: "list_all_patients",
+              description: "Lista todos los pacientes registrados con nombre, edad, diagnóstico y consultorio.",
+              parameters: { type: GenAIType.OBJECT, properties: {} }
+            },
+            {
+              name: "get_patient_info",
+              description: "Muestra información completa de un paciente.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING }
+                },
+                required: ["patientName"]
+              }
+            },
+            {
+              name: "search_patients",
+              description: "Busca pacientes por nombre, diagnóstico o notas.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  query: { type: GenAIType.STRING }
+                },
+                required: ["query"]
+              }
+            },
+            {
+              name: "get_agenda",
+              description: "Muestra agenda del día.",
+              parameters: { type: GenAIType.OBJECT, properties: {} }
+            },
+            {
+              name: "create_appointment",
+              description: "Crea cita nueva.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING },
+                  date: { type: GenAIType.STRING },
+                  time: { type: GenAIType.STRING },
+                  type: { type: GenAIType.STRING, enum: ["Consulta", "Evaluación", "Seguimiento"] }
+                },
+                required: ["patientName", "date", "time"]
+              }
+            },
+            {
+              name: "get_statistics",
+              description: "Muestra estadísticas generales.",
+              parameters: { type: GenAIType.OBJECT, properties: {} }
+            },
+            {
+              name: "create_report",
+              description: "Genera informe clínico.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING },
+                  reportType: { type: GenAIType.STRING, enum: ["valoracion", "seguimiento", "alta", "proceso", "derivacion", "interconsulta"] }
+                },
+                required: ["patientName", "reportType"]
+              }
+            },
+            {
+              name: "add_patient_note",
+              description: "Agrega una nota clínica a un paciente.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING },
+                  note: { type: GenAIType.STRING }
+                },
+                required: ["patientName", "note"]
+              }
+            },
+            {
+              name: "get_recent_activity",
+              description: "Muestra la actividad reciente de la app (últimas 24h).",
+              parameters: { type: GenAIType.OBJECT, properties: {} }
+            },
+            {
+              name: "update_treatment_plan",
+              description: "Actualiza el plan de tratamiento de un paciente.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING },
+                  general: { type: GenAIType.STRING },
+                  strategies: { type: GenAIType.STRING }
+                },
+                required: ["patientName"]
+              }
+            },
+            {
+              name: "add_clinical_fact",
+              description: "Registra un signo o hecho clínico para un paciente.",
+              parameters: {
+                type: GenAIType.OBJECT,
+                properties: {
+                  patientName: { type: GenAIType.STRING },
+                  module: { type: GenAIType.STRING, enum: ["voice", "audiology", "cognition", "language", "motricity", "swallowing"] },
+                  sign: { type: GenAIType.STRING },
+                  details: { type: GenAIType.STRING }
+                },
+                required: ["patientName", "module", "sign"]
+              }
+            }
+          ]
+        }
+      ];
+
       const response = await genAIRef.current.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: [...history, { role: 'user', parts: [{ text }] }],
         config: {
           systemInstruction: systemPrompt,
-          tools: [{ googleSearch: {} }],
+          tools: textModeTools,
         },
       });
-      const reply = response.text || 'No pude generar una respuesta.';
-      setChatMessages(prev => {
-        const next = [...prev, { role: 'assistant' as const, text: reply }];
-        return next.length > MAX_CHAT_MESSAGES ? next.slice(next.length - MAX_CHAT_MESSAGES) : next;
-      });
+
+      // Handle function calls in text mode
+      const part = response.candidates?.[0]?.content?.parts?.[0];
+      if (part?.functionCall) {
+        const fc = part.functionCall;
+        const showFeedback = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
+          window.dispatchEvent(new CustomEvent('fonoaudio-toast', { detail: { message, type } }));
+        };
+
+        let resultText = '';
+        switch (fc.name) {
+          case 'navigate':
+            setCurrentView(fc.args.view as ViewType);
+            showFeedback(`Navegando a ${fc.args.view}`, 'info');
+            resultText = `Navegué a ${fc.args.view}. ¿En qué puedo ayudarte?`;
+            break;
+          case 'list_all_patients':
+            resultText = `Tenés ${patients.length} pacientes registrados: ${patients.slice(0, 10).map(p => `${p.name} (${p.diagnosis || 'sin diagnóstico'})`).join(', ')}${patients.length > 10 ? '...' : ''}`;
+            break;
+          case 'get_patient_info': {
+            const p = patients.find(pat => pat.name.toLowerCase().includes((fc.args.patientName as string).toLowerCase()));
+            if (p) {
+              setSelectedPatientId(p.id);
+              setCurrentView('patients');
+              resultText = `Ficha de ${p.name}: ${p.age} años, ${p.diagnosis || 'sin diagnóstico'}. ${p.history?.length || 0} sesiones.`;
+            } else {
+              resultText = `No encontré un paciente con el nombre "${fc.args.patientName}".`;
+            }
+            break;
+          }
+          case 'search_patients': {
+            const query = (fc.args.query as string).toLowerCase();
+            const results = patients.filter(p => p.name.toLowerCase().includes(query) || p.diagnosis?.toLowerCase().includes(query));
+            resultText = results.length > 0
+              ? `Encontré ${results.length} paciente(s): ${results.map(p => `${p.name} - ${p.diagnosis || 'sin diagnóstico'}`).join(', ')}`
+              : `No encontré pacientes para "${fc.args.query}".`;
+            break;
+          }
+          case 'get_agenda': {
+            const today = new Date().toISOString().split('T')[0];
+            const todayAppts = appointments.filter(a => a.date === today);
+            resultText = todayAppts.length > 0
+              ? `Hoy tenés ${todayAppts.length} cita(s): ${todayAppts.map(a => `${a.time} - ${patients.find(p => p.id === a.patientId)?.name || 'Desconocido'}`).join(', ')}`
+              : 'No tenés citas programadas para hoy.';
+            break;
+          }
+          case 'create_appointment':
+            resultText = `Para crear la cita de ${fc.args.patientName} el ${fc.args.date} a las ${fc.args.time}, abrí la sección Agenda y completá los datos.`;
+            break;
+          case 'get_statistics':
+            resultText = `Estadísticas: ${patients.length} pacientes, ${appointments.length} citas, ${patients.filter(p => p.reports?.length).length} con informes.`;
+            break;
+          case 'add_patient_note':
+            resultText = `Para agregar la nota a ${fc.args.patientName}, abrí su ficha y escribí la nota en la sección correspondiente.`;
+            break;
+          case 'get_recent_activity':
+            resultText = `Actividad reciente: ${patients.length} pacientes activos, ${appointments.filter(a => a.date === new Date().toISOString().split('T')[0]).length} citas hoy.`;
+            break;
+          default:
+            resultText = `Acción "${fc.name}" ejecutada. ¿Necesitás algo más?`;
+        }
+
+        setChatMessages(prev => {
+          const next = [...prev, { role: 'assistant' as const, text: resultText }];
+          return next.length > MAX_CHAT_MESSAGES ? next.slice(next.length - MAX_CHAT_MESSAGES) : next;
+        });
+      } else {
+        const reply = response.text || 'No pude generar una respuesta.';
+        setChatMessages(prev => {
+          const next = [...prev, { role: 'assistant' as const, text: reply }];
+          return next.length > MAX_CHAT_MESSAGES ? next.slice(next.length - MAX_CHAT_MESSAGES) : next;
+        });
+      }
     } catch (e: any) {
       console.error('[TextAssistant] Error:', e);
       setChatMessages(prev => {

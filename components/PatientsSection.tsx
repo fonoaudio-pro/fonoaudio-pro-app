@@ -108,12 +108,12 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
 
   // Main view: Patient list with search + filters
   return (
-    <div className="p-6 h-full flex flex-col max-w-6xl mx-auto w-full">
+    <div className="p-4 sm:p-6 h-full flex flex-col max-w-6xl mx-auto w-full">
       {/* Header */}
-      <div className="flex items-center justify-between mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800 dark:text-white">Pacientes</h1>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-white">Pacientes</h1>
+          <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
             {filteredPatients.length} paciente{filteredPatients.length !== 1 ? 's' : ''}
             {consultorioName && ` en ${consultorioName}`}
             {searchQuery && ` · buscando "${searchQuery}"`}
@@ -121,7 +121,7 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
         </div>
         <button
           onClick={() => setShowNewPatientModal(true)}
-          className="bg-blue-600 text-white px-4 py-2.5 rounded-xl flex items-center gap-2 hover:bg-blue-700 font-medium text-sm shadow-sm transition-colors"
+          className="bg-blue-600 text-white px-4 py-2.5 min-h-[44px] rounded-xl flex items-center gap-2 hover:bg-blue-700 font-medium text-sm shadow-sm transition-colors"
         >
           <Plus size={18} /> Nuevo Paciente
         </button>
