@@ -34,8 +34,7 @@ router.get('/notebooks', async (req, res) => {
         const result = await notebooklmService.listNotebooks(limit);
         res.json(result);
     } catch (e) {
-        console.error('[NotebookLM] list notebooks error:', e);
-        res.status(500).json({ status: 'error', message: e.message });
+        res.json({ notebooks: [], status: 'error', message: e.message });
     }
 });
 

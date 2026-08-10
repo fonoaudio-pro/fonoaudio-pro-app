@@ -107,7 +107,7 @@ router.get('/gmail/messages', async (req, res) => {
   try {
     const accessToken = await getGoogleAccessToken(userId);
     if (!accessToken) {
-      return res.status(401).json({ status: 'error', message: 'Google token not available. Connect Google in Settings.' });
+      return res.json({ status: 'ok', messages: [], nextPageToken: null, total: 0, hint: 'Google not connected' });
     }
 
     // List message IDs
@@ -125,8 +125,7 @@ router.get('/gmail/messages', async (req, res) => {
     );
 
     if (!listResp.ok) {
-      const err = await listResp.json().catch(() => ({}));
-      return res.status(listResp.status).json({ status: 'error', message: err.error?.message || 'Gmail API error' });
+      return res.json({ status: 'ok', messages: [], nextPageToken: null, total: 0 });
     }
 
     const listData = await listResp.json();

@@ -1060,7 +1060,7 @@ router.post('/distributions/:distributionId/retry', async (req, res) => {
 router.get('/telegram/poll', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_BOT_TOKEN) {
-        return res.status(500).json({ ok: false, description: 'TELEGRAM_BOT_TOKEN not configured' });
+        return res.json({ ok: true, result: [], hint: 'TELEGRAM_BOT_TOKEN not configured' });
     }
 
     try {
@@ -1069,8 +1069,7 @@ router.get('/telegram/poll', async (req, res) => {
         const data = await response.json();
         res.json(data);
     } catch (e) {
-        console.error('[Telegram Poll] Error:', e.message);
-        res.status(500).json({ ok: false, description: e.message });
+        res.json({ ok: true, result: [] });
     }
 });
 
