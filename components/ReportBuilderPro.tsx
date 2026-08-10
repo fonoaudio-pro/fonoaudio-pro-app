@@ -3,7 +3,6 @@ import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Highlight from '@tiptap/extension-highlight';
-import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -12,7 +11,6 @@ import { TableHeader } from '@tiptap/extension-table-header';
 import { TextStyle, FontFamily, FontSize } from '@tiptap/extension-text-style';
 import { Color } from '@tiptap/extension-color';
 import { CharacterCount } from '@tiptap/extension-character-count';
-import { Gapcursor } from '@tiptap/extension-gapcursor';
 import {
     X, Save, Download, FileText, Sparkles, Mic, MicOff, Loader2,
     Wand2, ChevronRight, Plus, Brain, Stethoscope, RefreshCw, Check,
@@ -133,12 +131,11 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
             StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
             TextAlign.configure({ types: ['heading', 'paragraph'] }),
             Highlight.configure({ multicolor: true }),
-            Underline,
             Placeholder.configure({ placeholder: 'Escribí o pedile a la IA que genere el texto...' }),
             Table.configure({ resizable: true }),
             TableRow, TableCell, TableHeader,
             TextStyle, FontFamily, FontSize, Color,
-            CharacterCount, Gapcursor, VariableHighlight,
+            CharacterCount, VariableHighlight,
         ],
         content: '',
         editorProps: { attributes: { class: 'focus:outline-none min-h-[500px] text-slate-800 leading-relaxed' } },

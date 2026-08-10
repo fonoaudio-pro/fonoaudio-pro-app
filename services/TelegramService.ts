@@ -243,18 +243,26 @@ Reglas:
     this.stopPolling();
     onMessageCallback = onMessage;
 
+    let consecutiveErrors = 0;
+
     const poll = async () => {
       if (!this.botToken) return;
       try {
         const offset = parseInt(localStorage.getItem(TELEGRAM_OFFSET_KEY) || '0', 10);
         const resp = await fetch(`${BACKEND_URL}/api/telegram/poll?offset=${offset}`);
         if (!resp.ok) {
-          console.warn('[Telegram] Poll returned', resp.status, '- retrying in 30s');
+          consecutiveErrors++;
+          if (consecutiveErrors >= 3) {
+            console.warn('[Telegram] Server unavailable (', resp.status, ') - will retry in 60s');
+            clearInterval(pollTimer!);
+            pollTimer = setTimeout(() => { pollTimer = null; poll(); }, 60000) as any;
+          }
           return;
         }
+        consecutiveErrors = 0;
         const text = await resp.text();
         let data: any;
-        try { data = JSON.parse(text); } catch { console.warn('[Telegram] Non-JSON response'); return; }
+        try { data = JSON.parse(text); } catch { return; }
         if (data.ok && data.result?.length > 0) {
           for (const update of data.result) {
             const msg = update.message;
@@ -295,15 +303,17 @@ Reglas:
       } catch (e: any) {
         console.error('[Telegram] Poll error:', e.message);
       }
+      // Schedule next poll with backoff on errors
+      const delay = consecutiveErrors >= 3 ? 60000 : POLL_INTERVAL_MS;
+      pollTimer = setTimeout(() => { pollTimer = null; poll(); }, delay) as any;
     };
 
     poll();
-    pollTimer = setInterval(poll, POLL_INTERVAL_MS);
   }
 
   static stopPolling() {
     if (pollTimer) {
-      clearInterval(pollTimer);
+      clearTimeout(pollTimer);
       pollTimer = null;
     }
     onMessageCallback = null;

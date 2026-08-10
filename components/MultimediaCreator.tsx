@@ -259,7 +259,7 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
       // Pull clinical sources
       let sourcesContext = '';
       try {
-        const { data: sources } = await supabase.from('clinical_sources').select('title, content').limit(3);
+        const { data: sources } = await supabase.from('clinical_sources').select('id, title, category').limit(3);
         if (sources?.length) {
           sourcesContext = `\n\nFUENTES CLÍNICAS:\n${sources.map((s: any) => `- ${s.title}: ${(s.content || '').substring(0, 200)}`).join('\n')}`;
         }

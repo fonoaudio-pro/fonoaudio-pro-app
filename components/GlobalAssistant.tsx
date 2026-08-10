@@ -1761,7 +1761,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                         // Pull clinical sources context
                         let sourcesContext = '';
                         try {
-                          const { data: sources } = await supabase.from('clinical_sources').select('title, content').limit(3);
+                          const { data: sources } = await supabase.from('clinical_sources').select('id, title, category').limit(3);
                           if (sources?.length) {
                             sourcesContext = `\n\nFUENTES CLÍNICAS DISPONIBLES:\n${sources.map((s: any) => `- ${s.title}: ${(s.content || '').substring(0, 200)}`).join('\n')}`;
                           }
