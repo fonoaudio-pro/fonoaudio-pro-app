@@ -13,6 +13,7 @@ export const LoginPage: React.FC<{ onSkip?: () => void }> = ({ onSkip }) => {
       await GoogleAuthService.signInWithGoogle();
     } catch (err: any) {
       setError(err.message || 'Error al conectar con Google');
+    } finally {
       setIsLoading(false);
     }
   };

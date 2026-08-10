@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Underline from '@tiptap/extension-underline';
@@ -71,21 +71,23 @@ interface EditorProps {
 }
 
 const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAssistantActive }) => {
+  const extensions = useMemo(() => [
+    StarterKit,
+    Underline,
+    TextAlign.configure({
+      types: ['heading', 'paragraph'],
+    }),
+    TextStyle,
+    Color,
+    Highlight.configure({ multicolor: true }),
+    FontFamily.configure({
+      types: ['textStyle'],
+    }),
+    FontSize,
+  ], []);
+
   const editor = useEditor({
-    extensions: [
-      StarterKit,
-      Underline,
-      TextAlign.configure({
-        types: ['heading', 'paragraph'],
-      }),
-      TextStyle,
-      Color,
-      Highlight.configure({ multicolor: true }),
-      FontFamily.configure({
-        types: ['textStyle'],
-      }),
-      FontSize,
-    ],
+    extensions,
     content,
     onUpdate: ({ editor }) => {
       onChange(editor.getHTML());

@@ -256,7 +256,7 @@ const PatientsSection: React.FC<PatientsSectionProps> = ({
                   <td className="p-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={(e) => { e.stopPropagation(); onDeletePatient(p.id); }}
+                        onClick={(e) => { e.stopPropagation(); if (window.confirm(`¿Eliminar al paciente ${p.name}? Esta acción no se puede deshacer.`)) onDeletePatient(p.id); }}
                         className="p-2.5 min-h-[44px] min-w-[44px] flex items-center justify-center text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                         title="Eliminar"
                       >

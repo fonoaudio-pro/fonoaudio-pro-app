@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
-import { Bot, Minimize2, Loader2, Database, AlertTriangle, Activity, BookOpen, Send } from "lucide-react";
+import { Bot, Minimize2, Loader2, Database, AlertTriangle, Activity, BookOpen, Send, Trash2 } from "lucide-react";
 import { GoogleGenAI, LiveServerMessage, Modality, Type as GenAIType } from "@google/genai";
 import { supabase } from "../utils/supabaseClient";
 import { Patient, ViewType } from "../types";
@@ -103,6 +103,7 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
   const selectedPatientId = useAppStore(s => s.selectedPatientId);
   const setCurrentView = useAppStore(s => s.setCurrentView);
   const setSelectedPatientId = useAppStore(s => s.setSelectedPatientId);
+  const setSelectedConsultorio = useAppStore(s => s.setSelectedConsultorio);
   const setEditedPlan = useAppStore(s => s.setEditedPlan);
   const setIsEditingPlan = useAppStore(s => s.setIsEditingPlan);
   const setNewReportType = useAppStore(s => s.setNewReportType);
@@ -184,13 +185,17 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
 
     let longitudinalContext = '';
     if (selectedPatient && selectedPatient.birthDate) {
-      loadPatientContext(
-        selectedPatient.id,
-        selectedPatient.name,
-        selectedPatient.birthDate,
-        selectedPatient.diagnosis || 'No especificado'
-      ).then(() => {}).catch(() => {});
-      longitudinalContext = getContextForPrompt();
+      try {
+        await loadPatientContext(
+          selectedPatient.id,
+          selectedPatient.name,
+          selectedPatient.birthDate,
+          selectedPatient.diagnosis || 'No especificado'
+        );
+        longitudinalContext = getContextForPrompt();
+      } catch {
+        // Silent fail - longitudinal context stays empty
+      }
     }
 
     const [notebookContext, nbLmResult] = await Promise.all([
@@ -750,16 +755,20 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
 
       selectedPatientRef.current = selectedPatient;
 
-      // Load contexts in background — don't block connection
+      // Load contexts — need this before building system instruction
       let longitudinalContext = '';
       if (selectedPatient && selectedPatient.birthDate) {
-        loadPatientContext(
-          selectedPatient.id,
-          selectedPatient.name,
-          selectedPatient.birthDate,
-          selectedPatient.diagnosis || 'No especificado'
-        ).then(() => {}).catch(() => {});
-        longitudinalContext = getContextForPrompt();
+        try {
+          await loadPatientContext(
+            selectedPatient.id,
+            selectedPatient.name,
+            selectedPatient.birthDate,
+            selectedPatient.diagnosis || 'No especificado'
+          );
+          longitudinalContext = getContextForPrompt();
+        } catch {
+          // Silent fail - longitudinal context stays empty
+        }
       }
 
       const notebookContext = (notebookCacheRef.current && Date.now() - notebookCacheRef.current.ts < NOTEBOOK_CACHE_TTL)

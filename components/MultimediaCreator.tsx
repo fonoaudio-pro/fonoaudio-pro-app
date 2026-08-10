@@ -141,6 +141,11 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
   const [nbContext, setNbContext] = useState('');
   const [nbLoading, setNbLoading] = useState(false);
 
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    return () => { mountedRef.current = false; };
+  }, []);
+
   useEffect(() => {
     loadTemplates();
     loadCategories();
@@ -213,18 +218,18 @@ export default function MultimediaCreator({ userId, consultorioId, patientId, on
 
   async function checkComfyUI() {
     const available = await comfyuiService.healthCheck();
-    setComfyuiAvailable(available);
+    if (mountedRef.current) setComfyuiAvailable(available);
   }
 
   async function loadTemplates() {
     setLoading(true);
     try {
       const data = await MultimediaMaterialService.getTemplates();
-      setTemplates(data);
+      if (mountedRef.current) setTemplates(data);
     } catch (e) {
       console.error('[MultimediaCreator] Error loading templates:', e);
     }
-    setLoading(false);
+    if (mountedRef.current) setLoading(false);
   }
 
   async function handleAIGenerate() {
@@ -283,12 +288,13 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
   async function loadCategories() {
     try {
       const cats = await pictogramService.getCategories();
+      if (!mountedRef.current) return;
       setCategories(cats);
       const firstCat = Object.keys(cats)[0];
       if (firstCat) {
         setSelectedCategory(firstCat);
         const picts = await pictogramService.listPictograms(firstCat);
-        setPictogramList(picts);
+        if (mountedRef.current) setPictogramList(picts);
       }
     } catch (e) {
       console.warn('[Pictogram] Error loading categories:', e);
@@ -303,11 +309,11 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
         .select('id, title, content, category')
         .order('created_at', { ascending: false })
         .limit(20);
-      setClinicalSources(data || []);
+      if (mountedRef.current) setClinicalSources(data || []);
     } catch (e) {
       console.warn('[MultimediaCreator] Error loading clinical sources:', e);
     } finally {
-      setSourcesLoading(false);
+      if (mountedRef.current) setSourcesLoading(false);
     }
   }
 
@@ -318,23 +324,26 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
       const nbRes = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=5`);
       const nbData = await nbRes.json();
       const notebooks = Array.isArray(nbData) ? nbData : nbData.notebooks || [];
+      if (!mountedRef.current) return;
       setNbNotebooks(notebooks);
 
       if (notebooks.length > 0) {
         const artRes = await fetch(`${backendUrl}/api/notebooklm/notebooks/${notebooks[0].id}/artifacts`);
         const artData = await artRes.json();
         const artifacts = Array.isArray(artData) ? artData : artData.artifacts || [];
-        setNbArtifacts(artifacts.map((a: any) => ({
-          id: a.id,
-          type: a.type || 'unknown',
-          title: a.title || a.type,
-          status: a.status || 'completed'
-        })));
+        if (mountedRef.current) {
+          setNbArtifacts(artifacts.map((a: any) => ({
+            id: a.id,
+            type: a.type || 'unknown',
+            title: a.title || a.type,
+            status: a.status || 'completed'
+          })));
+        }
       }
     } catch (e) {
       console.warn('[MultimediaCreator] NotebookLM not available:', e);
     } finally {
-      setNbLoading(false);
+      if (mountedRef.current) setNbLoading(false);
     }
   }
 

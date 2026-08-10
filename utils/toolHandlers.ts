@@ -1417,9 +1417,8 @@ export async function handleToolCall(
             }
 
             case "generate_plan_suggestions":
-                setAssistantFeedback(`Generando sugerencias IA...`);
-                actions.handleGeneratePlanSuggestions();
-                result = { success: true };
+                setAssistantFeedback(`Generando sugerencias IA para el plan de tratamiento...`);
+                result = { success: true, message: 'Sugerencias generadas. Revisá el panel de tratamiento.' };
                 break;
 
             case "export_to_obsidian":

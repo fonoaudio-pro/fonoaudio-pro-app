@@ -29,6 +29,7 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [viewingHistory, setViewingHistory] = useState<PatientAnamnesis | null>(null);
   const [showAreaFilter, setShowAreaFilter] = useState(false);
 
@@ -43,6 +44,7 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
   const loadData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const [draft, allVersions] = await Promise.all([
         AnamnesisService.getCurrent(patientId),
         AnamnesisService.getAllByPatientId(patientId),
@@ -51,8 +53,9 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
       setCurrentDraft(draft);
       setHistory(allVersions);
       setSections(draft?.sections || {});
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error loading anamnesis:', err);
+      setError('Error al cargar la anamnesis. Por favor, intentá de nuevo.');
     } finally {
       setLoading(false);
     }
@@ -65,6 +68,7 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
   const handleSave = async () => {
     try {
       setSaving(true);
+      setError(null);
       const savedDraft = await AnamnesisService.saveAsNewDraft(
         patientId,
         sections,
@@ -74,8 +78,9 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       await loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error saving anamnesis:', err);
+      setError('Error al guardar la anamnesis. Verificá tu conexión e intentá de nuevo.');
     } finally {
       setSaving(false);
     }
@@ -89,6 +94,17 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
     return (
       <div className="flex items-center justify-center p-8">
         <Loader2 className="animate-spin text-blue-500" size={24} />
+      </div>
+    );
+  }
+
+  if (error && !sections) {
+    return (
+      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+        <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+        <button onClick={loadData} className="mt-2 text-xs text-red-700 dark:text-red-300 underline hover:no-underline">
+          Reintentar
+        </button>
       </div>
     );
   }
@@ -132,6 +148,12 @@ export const AnamnesisPanel: React.FC<AnamnesisPanelProps> = ({
           </button>
         </div>
       </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-600 dark:text-red-400">
+          {error}
+        </div>
+      )}
 
       {viewingHistory && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">

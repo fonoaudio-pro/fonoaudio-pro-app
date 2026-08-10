@@ -1,6 +1,6 @@
 import { SessionService } from './SessionService';
 import { MaterialService } from './MaterialService';
-import { Patient, ProactiveSuggestion, ClinicalTrend } from '../types';
+import { Patient, ProactiveSuggestion, ClinicalTrend, RedFlag } from '../types';
 import { supabase } from '../utils/supabaseClient';
 import { SwallowingService } from '../src/modules/swallowing/service';
 
