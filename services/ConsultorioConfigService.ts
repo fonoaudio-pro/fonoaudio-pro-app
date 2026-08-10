@@ -50,13 +50,34 @@ export const TAILWIND_COLORS: Record<string, { bg: string; text: string; border:
   indigo: { bg: 'bg-indigo-500', text: 'text-indigo-600', border: 'border-indigo-400', light: 'bg-indigo-50' },
 };
 
+import { supabase } from '../utils/supabaseClient';
+
 export const ConsultorioConfigService = {
+  async fetchFromSupabase(): Promise<ConsultorioConfig[]> {
+    try {
+      const { data } = await supabase.from('consultorios').select('*');
+      if (data && data.length > 0) {
+        const mapped: ConsultorioConfig[] = data.map((item: any) => ({
+          id: item.id || `consultorio_${item.name}`,
+          name: item.name || 'Consultorio',
+          icon: item.icon || '🏥',
+          color: item.color || 'blue',
+          googleColorId: item.google_color_id || item.googleColorId || '1',
+        }));
+        this.saveLocally(mapped);
+        return mapped;
+      }
+    } catch (e) {
+      console.warn('[ConsultorioConfigService] Error fetching from Supabase:', e);
+    }
+    return this.getAll();
+  },
+
   getAll(): ConsultorioConfig[] {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        // Merge with defaults to ensure new fields exist
         return DEFAULT_CONFIG.map(def => {
           const custom = parsed.find((c: ConsultorioConfig) => c.id === def.id);
           return custom ? { ...def, ...custom } : def;
@@ -70,8 +91,22 @@ export const ConsultorioConfigService = {
     return this.getAll().find(c => c.id === id);
   },
 
-  save(config: ConsultorioConfig[]): void {
+  saveLocally(config: ConsultorioConfig[]): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+  },
+
+  save(config: ConsultorioConfig[]): void {
+    this.saveLocally(config);
+    // Async background sync to Supabase
+    Promise.all(config.map(item =>
+      supabase.from('consultorios').upsert({
+        id: item.id,
+        name: item.name,
+        color: item.color,
+        icon: item.icon,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' })
+    ).catch(err => console.warn('[ConsultorioConfigService] Supabase sync error:', err)));
   },
 
   updateName(id: string, name: string): void {

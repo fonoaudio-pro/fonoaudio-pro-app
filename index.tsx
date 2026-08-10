@@ -25,6 +25,7 @@ import FollowUpWorklist from "./components/FollowUpWorklist";
 import SuggestionEffectivenessDashboard from "./components/SuggestionEffectivenessDashboard";
 
 import { ToastProvider, useToast } from "./context/ToastContext";
+import { useRealtimeSync } from "./hooks/useRealtimeSync";
 import { ThemeProvider } from "./context/ThemeContext";
 import { SettingsProvider } from "./context/SettingsContext";
 import { ClinicalAlertBusProvider } from "./context/ClinicalAlertBus";
@@ -72,6 +73,7 @@ const App = () => {
   const shareToken = isPublicShareRoute ? pathParts[3] : null;
 
   const auth = useAuth();
+  useRealtimeSync();
   const { session, userProfile, dbProfile, isAuthLoading, isGoogleConnected, signOut } = auth;
 
   // React Query — single source of truth for server data

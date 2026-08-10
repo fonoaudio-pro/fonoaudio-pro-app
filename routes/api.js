@@ -422,10 +422,18 @@ async function sendTelegramMessage(chatId, text, parseMode = 'HTML') {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_BOT_TOKEN || !chatId) return false;
     try {
+        let cleanedText = text;
+        if (parseMode === 'HTML') {
+            // Convert simple markdown bold/italic to HTML tags for Telegram compatibility
+            cleanedText = text
+                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
+                .replace(/\*(.*?)\*/g, '<b>$1</b>')
+                .replace(/_(.*?)_/g, '<i>$1</i>');
+        }
         const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ chat_id: chatId, text, parse_mode: parseMode }),
+            body: JSON.stringify({ chat_id: chatId, text: cleanedText, parse_mode: parseMode }),
         });
         const data = await resp.json();
         return data.ok === true;
