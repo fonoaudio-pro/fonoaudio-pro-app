@@ -853,12 +853,20 @@ router.get('/telegram/diagnose', async (req, res) => {
         chatIdSet: !!chatId,
         chatIdValue: chatId || 'MISSING',
         apiTest: null,
+        webhookInfo: null,
+        updatesTest: null,
     };
     if (token) {
         try {
             const r = await fetch(`https://api.telegram.org/bot${token}/getMe`);
             const d = await r.json();
             result.apiTest = d.ok ? `Bot: @${d.result.username} (${d.result.first_name})` : `ERROR: ${d.description}`;
+
+            const whRes = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`);
+            result.webhookInfo = await whRes.json();
+
+            const updRes = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=5`);
+            result.updatesTest = await updRes.json();
         } catch (e) {
             result.apiTest = `FETCH ERROR: ${e.message}`;
         }
