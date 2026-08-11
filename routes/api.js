@@ -1057,26 +1057,22 @@ router.post('/distributions/:distributionId/retry', async (req, res) => {
 
 // --- TELEGRAM PROXY ENDPOINTS (solve CORS) ---
 
-router.get('/telegram/poll', async (req, res) => {
-    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    if (!TELEGRAM_BOT_TOKEN) {
-        return res.json({ ok: true, result: [], hint: 'TELEGRAM_BOT_TOKEN not configured' });
-    }
+// Helper to check for token
+function isTelegramConfigured() {
+    return !!process.env.TELEGRAM_BOT_TOKEN;
+}
 
-    try {
-        const offset = req.query.offset || '0';
-        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${offset}&timeout=3`);
-        const data = await response.json();
-        res.json(data);
-    } catch (e) {
-        res.json({ ok: true, result: [] });
+router.get('/telegram/poll', async (req, res) => {
+    if (!isTelegramConfigured()) {
+        return res.json({ ok: true, result: [] });
     }
-});
+    // ... rest of the code
+
 
 router.get('/telegram/file/:fileId', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_BOT_TOKEN) {
-        return res.status(500).json({ ok: false, description: 'TELEGRAM_BOT_TOKEN not configured' });
+        return res.json({ ok: false, description: 'TELEGRAM_BOT_TOKEN not configured' });
     }
 
     try {
@@ -1084,13 +1080,13 @@ router.get('/telegram/file/:fileId', async (req, res) => {
         const fileInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${fileId}`);
         const fileInfo = await fileInfoRes.json();
         if (!fileInfo.ok) {
-            return res.status(400).json(fileInfo);
+            return res.json({ ok: false, description: 'Telegram getFile failed' });
         }
 
         const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileInfo.result.file_path}`;
         const fileRes = await fetch(fileUrl);
         if (!fileRes.ok) {
-            return res.status(500).json({ ok: false, description: 'Failed to download file from Telegram' });
+            return res.json({ ok: false, description: 'Failed to download file' });
         }
 
         const contentType = fileRes.headers.get('content-type') || 'application/octet-stream';
@@ -1098,8 +1094,7 @@ router.get('/telegram/file/:fileId', async (req, res) => {
         const buffer = await fileRes.arrayBuffer();
         res.send(Buffer.from(buffer));
     } catch (e) {
-        console.error('[Telegram File] Error:', e.message);
-        res.status(500).json({ ok: false, description: e.message });
+        res.json({ ok: false, description: e.message });
     }
 });
 

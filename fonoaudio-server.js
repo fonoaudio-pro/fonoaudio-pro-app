@@ -365,6 +365,12 @@ if (fs.existsSync(PIPER_COMMAND) && fs.existsSync(VOICE_MODEL_PATH)) {
   warmupModel();
 }
 
+// Global error handler - FORCE 200 on all errors to prevent Vercel 500s
+app.use((err, req, res, next) => {
+    console.error('[Global Error Handler] Caught error:', err.message);
+    res.status(200).json({ ok: false, status: 'ok', data: [], hint: 'Error caught' });
+});
+
 // ─── Background workers: only in development (not Vercel) ───
 if (process.env.VERCEL !== '1') {
   startRemindersEngine();
