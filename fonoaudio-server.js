@@ -39,12 +39,23 @@ const app = express();
 app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 
-// Initialize Gemini
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
-const aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+// Initialize Gemini (safe — won't crash server if API key is missing)
+let aiModel = null;
+try {
+    const apiKey = process.env.GOOGLE_API_KEY;
+    if (apiKey) {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        console.log('[Gemini] Model initialized successfully');
+    } else {
+        console.warn('[Gemini] GOOGLE_API_KEY not set — AI features will use fallbacks');
+    }
+} catch (e) {
+    console.error('[Gemini] Failed to initialize:', e.message);
+}
 
 const PORT = process.env.PORT || 3001;
-app.locals.aiModel = aiModel; // Share model with routes
+app.locals.aiModel = aiModel; // Share model with routes (may be null)
 
 // ─── Pexels Image Search Proxy ───
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY || '';

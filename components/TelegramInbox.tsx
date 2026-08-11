@@ -58,7 +58,7 @@ const TelegramInbox: React.FC<TelegramInboxProps> = ({ onNavigateToSettings, onN
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { settings, update } = useSettings();
 
-  const isConfigured = TelegramService.isConfigured();
+  const [isConfigured, setIsConfigured] = useState(() => TelegramService.isConfigured());
   const chatId = settings.integrations?.telegram?.chatId || '';
 
   // Match incoming message sender to a patient
@@ -67,6 +67,15 @@ const TelegramInbox: React.FC<TelegramInboxProps> = ({ onNavigateToSettings, onN
     const lower = senderName.toLowerCase();
     return patients.find(p => p.name.toLowerCase().includes(lower) || lower.includes(p.name.toLowerCase())) || null;
   };
+
+  // Restore bot token from settings on mount (static var is lost on page refresh)
+  useEffect(() => {
+    const tg = settings.integrations?.telegram;
+    if (tg?.botToken && !TelegramService.isConfigured()) {
+      TelegramService.configure(tg.botToken, tg.chatId || '');
+      setIsConfigured(true);
+    }
+  }, []);
 
   useEffect(() => {
     loadMessages();

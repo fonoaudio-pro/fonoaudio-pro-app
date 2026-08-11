@@ -259,6 +259,18 @@ function isRetryableError(err) {
 
 // Main resilience function: tries model chain with backoff, then Groq fallback
 async function callGeminiResilient(parts, aiModel, modelName) {
+    if (!aiModel) {
+        // No AI model available — try Groq directly
+        const textPrompt = extractTextFromParts(parts);
+        if (textPrompt) {
+            const groqResult = await callGroqFallback(textPrompt);
+            if (groqResult.ok) {
+                return { ok: true, text: groqResult.text, model: groqResult.model, fallback: true };
+            }
+        }
+        return { ok: false, error: new Error('AI model not available and Groq fallback failed') };
+    }
+
     const modelsToTry = [modelName, ...GEMINI_MODEL_CHAIN.filter(m => m !== modelName)];
 
     // Phase 1: Try all Gemini models
@@ -1251,11 +1263,13 @@ router.post('/telegram/process-media', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     const aiModel = req.app.locals.aiModel;
 
-    if (!TELEGRAM_BOT_TOKEN) {
-        return res.status(500).json({ status: 'error', message: 'TELEGRAM_BOT_TOKEN not configured' });
-    }
     if (!file_id) {
         return res.status(400).json({ status: 'error', message: 'file_id is required' });
+    }
+
+    if (!TELEGRAM_BOT_TOKEN) {
+        console.warn('[Process-Media] No TELEGRAM_BOT_TOKEN — cannot download file');
+        return res.json({ status: 'ok', response: 'Archivo recibido pero no se pudo procesar sin token de Telegram configurado.', sent_to_telegram: false });
     }
 
     try {
@@ -1790,9 +1804,6 @@ router.post('/telegram/process-text', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     const aiModel = req.app.locals.aiModel;
 
-    if (!aiModel) {
-        return res.status(500).json({ status: 'error', message: 'AI model not available' });
-    }
     if (!message_text) {
         return res.status(400).json({ status: 'error', message: 'message_text is required' });
     }
@@ -2051,19 +2062,29 @@ ${message_text}
 10. Podés saludar, despedirte, o responder preguntas generales de forma amable.`;
 
         const parts = [{ text: clinicalPrompt }];
-        const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
         let aiResponse;
 
-        if (geminiResult.ok) {
-            aiResponse = geminiResult.text;
-        } else {
-            console.warn('[Process-Text] All Gemini models failed. Attempting Supabase fallback...');
-            // Try degraded response from Supabase (no AI needed)
+        if (!aiModel) {
+            console.warn('[Process-Text] AI model not available, using Supabase fallback...');
             const fallback = await getTextFallbackFromSupabase(message_text, user_id);
             if (fallback) {
                 aiResponse = fallback;
             } else {
-                aiResponse = `No pude generar una respuesta con IA (servicio temporalmente no disponible).\n\nPodés:\n• Consultar la agenda directamente desde la app\n• Revisar los pacientes en la sección Pacientes\n• Intentar de nuevo en unos minutos`;
+                aiResponse = `No pude generar una respuesta con IA (servicio no disponible).\n\nPodés:\n• Consultar la agenda directamente desde la app\n• Revisar los pacientes en la sección Pacientes\n• Intentar de nuevo en unos minutos`;
+            }
+        } else {
+            const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
+
+            if (geminiResult.ok) {
+                aiResponse = geminiResult.text;
+            } else {
+                console.warn('[Process-Text] All Gemini models failed. Attempting Supabase fallback...');
+                const fallback = await getTextFallbackFromSupabase(message_text, user_id);
+                if (fallback) {
+                    aiResponse = fallback;
+                } else {
+                    aiResponse = `No pude generar una respuesta con IA (servicio temporalmente no disponible).\n\nPodés:\n• Consultar la agenda directamente desde la app\n• Revisar los pacientes en la sección Pacientes\n• Intentar de nuevo en unos minutos`;
+                }
             }
         }
 
