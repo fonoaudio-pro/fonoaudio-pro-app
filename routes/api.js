@@ -1063,11 +1063,24 @@ function isTelegramConfigured() {
 }
 
 router.get('/telegram/poll', async (req, res) => {
-    if (!isTelegramConfigured()) {
-        return res.json({ ok: true, result: [] });
-    }
-    // ... rest of the code
+    try {
+        const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+        if (!TELEGRAM_BOT_TOKEN) {
+            return res.status(200).json({ ok: true, result: [] });
+        }
 
+        const offset = req.query.offset || '0';
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getUpdates?offset=${offset}&timeout=3`);
+        if (!response.ok) {
+            return res.status(200).json({ ok: true, result: [] });
+        }
+        const data = await response.json();
+        res.status(200).json(data);
+    } catch (e) {
+        console.error('[Telegram Poll] Error:', e.message);
+        res.status(200).json({ ok: true, result: [] });
+    }
+});
 
 router.get('/telegram/file/:fileId', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
