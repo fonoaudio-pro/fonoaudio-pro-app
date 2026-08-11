@@ -1,7 +1,10 @@
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// import.meta.env works in Vite (frontend), process.env works in Node.js (serverless)
+const env = (typeof import.meta !== 'undefined' && import.meta.env) || process.env;
+
+const supabaseUrl = env.VITE_SUPABASE_URL || env.SUPABASE_URL;
+const supabaseKey = env.VITE_SUPABASE_ANON_KEY || env.SUPABASE_ANON_KEY;
 
 if (!supabaseUrl || !supabaseKey || supabaseUrl.includes('placeholder')) {
   console.warn('[Supabase] VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY not configured. Using placeholder - some features will not work.');
