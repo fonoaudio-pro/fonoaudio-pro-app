@@ -452,12 +452,20 @@ async function sendTelegramMessage(chatId, text, parseMode = 'HTML') {
     if (!TELEGRAM_BOT_TOKEN || !chatId) return false;
     try {
         let cleanedText = text;
-        if (parseMode === 'HTML') {
-            // Convert simple markdown bold/italic to HTML tags for Telegram compatibility
+        if (parseMode === 'Markdown') {
+            // MarkdownV2 requires escaping special chars
+            cleanedText = text.replace(/[_*\[\]()~`>+#=-|{.}/g, '\\$&');
+        } else if (parseMode === 'HTML') {
+            // Escape HTML special chars FIRST, then apply markdown→HTML conversions
             cleanedText = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+            // Now convert simple markdown to HTML
+            cleanedText = cleanedText
                 .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                 .replace(/\*(.*?)\*/g, '<b>$1</b>')
-                .replace(/_(.*?)_/g, '<i>$1</i>');
+                .replace(/(?<!&lt;)_(.*?)_(?!&gt;)/g, '<i>$1</i>');
         }
         const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
@@ -465,6 +473,9 @@ async function sendTelegramMessage(chatId, text, parseMode = 'HTML') {
             body: JSON.stringify({ chat_id: chatId, text: cleanedText, parse_mode: parseMode }),
         });
         const data = await resp.json();
+        if (!data.ok) {
+            console.error('[sendTelegramMessage] Telegram API error:', data.description || 'unknown', '| text preview:', cleanedText.substring(0, 200));
+        }
         return data.ok === true;
     } catch { return false; }
 }
