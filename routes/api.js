@@ -1835,6 +1835,135 @@ router.get('/telegram/pending-file/:chatId', async (req, res) => {
 
 // --- TELEGRAM TEXT AI PROCESSING (with clinical context + action handling) ---
 
+// ══════════════════════════════════════════════════════════════════
+// GEMINI FUNCTION CALLING (TOOLS) FOR CLINICAL AGENT
+// ══════════════════════════════════════════════════════════════════
+
+const clinicalTools = [
+    {
+        name: 'search_patient',
+        description: 'Busca un paciente por nombre o diagnóstico en la base de datos de Supabase del profesional.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                name: { type: 'STRING', description: 'Nombre o parte del nombre del paciente a buscar.' }
+            },
+            required: ['name']
+        }
+    },
+    {
+        name: 'add_clinical_evolution',
+        description: 'Agrega una entrada de evolución o nota clínica en la historia clínica del paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID único del paciente.' },
+                clinical_text: { type: 'STRING', description: 'Texto de la evolución o nota clínica observada.' }
+            },
+            required: ['patient_id', 'clinical_text']
+        }
+    },
+    {
+        name: 'generate_report_draft',
+        description: 'Crea un borrador de informe clínico centrado en un área específica (ej. lenguaje, fonación, deglución).',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID único del paciente.' },
+                focus_area: { type: 'STRING', description: 'Área fonoaudiológica de enfoque para el informe.' }
+            },
+            required: ['patient_id', 'focus_area']
+        }
+    }
+];
+
+async function executeToolCall(functionName, args, user_id) {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return { status: 'error', message: 'Supabase not configured' };
+
+    try {
+        if (functionName === 'search_patient') {
+            const queryName = args.name.toLowerCase();
+            const patients = await fetchPatientsForUser(user_id);
+            const matches = patients.filter(p => p.name.toLowerCase().includes(queryName) || (p.diagnosis && p.diagnosis.toLowerCase().includes(queryName)));
+            return { status: 'ok', count: matches.length, patients: matches };
+        }
+
+        if (functionName === 'add_clinical_evolution') {
+            const { patient_id, clinical_text } = args;
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === patient_id);
+            if (!patient) return { status: 'error', message: 'Patient not found' };
+
+            const now = new Date().toISOString().split('T')[0];
+            const newHistoryItem = {
+                id: `evol_${Date.now()}`,
+                patientId: patient.id,
+                date: now,
+                status: 'completed',
+                type: 'nota_clinica_telegram',
+                objectives: 'Nota clínica vía Telegram Agent',
+                observations: clinical_text,
+                summary: clinical_text,
+                planUpdates: '',
+                associatedMaterialIds: [],
+                nextAction: '',
+            };
+
+            const updatedHistory = [...(patient.history || []), newHistoryItem];
+            const updateRes = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
+                method: 'PATCH',
+                headers: {
+                    apikey: supabaseKey,
+                    Authorization: `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json',
+                    Prefer: 'return=minimal',
+                },
+                body: JSON.stringify({ history: updatedHistory }),
+            });
+
+            if (!updateRes.ok) throw new Error(await updateRes.text());
+            return { status: 'ok', message: `Evolución agregada correctamente a la historia de ${patient.name}.` };
+        }
+
+        if (functionName === 'generate_report_draft') {
+            const { patient_id, focus_area } = args;
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === patient_id);
+            if (!patient) return { status: 'error', message: 'Patient not found' };
+
+            const draft = `# INFORME CLÍNICO - ${patient.name}\nÁrea de Enfoque: ${focus_area}\nDiagnóstico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Análisis y Observaciones\nSe evalúa área de ${focus_area} evidenciando desempeño clínico acorde al plan terapéutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente Fonoaudiológico AI.`;
+
+            const reportEntry = {
+                id: `rep_${Date.now()}`,
+                date: new Date().toISOString().split('T')[0],
+                title: `Borrador Informe (${focus_area}) — ${patient.name}`,
+                content: draft,
+                type: 'generico',
+            };
+
+            const updatedReports = [...(patient.reports || []), reportEntry];
+            await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
+                method: 'PATCH',
+                headers: {
+                    apikey: supabaseKey,
+                    Authorization: `Bearer ${supabaseKey}`,
+                    'Content-Type': 'application/json',
+                    Prefer: 'return=minimal',
+                },
+                body: JSON.stringify({ reports: updatedReports }),
+            });
+
+            return { status: 'ok', draft, message: `Borrador de informe generado y guardado para ${patient.name}.` };
+        }
+
+        return { status: 'error', message: `Unknown tool: ${functionName}` };
+    } catch (e) {
+        return { status: 'error', message: e.message };
+    }
+}
+
 // --- TELEGRAM TEXT AI PROCESSING INTERNAL ---
 async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -2060,12 +2189,11 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
             }
         }
 
-        const clinicalPrompt = `Sos el asistente clínico de FonoAudio Pro AI, una plataforma profesional de fonoaudiología. Tenés acceso a datos reales de la agenda, pacientes y contexto del profesional.
+        const clinicalPrompt = `Sos el asistente clínico y agente autónomo de FonoAudio Pro AI, una plataforma profesional de fonoaudiología. Tenés acceso a herramientas clínicas (Function Calling) para buscar pacientes, registrar notas en la historia clínica y generar borradores de informes.
 
 ═══ HORA ACTUAL (IMPORTANTE) ═══
 Hoy es ${currentDate}.
 Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
-Usá esta hora para interpretar correctamente la agenda: si una cita es a las 09:00 y ahora son las 00:30, esa cita AÚN NO LLEGÓ (faltan 8.5 horas).
 
 ═══ CONTEXTO CLÍNICO DEL PROFESIONAL ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
 ${pendingFileContext}
@@ -2074,47 +2202,62 @@ ${notebookLmContext}
 ═══ MENSAJE DEL USUARIO ═══
 ${message_text}
 
-═══ REGLAS DE RESPUESTA ═══
-1. Respondé en español argentino profesional y cálido.
-2. Sé conciso pero informativo (máx 5 oraciones).
-3. SIEMPRE tené en cuenta la hora actual al interpretar la agenda.
-4. Si te preguntan "¿qué pacientes tengo?", listá los de HOY con su hora y estado relativo.
-5. Si una cita es a las 09:00 y son las 00:00, decí "tu primera cita es a las 09:00" (NO que ya pasó).
-6. Si te piden info de un paciente específico, usá el contexto disponible.
-7. Si detectás una consulta clínica fonoaudiológica, respondé con precisión técnica.
-8. Si te piden crear turno/recordatorio, decí que lo procesás desde la app.
-9. No inventés datos clínicos que no tengas.
-10. Podés saludar, despedirte, o responder preguntas generales de forma amable.`;
+═══ INSTRUCCIONES DE AGENTE ═══
+- Si el usuario te pide buscar un paciente, agregar una nota clínica, evolución o informe, USÁ las herramientas (tools) disponibles.
+- Respondé en español argentino profesional y cálido.
+- Sé conciso pero informativo (máx 5 oraciones).`;
 
-        const parts = [{ text: clinicalPrompt }];
-        let aiResponse;
+        let aiResponse = '';
+        let sentToTelegram = false;
 
         if (!aiModel) {
             console.warn('[Process-Text] AI model not available, using Supabase fallback...');
             const fallback = await getTextFallbackFromSupabase(message_text, user_id);
-            if (fallback) {
-                aiResponse = fallback;
-            } else {
-                aiResponse = `No pude generar una respuesta con IA (servicio no disponible).\n\nPodés:\n• Consultar la agenda directamente desde la app\n• Revisar los pacientes en la sección Pacientes\n• Intentar de nuevo en unos minutos`;
-            }
+            aiResponse = fallback || `No pude generar una respuesta con IA (servicio no disponible).`;
         } else {
-            const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
+            // Execute with Gemini Function Calling / Tools
+            try {
+                const response = await aiModel.generateContent({
+                    contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
+                    tools: [{ functionDeclarations: clinicalTools }]
+                });
 
-            if (geminiResult.ok) {
-                aiResponse = geminiResult.text;
-            } else {
-                console.warn('[Process-Text] All Gemini models failed. Attempting Supabase fallback...');
-                const fallback = await getTextFallbackFromSupabase(message_text, user_id);
-                if (fallback) {
-                    aiResponse = fallback;
+                const candidate = response.response?.candidates?.[0];
+                const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+
+                if (functionCalls.length > 0) {
+                    const fc = functionCalls[0].functionCall;
+                    console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
+                    const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+
+                    // Send second turn to Gemini with tool result
+                    const secondResponse = await aiModel.generateContent({
+                        contents: [
+                            { role: 'user', parts: [{ text: clinicalPrompt }] },
+                            { role: 'model', parts: candidate.content.parts },
+                            {
+                                role: 'function',
+                                parts: [{
+                                    functionResponse: {
+                                        name: fc.name,
+                                        response: toolResult
+                                    }
+                                }]
+                            }
+                        ]
+                    });
+                    aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada con éxito. Resultado: ${JSON.stringify(toolResult)}`;
                 } else {
-                    aiResponse = `No pude generar una respuesta con IA (servicio temporalmente no disponible).\n\nPodés:\n• Consultar la agenda directamente desde la app\n• Revisar los pacientes en la sección Pacientes\n• Intentar de nuevo en unos minutos`;
+                    aiResponse = response.response?.text() || 'Sin respuesta de IA.';
                 }
+            } catch (toolErr) {
+                console.error('[Gemini Tool Calling Error]:', toolErr);
+                const geminiResult = await callGeminiResilient([{ text: clinicalPrompt }], aiModel, GEMINI_MODEL_CHAIN[0]);
+                aiResponse = geminiResult.ok ? geminiResult.text : 'Error procesando la consulta con el agente.';
             }
         }
 
         // Send response back via Telegram
-        let sentToTelegram = false;
         sentToTelegram = await sendTelegramMessage(chat_id, aiResponse);
 
         return {
