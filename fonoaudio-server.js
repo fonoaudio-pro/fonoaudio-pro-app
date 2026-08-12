@@ -36,6 +36,7 @@ import communicationRouter from './routes/communication.js';
 import workJournalRouter from './routes/workJournal.js';
 
 const app = express();
+app.set('trust proxy', true);
 app.use(express.json({ limit: '50mb' }));
 app.use(cors());
 

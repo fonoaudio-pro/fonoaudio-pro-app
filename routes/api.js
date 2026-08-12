@@ -2441,7 +2441,7 @@ async function autoSetupWebhook(req) {
     if (!TELEGRAM_BOT_TOKEN) return;
     const host = req.get('host');
     if (!host || host.includes('localhost') || host.includes('127.0.0.1')) return; // Don't register webhook in local dev
-    const protocol = req.protocol || 'https';
+    const protocol = (req.protocol === 'https' || host.includes('vercel.app') || process.env.VERCEL === '1') ? 'https' : req.protocol;
     const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
     try {
         const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
@@ -2534,7 +2534,7 @@ router.get('/telegram/setup-webhook', async (req, res) => {
     }
 
     const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
-    const protocol = req.protocol || 'https';
+    const protocol = (req.protocol === 'https' || host.includes('vercel.app') || process.env.VERCEL === '1') ? 'https' : req.protocol;
     const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
 
     try {
