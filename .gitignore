@@ -28,6 +28,24 @@ piper*
 logs
 *.log
 npm-debug.log*
+
+# Debug/temp scripts - never commit
+*.cjs
+debug-*.cjs
+deploy-*.cjs
+send-*.cjs
+test-*.cjs
+check-*.cjs
+set-*.cjs
+update-*.cjs
+list-*.cjs
+fix-*.cjs
+send-webhook-test.mjs
+send-voice-test.cjs
+test-bot-env.cjs
+null
+test-audio.oga
+vercel-build.sh
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*

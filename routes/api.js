@@ -882,6 +882,27 @@ router.get('/telegram/diagnose', async (req, res) => {
     res.json(result);
 });
 
+// Detailed environment + aiModel check (for debugging audio not responding)
+router.get('/telegram/env-check', (req, res) => {
+    const aiModel = req.app.locals.aiModel;
+    res.json({
+        env: {
+            TELEGRAM_BOT_TOKEN: !!process.env.TELEGRAM_BOT_TOKEN,
+            TELEGRAM_CHAT_ID: !!process.env.TELEGRAM_CHAT_ID,
+            GOOGLE_API_KEY: !!process.env.GOOGLE_API_KEY,
+            GROQ_API_KEY: !!process.env.GROQ_API_KEY,
+            VITE_SUPABASE_URL: !!process.env.VITE_SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+            GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+        },
+        aiModel: {
+            isNull: !aiModel,
+            type: aiModel ? (aiModel.constructor?.name || 'initialized') : 'null',
+        },
+        timestamp: new Date().toISOString(),
+    });
+});
+
 router.post('/telegram/send', async (req, res) => {
     const { chatId: reqChatId, message, fileUrl, photo, video, audio, voice, document, caption, parse_mode } = req.body;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -1142,6 +1163,23 @@ router.get('/telegram/file/:fileId', async (req, res) => {
 // --- AUDIO CLINICAL PROCESSING (transcribe + intent + patient + action) ---
 
 async function processAudioClinically(base64Data, mimeType, messageText, patients, aiModel) {
+    // Explicit check: if aiModel is null, return error immediately
+    if (!aiModel) {
+        console.error('[processAudioClinically] AI model is NULL — cannot process audio. GOOGLE_API_KEY may be missing in Vercel env.');
+        return {
+            status: 'error',
+            error: true,
+            type: 'audio_clinical',
+            transcription: '',
+            intent: 'error',
+            patientDetected: null,
+            actionSuggested: 'ninguno',
+            clinicalSummary: '',
+            suggestedResponse: '⚠️ *No pude procesar el audio*\n\nEl modelo de IA de Gemini no está inicializado. Esto suele ocurrir cuando `GOOGLE_API_KEY` no está configurado en el entorno de Vercel.\n\n_Contactá al administrador para configurar la clave de API de Google Gemini._',
+            rawResponse: '',
+        };
+    }
+
     const patientList = patients.length > 0
         ? `\nPACIENTES DEL PROFESIONAL:\n${patients.map((p, i) => `${i + 1}. ${p.name} — ${p.diagnosis || 'sin diagnóstico'}, ${p.age || '?'} años`).join('\n')}`
         : '\nNo hay pacientes cargados en el sistema.';
@@ -1158,7 +1196,7 @@ Este audio es una ENTRADA CONVERSACIONAL, no un archivo genico. El profesional t
 
 ═══ CONTEXTO ═══
 ${patientList}
-${message_text ? `Mensaje adjunto del usuario: "${message_text}"` : ''}
+${messageText ? `Mensaje adjunto del usuario: "${messageText}"` : ''}
 
 ═══ FORMATO DE RESPUESTA ═══
 Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
