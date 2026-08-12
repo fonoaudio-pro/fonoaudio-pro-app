@@ -46,13 +46,17 @@ export const GoogleAuthService = {
   },
 
   async saveTokens(userId: string, tokens: GoogleTokens) {
+    const existing = await this.getTokens(userId);
+    const finalRefreshToken = tokens.refreshToken || existing?.refreshToken || '';
+
     const { error } = await supabase
       .from('google_auth')
       .upsert({
         user_id: userId,
         access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken,
+        refresh_token: finalRefreshToken,
         expires_at: tokens.expiresAt,
+        updated_at: new Date().toISOString(),
       });
     if (error) throw error;
   },

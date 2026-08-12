@@ -855,6 +855,11 @@ router.get('/telegram/diagnose', async (req, res) => {
         tokenPreview: token ? token.substring(0, 10) + '...' : 'MISSING',
         chatIdSet: !!chatId,
         chatIdValue: chatId || 'MISSING',
+        googleApiKeySet: !!process.env.GOOGLE_API_KEY,
+        groqApiKeySet: !!process.env.GROQ_API_KEY,
+        supabaseUrlSet: !!process.env.VITE_SUPABASE_URL,
+        supabaseKeySet: !!(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY),
+        aiModelType: req.app.locals.aiModel ? req.app.locals.aiModel.constructor?.name || 'initialized' : 'null',
         apiTest: null,
         webhookInfo: null,
         updatesTest: null,
@@ -2634,7 +2639,7 @@ router.post('/telegram/webhook', async (req, res) => {
         const message_text = msg.text || msg.caption || '';
         const hasMedia = !!(msg.photo || msg.audio || msg.video || msg.document || msg.voice);
 
-        console.log(`[Telegram Webhook] Update received. chatId: ${chat_id}, textLen: ${message_text.length}, hasMedia: ${hasMedia}`);
+        console.log(`[Telegram Webhook] Update received. chatId: ${chat_id}, textLen: ${message_text.length}, hasMedia: ${hasMedia}, aiModel: ${aiModel ? 'SET' : 'NULL'}, user_id: ${user_id || 'none'}`);
 
         if (hasMedia) {
             let file_id = '';
@@ -2656,10 +2661,16 @@ router.post('/telegram/webhook', async (req, res) => {
                 media_type = 'document';
             }
 
+            console.log(`[Telegram Webhook] Media detected. type: ${media_type}, file_id: ${file_id ? file_id.substring(0, 20) + '...' : 'EMPTY'}`);
+
             if (file_id) {
-                await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
+                const mediaResult = await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
+                console.log(`[Telegram Webhook] processMediaInternal result: ${JSON.stringify(mediaResult)?.substring(0, 200)}`);
+            } else {
+                console.warn(`[Telegram Webhook] file_id is empty for media type: ${media_type}`);
             }
         } else if (message_text) {
+            console.log(`[Telegram Webhook] Text message received, routing to processTextInternal`);
             await processTextInternal(message_text, chat_id, user_id, aiModel);
         }
 
