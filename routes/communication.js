@@ -196,9 +196,24 @@ router.get('/gmail/messages/:id', async (req, res) => {
     // Extract body (prefer HTML, fallback to plain text)
     let body = '';
     let bodyHtml = '';
+    function decodeBodyData(data) {
+      if (!data) return '';
+      try {
+        // Gmail API returns URL-safe base64 or standard base64
+        const normalized = data.replace(/-/g, '+').replace(/_/g, '/');
+        return Buffer.from(normalized, 'base64').toString('utf-8');
+      } catch {
+        try {
+          return Buffer.from(data, 'base64url').toString('utf-8');
+        } catch {
+          return '';
+        }
+      }
+    }
+
     function extractBody(part) {
       if (part.body?.data) {
-        const decoded = Buffer.from(part.body.data, 'base64url').toString('utf-8');
+        const decoded = decodeBodyData(part.body.data);
         if (part.mimeType === 'text/html' && !bodyHtml) {
           bodyHtml = decoded;
         } else if (part.mimeType === 'text/plain' && !body) {

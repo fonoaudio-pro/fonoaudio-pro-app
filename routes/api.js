@@ -844,6 +844,9 @@ ${history || 'Sin historial detallado.'}
 
 // 1. Telegram: Send actual message
 router.get('/telegram/diagnose', async (req, res) => {
+    // Auto-register webhook on diagnose visit
+    await autoSetupWebhook(req);
+
     const token = process.env.TELEGRAM_BOT_TOKEN;
     const chatId = process.env.TELEGRAM_CHAT_ID;
     const result = {
@@ -1266,18 +1269,17 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
 
 // --- TELEGRAM MULTIMODAL AI PROCESSING (with patient matching + action suggestions) ---
 
-router.post('/telegram/process-media', async (req, res) => {
-    const { file_id, media_type, message_text, chat_id, user_id } = req.body;
+// --- TELEGRAM MULTIMODAL AI PROCESSING INTERNAL ---
+async function processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel) {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const aiModel = req.app.locals.aiModel;
 
     if (!file_id) {
-        return res.status(400).json({ status: 'error', message: 'file_id is required' });
+        return { status: 'error', message: 'file_id is required' };
     }
 
     if (!TELEGRAM_BOT_TOKEN) {
         console.warn('[Process-Media] No TELEGRAM_BOT_TOKEN — cannot download file');
-        return res.json({ status: 'ok', response: 'Archivo recibido pero no se pudo procesar sin token de Telegram configurado.', sent_to_telegram: false });
+        return { status: 'ok', response: 'Archivo recibido pero no se pudo procesar sin token de Telegram configurado.', sent_to_telegram: false };
     }
 
     try {
@@ -1285,14 +1287,14 @@ router.post('/telegram/process-media', async (req, res) => {
         const fileInfoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getFile?file_id=${file_id}`);
         const fileInfo = await fileInfoRes.json();
         if (!fileInfo.ok) {
-            return res.status(400).json({ status: 'error', message: `Telegram getFile failed: ${fileInfo.description}` });
+            return { status: 'error', message: `Telegram getFile failed: ${fileInfo.description}` };
         }
 
         // Step 2: Download the file
         const fileUrl = `https://api.telegram.org/file/bot${TELEGRAM_BOT_TOKEN}/${fileInfo.result.file_path}`;
         const fileRes = await fetch(fileUrl);
         if (!fileRes.ok) {
-            return res.status(500).json({ status: 'error', message: 'Failed to download file from Telegram' });
+            return { status: 'error', message: 'Failed to download file from Telegram' };
         }
         const fileBuffer = await fileRes.arrayBuffer();
         const base64Data = Buffer.from(fileBuffer).toString('base64');
@@ -1321,7 +1323,7 @@ router.post('/telegram/process-media', async (req, res) => {
             // If audio processing failed, send error to Telegram
             if (audioResult.error) {
                 await sendTelegramMessage(chat_id, audioResult.suggestedResponse);
-                return res.json({
+                return {
                     status: 'error',
                     type: 'audio_clinical',
                     response: audioResult.suggestedResponse,
@@ -1329,7 +1331,7 @@ router.post('/telegram/process-media', async (req, res) => {
                     mime_type: mimeType,
                     file_name: fileName,
                     sent_to_telegram: true,
-                });
+                };
             }
 
             // Build patient matching for audio
@@ -1347,7 +1349,7 @@ router.post('/telegram/process-media', async (req, res) => {
 
             // Also try matchPatient on the full text if no patient detected from structured data
             if (!matchedPatient && patients.length > 0) {
-                const fallbackMatch = matchPatient(audioResult.transcription, patients, messageText || '');
+                const fallbackMatch = matchPatient(audioResult.transcription, patients, message_text || '');
                 if (fallbackMatch) {
                     matchedPatient = fallbackMatch.patient;
                     if (!audioResult.patientDetected) audioResult.patientDetected = fallbackMatch.patient.name;
@@ -1426,7 +1428,7 @@ router.post('/telegram/process-media', async (req, res) => {
                 }
             }
 
-            return res.json({
+            return {
                 status: 'ok',
                 type: 'audio_clinical',
                 response: responseMessage,
@@ -1440,12 +1442,10 @@ router.post('/telegram/process-media', async (req, res) => {
                 mime_type: mimeType,
                 file_name: fileName,
                 sent_to_telegram: sentToTelegram,
-            });
+            };
         }
 
         // ─── NON-AUDIO: existing image/video/document handler ───
-
-        // Patients already fetched above (shared variable)
 
         // Step 5: Build Gemini prompt with patient awareness
         const patientList = patients.length > 0
@@ -1503,7 +1503,7 @@ SUGERENCIA: [Guardar como documento | Guardar como sesión | Guardar como inform
 
             const errorMsg = `No pude analizar el archivo con IA (servicio temporalmente no disponible).\n\n✅ Tu archivo quedó guardado en la cola de procesamiento. Cuando el servicio se restablezca, se analizará automáticamente.\n\n📄 Mientras tanto, podés guardarlo manualmente desde la app.`;
             await sendTelegramMessage(chat_id, errorMsg);
-            return res.json({ status: 'ok', response: errorMsg, queued: true, sent_to_telegram: true });
+            return { status: 'ok', response: errorMsg, queued: true, sent_to_telegram: true };
         }
 
         // Step 7: Parse AI suggestions section
@@ -1593,7 +1593,7 @@ SUGERENCIA: [Guardar como documento | Guardar como sesión | Guardar como inform
             }
         }
 
-        res.json({
+        return {
             status: 'ok',
             response: responseMessage,
             media_type,
@@ -1601,28 +1601,42 @@ SUGERENCIA: [Guardar como documento | Guardar como sesión | Guardar como inform
             file_name: fileName,
             suggestions,
             sent_to_telegram: sentToTelegram,
-        });
+        };
     } catch (e) {
         console.error('[Telegram Process-Media] Error:', e.message);
+        return { status: 'error', message: e.message };
+    }
+}
+
+router.post('/telegram/process-media', async (req, res) => {
+    const { file_id, media_type, message_text, chat_id, user_id } = req.body;
+    const aiModel = req.app.locals.aiModel;
+
+    try {
+        const result = await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
+        if (result.status === 'ok') {
+            res.json(result);
+        } else {
+            res.status(400).json(result);
+        }
+    } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
 });
 
 // --- SAVE FILE/ANALYSIS TO PATIENT RECORD ---
 
-router.post('/telegram/save-to-patient', async (req, res) => {
-    const { chat_id, patient_id, save_type, user_id } = req.body;
-    // save_type: 'document' | 'session' | 'report'
-
+// --- SAVE FILE/ANALYSIS TO PATIENT RECORD INTERNAL ---
+async function saveToPatientInternal(chat_id, patient_id, save_type, user_id) {
     const pending = await getPendingFile(chat_id);
     if (!pending) {
-        return res.status(400).json({ status: 'error', message: 'No hay archivo pendiente para guardar. Send a new file first.' });
+        return { status: 'error', message: 'No hay archivo pendiente para guardar. Send a new file first.' };
     }
 
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) {
-        return res.status(500).json({ status: 'error', message: 'Supabase not configured' });
+        return { status: 'error', message: 'Supabase not configured' };
     }
 
     try {
@@ -1631,7 +1645,7 @@ router.post('/telegram/save-to-patient', async (req, res) => {
         const patient = patients.find(p => p.id === patient_id) || (patient_id ? { id: patient_id, name: 'Desconocido' } : null);
 
         if (!patient) {
-            return res.status(404).json({ status: 'error', message: 'Patient not found' });
+            return { status: 'error', message: 'Patient not found' };
         }
 
         const now = new Date().toISOString();
@@ -1704,13 +1718,13 @@ router.post('/telegram/save-to-patient', async (req, res) => {
             // Clean up pending
             await deletePendingFile(chat_id);
 
-            return res.json({
+            return {
                 status: 'ok',
                 saved_as: 'session',
                 patient_name: patient.name,
                 file_name: pending.file_name,
                 message: `Sesión guardada en la historia de ${patient.name}.`,
-            });
+            };
 
         } else if (save_type === 'report') {
             // Save as clinical report
@@ -1745,13 +1759,13 @@ router.post('/telegram/save-to-patient', async (req, res) => {
 
             await deletePendingFile(chat_id);
 
-            return res.json({
+            return {
                 status: 'ok',
                 saved_as: 'report',
                 patient_name: patient.name,
                 file_name: pending.file_name,
                 message: `Informe guardado en la historia de ${patient.name}.`,
-            });
+            };
 
         } else {
             // Default: save as document (most common)
@@ -1776,16 +1790,30 @@ router.post('/telegram/save-to-patient', async (req, res) => {
 
             await deletePendingFile(chat_id);
 
-            return res.json({
+            return {
                 status: 'ok',
                 saved_as: 'document',
                 patient_name: patient.name,
                 file_name: pending.file_name,
                 message: `Documento guardado en la historia de ${patient.name}.`,
-            });
+            };
         }
     } catch (e) {
-        console.error('[Telegram Save-To-Patient] Error:', e.message);
+        console.error('[saveToPatientInternal] Error:', e.message);
+        return { status: 'error', message: e.message };
+    }
+}
+
+router.post('/telegram/save-to-patient', async (req, res) => {
+    const { chat_id, patient_id, save_type, user_id } = req.body;
+    try {
+        const result = await saveToPatientInternal(chat_id, patient_id, save_type, user_id);
+        if (result.status === 'ok') {
+            res.json(result);
+        } else {
+            res.status(result.status === 'error' ? 400 : 500).json(result);
+        }
+    } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
 });
@@ -1807,131 +1835,120 @@ router.get('/telegram/pending-file/:chatId', async (req, res) => {
 
 // --- TELEGRAM TEXT AI PROCESSING (with clinical context + action handling) ---
 
-router.post('/telegram/process-text', async (req, res) => {
-    const { message_text, chat_id, user_id } = req.body;
+// --- TELEGRAM TEXT AI PROCESSING INTERNAL ---
+async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const aiModel = req.app.locals.aiModel;
-
-    if (!message_text) {
-        return res.status(400).json({ status: 'error', message: 'message_text is required' });
-    }
 
     // ─── STEP 0: Check if this is an ACTION response to a pending file ───
     try {
-    const pending = chat_id ? await getPendingFile(chat_id) : null;
-    const lowerText = message_text.trim().toLowerCase();
+        const pending = chat_id ? await getPendingFile(chat_id) : null;
+        const lowerText = message_text.trim().toLowerCase();
 
-    if (pending) {
-        // Parse action intent
-        let actionType = null;
-        let targetPatient = null;
-        const discardPatterns = ['no', 'descartar', 'cancelar', 'ninguno', 'nada'];
-        const docPatterns = ['1', 'documento', 'doc', 'guardalo', 'guardar', 'guardar como documento'];
-        const sessionPatterns = ['2', 'sesión', 'sesion', 'sesión clínica', 'sesion clinica'];
-        const reportPatterns = ['3', 'informe', 'reporte', 'evaluación', 'evaluacion'];
+        if (pending) {
+            // Parse action intent
+            let actionType = null;
+            let targetPatient = null;
+            const discardPatterns = ['no', 'descartar', 'cancelar', 'ninguno', 'nada'];
+            const docPatterns = ['1', 'documento', 'doc', 'guardalo', 'guardar', 'guardar como documento'];
+            const sessionPatterns = ['2', 'sesión', 'sesion', 'sesión clínica', 'sesion clinica'];
+            const reportPatterns = ['3', 'informe', 'reporte', 'evaluación', 'evaluacion'];
 
-        // Check discard
-        if (discardPatterns.some(p => lowerText === p || lowerText.startsWith(p))) {
-            await deletePendingFile(chat_id);
-            const discardMsg = 'Archivo descartado. Si necesitás guardarlo después, mandá el archivo de nuevo.';
-            if (chat_id && TELEGRAM_BOT_TOKEN) {
-                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id, text: discardMsg }),
-                }).catch(() => {});
-            }
-            return res.json({ status: 'ok', response: discardMsg, action: 'discard', sent_to_telegram: true });
-        }
-
-        // Check save type
-        if (sessionPatterns.some(p => lowerText.includes(p))) actionType = 'session';
-        else if (reportPatterns.some(p => lowerText.includes(p))) actionType = 'report';
-        else if (docPatterns.some(p => lowerText.includes(p)) || /^\d+$/.test(lowerText)) actionType = 'document';
-
-        // If we detected a save type, try to find the patient
-        if (actionType) {
-            // Check for explicit patient name
-            const patients = pending.patients || [];
-
-            // Try to extract patient name from message
-            let matchedPatient = null;
-            const textNoAction = lowerText
-                .replace(/guardalo|guardar|documento|doc|sesión|sesion|informe|reporte|evaluación|evaluacion|como|en|a|el|la|los|las|del|al/g, '')
-                .trim();
-
-            // Check number reference (e.g., "1" or "2")
-            if (/^\d+$/.test(textNoAction) && parseInt(textNoAction) > 0 && parseInt(textNoAction) <= patients.length) {
-                matchedPatient = patients[parseInt(textNoAction) - 1];
-            }
-
-            // Check name match
-            if (!matchedPatient && textNoAction.length > 1) {
-                for (const p of patients) {
-                    const nameLower = p.name.toLowerCase();
-                    if (textNoAction.includes(nameLower) || nameLower.includes(textNoAction) || textNoAction.includes(nameLower.split(' ')[0])) {
-                        matchedPatient = p;
-                        break;
-                    }
-                }
-            }
-
-            // If we have a matched patient, save it
-            if (matchedPatient) {
-                try {
-                    const saveRes = await fetch(`${req.protocol}://${req.get('host')}/api/telegram/save-to-patient`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            chat_id,
-                            patient_id: matchedPatient.id,
-                            save_type: actionType,
-                            user_id,
-                        }),
-                    });
-                    const saveData = await saveRes.json();
-
-                    if (saveData.status === 'ok') {
-                        const confirmMsg = `✅ ${saveData.message}\nTipo: ${actionType === 'session' ? 'Sesión clínica' : actionType === 'report' ? 'Informe' : 'Documento'}\nArchivo: ${saveData.file_name}`;
-                        if (chat_id && TELEGRAM_BOT_TOKEN) {
-                            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id, text: confirmMsg }),
-                            }).catch(() => {});
-                        }
-                        return res.json({ status: 'ok', response: confirmMsg, action: 'saved', saved_to: matchedPatient.name, sent_to_telegram: true });
-                    } else {
-                        throw new Error(saveData.message || 'Save failed');
-                    }
-                } catch (saveErr) {
-                    const errMsg = `Error al guardar: ${saveErr.message}. Intentá de nuevo.`;
-                    if (chat_id && TELEGRAM_BOT_TOKEN) {
-                        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ chat_id, text: errMsg }),
-                        }).catch(() => {});
-                    }
-                    return res.json({ status: 'ok', response: errMsg, action: 'error', sent_to_telegram: true });
-                }
-            } else if (actionType && patients.length > 0) {
-                // Action detected but no patient matched — ask again
-                const retryMsg = `No identifiqué a qué paciente. Respondé con el nombre o número:\n${patients.map((p, i) => `  ${i + 1}. ${p.name}`).join('\n')}\nO escribí "no" para cancelar.`;
+            // Check discard
+            if (discardPatterns.some(p => lowerText === p || lowerText.startsWith(p))) {
+                await deletePendingFile(chat_id);
+                const discardMsg = 'Archivo descartado. Si necesitás guardarlo después, mandá el archivo de nuevo.';
                 if (chat_id && TELEGRAM_BOT_TOKEN) {
                     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id, text: retryMsg }),
+                        body: JSON.stringify({ chat_id, text: discardMsg }),
                     }).catch(() => {});
                 }
-                return res.json({ status: 'ok', response: retryMsg, action: 'retry_patient', sent_to_telegram: true });
+                return { status: 'ok', response: discardMsg, action: 'discard', sent_to_telegram: true };
+            }
+
+            // Check save type
+            if (sessionPatterns.some(p => lowerText.includes(p))) actionType = 'session';
+            else if (reportPatterns.some(p => lowerText.includes(p))) actionType = 'report';
+            else if (docPatterns.some(p => lowerText.includes(p)) || /^\d+$/.test(lowerText)) actionType = 'document';
+
+            // If we detected a save type, try to find the patient
+            if (actionType) {
+                // Check for explicit patient name
+                const patients = pending.patients || [];
+
+                // Try to extract patient name from message
+                let matchedPatient = null;
+                const textNoAction = lowerText
+                    .replace(/guardalo|guardar|documento|doc|sesión|sesion|informe|reporte|evaluación|evaluacion|como|en|a|el|la|los|las|del|al/g, '')
+                    .trim();
+
+                // Check number reference (e.g., "1" or "2")
+                if (/^\d+$/.test(textNoAction) && parseInt(textNoAction) > 0 && parseInt(textNoAction) <= patients.length) {
+                    matchedPatient = patients[parseInt(textNoAction) - 1];
+                }
+
+                // Check name match
+                if (!matchedPatient && textNoAction.length > 1) {
+                    for (const p of patients) {
+                        const nameLower = p.name.toLowerCase();
+                        if (textNoAction.includes(nameLower) || nameLower.includes(textNoAction) || textNoAction.includes(nameLower.split(' ')[0])) {
+                            matchedPatient = p;
+                            break;
+                        }
+                    }
+                }
+
+                // If we have a matched patient, save it
+                if (matchedPatient) {
+                    try {
+                        const saveData = await saveToPatientInternal(
+                            chat_id,
+                            matchedPatient.id,
+                            actionType,
+                            user_id
+                        );
+
+                        if (saveData.status === 'ok') {
+                            const confirmMsg = `✅ ${saveData.message}\nTipo: ${actionType === 'session' ? 'Sesión clínica' : actionType === 'report' ? 'Informe' : 'Documento'}\nArchivo: ${saveData.file_name}`;
+                            if (chat_id && TELEGRAM_BOT_TOKEN) {
+                                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ chat_id, text: confirmMsg }),
+                                }).catch(() => {});
+                            }
+                            return { status: 'ok', response: confirmMsg, action: 'saved', saved_to: matchedPatient.name, sent_to_telegram: true };
+                        } else {
+                            throw new Error(saveData.message || 'Save failed');
+                        }
+                    } catch (saveErr) {
+                        const errMsg = `Error al guardar: ${saveErr.message}. Intentá de nuevo.`;
+                        if (chat_id && TELEGRAM_BOT_TOKEN) {
+                            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id, text: errMsg }),
+                            }).catch(() => {});
+                        }
+                        return { status: 'ok', response: errMsg, action: 'error', sent_to_telegram: true };
+                    }
+                } else if (actionType && patients.length > 0) {
+                    // Action detected but no patient matched — ask again
+                    const retryMsg = `No identifiqué a qué paciente. Respondé con el nombre o número:\n${patients.map((p, i) => `  ${i + 1}. ${p.name}`).join('\n')}\nO escribí "no" para cancelar.`;
+                    if (chat_id && TELEGRAM_BOT_TOKEN) {
+                        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id, text: retryMsg }),
+                        }).catch(() => {});
+                    }
+                    return { status: 'ok', response: retryMsg, action: 'retry_patient', sent_to_telegram: true };
+                }
             }
         }
-    }
     } catch (step0Err) {
         console.error('[Telegram Process-Text] STEP 0 error:', step0Err);
-        // Don't return error here — fall through to STEP 1 for normal AI processing
     }
 
     // ─── STEP 1: Normal AI text processing (no pending action) ───
@@ -2100,13 +2117,27 @@ ${message_text}
         let sentToTelegram = false;
         sentToTelegram = await sendTelegramMessage(chat_id, aiResponse);
 
-        res.json({
+        return {
             status: 'ok',
             response: aiResponse,
             sent_to_telegram: sentToTelegram,
-        });
+        };
     } catch (e) {
         console.error('[Telegram Process-Text] Error:', e.message);
+        return { status: 'error', message: e.message };
+    }
+}
+
+router.post('/telegram/process-text', async (req, res) => {
+    const { message_text, chat_id, user_id } = req.body;
+    const aiModel = req.app.locals.aiModel;
+    const protocol = req.protocol || 'https';
+    const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
+
+    try {
+        const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host);
+        res.json(result);
+    } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
 });
@@ -2394,7 +2425,130 @@ router.get('/worker/daily-summary', async (req, res) => {
             body: JSON.stringify({ chat_id: Number(CHAT_ID), text: summary, parse_mode: 'Markdown' })
         });
         const d = await r.json();
+        
+        // Auto-register webhook when daily summary is run as worker
+        await autoSetupWebhook(req);
+
         res.json({ status: d.ok ? 'ok' : 'error', message: d.description });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// --- TELEGRAM WEBHOOK AUTO-REGISTRATION ---
+async function autoSetupWebhook(req) {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_BOT_TOKEN) return;
+    const host = req.get('host');
+    if (!host || host.includes('localhost') || host.includes('127.0.0.1')) return; // Don't register webhook in local dev
+    const protocol = req.protocol || 'https';
+    const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
+    try {
+        const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: webhookUrl })
+        });
+        const d = await res.json();
+        console.log('[Telegram Webhook] Auto-registration result:', d);
+    } catch (e) {
+        console.warn('[Telegram Webhook] Auto-registration failed:', e.message);
+    }
+}
+
+// Find professional/clinician ID from Supabase
+async function findProfessionalId() {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return null;
+    try {
+        const res = await fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
+            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+        });
+        if (!res.ok) return null;
+        const rows = await res.json();
+        return rows?.[0]?.id || null;
+    } catch {
+        return null;
+    }
+}
+
+// --- TELEGRAM WEBHOOK ROUTE (24/7 Serverless Assistant) ---
+router.post('/telegram/webhook', async (req, res) => {
+    try {
+        const update = req.body;
+        if (!update || (!update.message && !update.edited_message)) {
+            return res.json({ ok: true });
+        }
+
+        const msg = update.message || update.edited_message;
+        const chat_id = msg.chat?.id;
+        if (!chat_id) return res.json({ ok: true });
+
+        const aiModel = req.app.locals.aiModel;
+        const user_id = await findProfessionalId();
+
+        const message_text = msg.text || msg.caption || '';
+        const hasMedia = !!(msg.photo || msg.audio || msg.video || msg.document || msg.voice);
+
+        console.log(`[Telegram Webhook] Update received. chatId: ${chat_id}, textLen: ${message_text.length}, hasMedia: ${hasMedia}`);
+
+        if (hasMedia) {
+            let file_id = '';
+            let media_type = 'document';
+            if (msg.photo) {
+                file_id = msg.photo[msg.photo.length - 1]?.file_id || '';
+                media_type = 'photo';
+            } else if (msg.audio) {
+                file_id = msg.audio.file_id;
+                media_type = 'audio';
+            } else if (msg.voice) {
+                file_id = msg.voice.file_id;
+                media_type = 'voice';
+            } else if (msg.video) {
+                file_id = msg.video.file_id;
+                media_type = 'video';
+            } else if (msg.document) {
+                file_id = msg.document.file_id;
+                media_type = 'document';
+            }
+
+            if (file_id) {
+                await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
+            }
+        } else if (message_text) {
+            await processTextInternal(message_text, chat_id, user_id, aiModel);
+        }
+
+        res.json({ ok: true });
+    } catch (e) {
+        console.error('[Telegram Webhook Error]:', e.message);
+        res.status(200).json({ ok: true, error: e.message }); // Always return 200 to Telegram
+    }
+});
+
+router.get('/telegram/setup-webhook', async (req, res) => {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_BOT_TOKEN) {
+        return res.status(400).json({ status: 'error', message: 'TELEGRAM_BOT_TOKEN is not configured in environment.' });
+    }
+
+    const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
+    const protocol = req.protocol || 'https';
+    const webhookUrl = `${protocol}://${host}/api/telegram/webhook`;
+
+    try {
+        const response = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url: webhookUrl })
+        });
+        const data = await response.json();
+        res.json({
+            status: data.ok ? 'ok' : 'error',
+            message: data.ok ? `Webhook set successfully to ${webhookUrl}` : `Failed to set webhook: ${data.description}`,
+            details: data
+        });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
     }
