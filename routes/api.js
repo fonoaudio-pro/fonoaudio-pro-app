@@ -8,6 +8,23 @@ import notebooklmRouter from './notebooklm.js';
 import fs from 'fs';
 import path from 'path';
 
+// Global error tracker for debugging (Vercel doesn't expose logs easily)
+const globalErrorLog = [];
+const MAX_LOG_ENTRIES = 50;
+function logError(context, error) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        context,
+        message: error?.message || String(error),
+        stack: error?.stack?.split('\n').slice(0, 3).join(' | '),
+    };
+    globalErrorLog.push(entry);
+    if (globalErrorLog.length > MAX_LOG_ENTRIES) globalErrorLog.shift();
+    console.error(`[GLOBAL-ERROR-LOG] ${context}: ${entry.message}`);
+}
+function getErrorLog() { return [...globalErrorLog]; }
+function clearErrorLog() { globalErrorLog.length = 0; }
+
 const router = express.Router();
 
 // Admin endpoint: update profile role using service role key (bypasses RLS)
@@ -879,6 +896,7 @@ router.get('/telegram/diagnose', async (req, res) => {
             result.apiTest = `FETCH ERROR: ${e.message}`;
         }
     }
+    result.errorLog = getErrorLog();
     res.json(result);
 });
 
@@ -1455,19 +1473,17 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
                 responseMessage += audioResult.suggestedResponse;
             }
 
-            // Send to Telegram
+            // Send to Telegram — use sendTelegramMessage helper which handles markdown→HTML conversion
             let sentToTelegram = false;
             if (chat_id && TELEGRAM_BOT_TOKEN) {
                 try {
-                    const tgResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ chat_id, text: responseMessage, parse_mode: 'HTML' }),
-                    });
-                    const tgData = await tgResp.json();
-                    sentToTelegram = tgData.ok === true;
+                    sentToTelegram = await sendTelegramMessage(chat_id, responseMessage, 'HTML');
+                    if (!sentToTelegram) {
+                        console.error('[Telegram Process-Media] sendMessage returned ok:false');
+                    }
                 } catch (tgErr) {
-                    console.error('[Telegram Process-Media] Failed to send audio response:', tgErr.message);
+                    logError('Telegram Process-Media send response', tgErr);
+                    console.error('[Telegram Process-Media] Error sending response:', tgErr.message);
                 }
             }
 
@@ -2702,8 +2718,28 @@ router.post('/telegram/webhook', async (req, res) => {
             console.log(`[Telegram Webhook] Media detected. type: ${media_type}, file_id: ${file_id ? file_id.substring(0, 20) + '...' : 'EMPTY'}`);
 
             if (file_id) {
-                const mediaResult = await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
-                console.log(`[Telegram Webhook] processMediaInternal result: ${JSON.stringify(mediaResult)?.substring(0, 200)}`);
+                console.log(`[Telegram Webhook] Calling processMediaInternal...`);
+                try {
+                    const mediaResult = await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
+                    console.log(`[Telegram Webhook] processMediaInternal returned. status: ${mediaResult?.status}, type: ${mediaResult?.type}`);
+                    if (mediaResult?.status === 'error' || mediaResult?.error) {
+                        console.error(`[Telegram Webhook] processMediaInternal error: ${JSON.stringify(mediaResult)?.substring(0, 200)}`);
+                    }
+                } catch (mediaErr) {
+                    logError('Telegram Webhook processMediaInternal', mediaErr);
+                    console.error(`[Telegram Webhook] processMediaInternal threw error: ${mediaErr.message}`);
+                    // Try to notify user
+                    if (chat_id && process.env.TELEGRAM_BOT_TOKEN) {
+                        try {
+                            const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+                            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id, text: `❌ Error procesando el audio: ${mediaErr.message}`, parse_mode: 'HTML' })
+                            });
+                        } catch (tgErr) { logError('Telegram Webhook notify user', tgErr); }
+                    }
+                }
             } else {
                 console.warn(`[Telegram Webhook] file_id is empty for media type: ${media_type}`);
             }
@@ -2714,7 +2750,7 @@ router.post('/telegram/webhook', async (req, res) => {
 
         res.json({ ok: true });
     } catch (e) {
-        console.error('[Telegram Webhook Error]:', e.message);
+        logError('Telegram Webhook outer catch', e);
         res.status(200).json({ ok: true, error: e.message }); // Always return 200 to Telegram
     }
 });
