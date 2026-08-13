@@ -52,17 +52,10 @@ export default async function handler(req, res) {
     req.body = {};
   }
 
-  // Attach the Express app
+  // Attach the Express app so req.app.locals works
   req.app = cachedApp;
 
-  // Vercel passes /api/telegram/webhook but Express routes are /telegram/webhook
-  // The vercel.json rewrites /api/(.*) to this handler, so strip the /api prefix
-  if (req.url && req.url.startsWith('/api/')) {
-    req.url = req.url.replace(/^\/api/, '');
-    console.log('[index.js] Normalized URL to:', req.url);
-  }
-
-  // Dispatch to Express
+  // Dispatch to Express (do NOT strip /api prefix — routes are already mounted at /api)
   console.log('[index.js] Dispatching to Express with URL:', req.url);
   cachedApp(req, res);
 }
