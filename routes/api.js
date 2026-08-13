@@ -1258,6 +1258,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
     ];
 
     const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
+    console.log('[processAudioClinically] Gemini result - ok:', geminiResult.ok, 'text length:', geminiResult.text ? geminiResult.text.length : 0, 'error:', geminiResult.error?.message?.slice(0, 100));
     if (!geminiResult.ok) {
         console.error('[Audio Clinical] All Gemini models failed:', geminiResult.error?.message);
 
@@ -1311,6 +1312,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
     }
 
     if (parsed && parsed.transcripcion) {
+        console.log('[processAudioClinically] JSON parsed successfully! transcription:', parsed.transcripcion?.slice(0, 60));
         return {
             status: 'ok',
             type: 'audio_clinical',
@@ -1324,6 +1326,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
         };
     }
 
+    console.log('[processAudioClinically] JSON parse FAILED. Returning fallback. rawText length:', rawText.length);
     // Fallback: return raw response without structured data
     return {
         status: 'ok',
@@ -1391,10 +1394,13 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
         if (isAudio) {
             console.log(`[Telegram Process-Media] Audio detected (${mimeType}). Routing to clinical audio handler.`);
             const audioResult = await processAudioClinically(base64Data, mimeType, message_text, patients, aiModel);
+            console.log(`[Telegram Process-Media] processAudioClinically returned. error: ${audioResult.error}, transcription: ${audioResult.transcription?.slice(0, 50)}, suggestedResponse: ${audioResult.suggestedResponse?.slice(0, 50)}`);
 
             // If audio processing failed, send error to Telegram
             if (audioResult.error) {
-                await sendTelegramMessage(chat_id, audioResult.suggestedResponse);
+                console.log('[Telegram Process-Media] Audio processing FAILED - sending error to Telegram');
+                const sent = await sendTelegramMessage(chat_id, audioResult.suggestedResponse);
+                console.log('[Telegram Process-Media] Error message sent result:', sent);
                 return {
                     status: 'error',
                     type: 'audio_clinical',
@@ -1488,9 +1494,11 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
             let sentToTelegram = false;
             if (chat_id && TELEGRAM_BOT_TOKEN) {
                 try {
+                    console.log('[Telegram Process-Media] Sending response to Telegram...', responseMessage.slice(0, 100));
                     sentToTelegram = await sendTelegramMessage(chat_id, responseMessage, 'HTML');
+                    console.log('[Telegram Process-Media] sendTelegramMessage returned:', sentToTelegram);
                     if (!sentToTelegram) {
-                        console.error('[Telegram Process-Media] sendMessage returned ok:false');
+                        console.error('[Telegram Process-Media] sendMessage returned false - check sendTelegramMessage error log above');
                     }
                 } catch (tgErr) {
                     logError('Telegram Process-Media send response', tgErr);
