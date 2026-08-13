@@ -10,7 +10,18 @@ import path from 'path';
 
 // Global error tracker for debugging (Vercel doesn't expose logs easily)
 const globalErrorLog = [];
+const globalDebugLog = [];
 const MAX_LOG_ENTRIES = 50;
+function logDebug(context, message) {
+    const entry = {
+        timestamp: new Date().toISOString(),
+        context,
+        message: typeof message === 'string' ? message : JSON.stringify(message)?.substring(0, 300),
+    };
+    globalDebugLog.push(entry);
+    if (globalDebugLog.length > MAX_LOG_ENTRIES) globalDebugLog.shift();
+    console.log(`[DEBUG] ${context}: ${entry.message}`);
+}
 function logError(context, error) {
     const entry = {
         timestamp: new Date().toISOString(),
@@ -23,7 +34,8 @@ function logError(context, error) {
     console.error(`[GLOBAL-ERROR-LOG] ${context}: ${entry.message}`);
 }
 function getErrorLog() { return [...globalErrorLog]; }
-function clearErrorLog() { globalErrorLog.length = 0; }
+function getDebugLog() { return [...globalDebugLog]; }
+function clearLog() { globalErrorLog.length = 0; globalDebugLog.length = 0; }
 
 const router = express.Router();
 
@@ -908,7 +920,18 @@ router.get('/telegram/diagnose', async (req, res) => {
         }
     }
     result.errorLog = getErrorLog();
+    result.debugLog = getDebugLog();
     res.json(result);
+});
+
+// Expose debug logs (for troubleshooting audio processing)
+router.get('/telegram/logs', (req, res) => {
+    res.json({ debugLog: getDebugLog(), errorLog: getErrorLog() });
+});
+
+router.get('/telegram/clear-logs', (req, res) => {
+    clearLog();
+    res.json({ status: 'ok', message: 'Logs cleared' });
 });
 
 // Detailed environment + aiModel check (for debugging audio not responding)
@@ -1258,7 +1281,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
     ];
 
     const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
-    console.log('[processAudioClinically] Gemini result - ok:', geminiResult.ok, 'text length:', geminiResult.text ? geminiResult.text.length : 0, 'error:', geminiResult.error?.message?.slice(0, 100));
+    logDebug('processAudioClinically', `Gemini result - ok: ${geminiResult.ok}, text length: ${geminiResult.text ? geminiResult.text.length : 0}, error: ${geminiResult.error?.message?.slice(0, 100)}`);
     if (!geminiResult.ok) {
         console.error('[Audio Clinical] All Gemini models failed:', geminiResult.error?.message);
 
@@ -1312,7 +1335,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
     }
 
     if (parsed && parsed.transcripcion) {
-        console.log('[processAudioClinically] JSON parsed successfully! transcription:', parsed.transcripcion?.slice(0, 60));
+        logDebug('processAudioClinically', `JSON parsed! transcription: ${parsed.transcripcion?.slice(0, 60)}`);
         return {
             status: 'ok',
             type: 'audio_clinical',
@@ -1326,7 +1349,7 @@ Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
         };
     }
 
-    console.log('[processAudioClinically] JSON parse FAILED. Returning fallback. rawText length:', rawText.length);
+    logDebug('processAudioClinically', `JSON parse FAILED. rawText length: ${rawText.length}`);
     // Fallback: return raw response without structured data
     return {
         status: 'ok',
@@ -1392,15 +1415,15 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
         const isAudio = media_type === 'audio' || media_type === 'voice' || mimeType.startsWith('audio/');
 
         if (isAudio) {
-            console.log(`[Telegram Process-Media] Audio detected (${mimeType}). Routing to clinical audio handler.`);
+            logDebug('Telegram Process-Media', `Audio detected (${mimeType}). Routing to clinical audio handler.`);
             const audioResult = await processAudioClinically(base64Data, mimeType, message_text, patients, aiModel);
-            console.log(`[Telegram Process-Media] processAudioClinically returned. error: ${audioResult.error}, transcription: ${audioResult.transcription?.slice(0, 50)}, suggestedResponse: ${audioResult.suggestedResponse?.slice(0, 50)}`);
+            logDebug('Telegram Process-Media', `processAudioClinically returned. error: ${audioResult.error}, transcription: ${audioResult.transcription?.slice(0, 50)}, suggestedResponse: ${audioResult.suggestedResponse?.slice(0, 50)}`);
 
             // If audio processing failed, send error to Telegram
             if (audioResult.error) {
-                console.log('[Telegram Process-Media] Audio processing FAILED - sending error to Telegram');
+                logDebug('Telegram Process-Media', 'Audio processing FAILED - sending error to Telegram');
                 const sent = await sendTelegramMessage(chat_id, audioResult.suggestedResponse);
-                console.log('[Telegram Process-Media] Error message sent result:', sent);
+                logDebug('Telegram Process-Media', `Error message sent result: ${sent}`);
                 return {
                     status: 'error',
                     type: 'audio_clinical',
@@ -1494,15 +1517,15 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
             let sentToTelegram = false;
             if (chat_id && TELEGRAM_BOT_TOKEN) {
                 try {
-                    console.log('[Telegram Process-Media] Sending response to Telegram...', responseMessage.slice(0, 100));
+                    logDebug('Telegram Process-Media', `Sending response to Telegram: ${responseMessage.slice(0, 100)}`);
                     sentToTelegram = await sendTelegramMessage(chat_id, responseMessage, 'HTML');
-                    console.log('[Telegram Process-Media] sendTelegramMessage returned:', sentToTelegram);
+                    logDebug('Telegram Process-Media', `sendTelegramMessage returned: ${sentToTelegram}`);
                     if (!sentToTelegram) {
-                        console.error('[Telegram Process-Media] sendMessage returned false - check sendTelegramMessage error log above');
+                        logError('Telegram Process-Media sendTelegramMessage', new Error('sendMessage returned false'));
                     }
                 } catch (tgErr) {
                     logError('Telegram Process-Media send response', tgErr);
-                    console.error('[Telegram Process-Media] Error sending response:', tgErr.message);
+                    logDebug('Telegram Process-Media', `Error sending response: ${tgErr.message}`);
                 }
             }
 
@@ -2734,19 +2757,17 @@ router.post('/telegram/webhook', async (req, res) => {
                 media_type = 'document';
             }
 
-            console.log(`[Telegram Webhook] Media detected. type: ${media_type}, file_id: ${file_id ? file_id.substring(0, 20) + '...' : 'EMPTY'}`);
+            logDebug('Telegram Webhook', `Media detected. type: ${media_type}, file_id: ${file_id ? file_id.substring(0, 20) + '...' : 'EMPTY'}, chat_id: ${chat_id}`);
 
             if (file_id) {
-                console.log(`[Telegram Webhook] Calling processMediaInternal...`);
                 try {
                     const mediaResult = await processMediaInternal(file_id, media_type, message_text, chat_id, user_id, aiModel);
-                    console.log(`[Telegram Webhook] processMediaInternal returned. status: ${mediaResult?.status}, type: ${mediaResult?.type}`);
+                    logDebug('Telegram Webhook', `processMediaInternal result: status=${mediaResult?.status}, type=${mediaResult?.type}, sent_to_telegram=${mediaResult?.sent_to_telegram}`);
                     if (mediaResult?.status === 'error' || mediaResult?.error) {
-                        console.error(`[Telegram Webhook] processMediaInternal error: ${JSON.stringify(mediaResult)?.substring(0, 200)}`);
+                        logError('Telegram Webhook processMediaInternal', new Error(mediaResult?.message || mediaResult?.error));
                     }
                 } catch (mediaErr) {
                     logError('Telegram Webhook processMediaInternal', mediaErr);
-                    console.error(`[Telegram Webhook] processMediaInternal threw error: ${mediaErr.message}`);
                     // Try to notify user
                     if (chat_id && process.env.TELEGRAM_BOT_TOKEN) {
                         try {
@@ -2760,10 +2781,10 @@ router.post('/telegram/webhook', async (req, res) => {
                     }
                 }
             } else {
-                console.warn(`[Telegram Webhook] file_id is empty for media type: ${media_type}`);
+                logDebug('Telegram Webhook', `file_id is empty for media type: ${media_type}`);
             }
         } else if (message_text) {
-            console.log(`[Telegram Webhook] Text message received, routing to processTextInternal`);
+            logDebug('Telegram Webhook', `Text message received, routing to processTextInternal`);
             await processTextInternal(message_text, chat_id, user_id, aiModel);
         }
 
