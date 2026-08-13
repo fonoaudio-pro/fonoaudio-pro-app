@@ -32,6 +32,7 @@ export default async function handler(req, res) {
   }
 
   // Parse JSON body for POST requests (Vercel doesn't do this automatically)
+  // We parse here AND let express.json() parse — our parsed body takes precedence
   if (req.method === 'POST') {
     try {
       const chunks = [];
@@ -41,8 +42,11 @@ export default async function handler(req, res) {
       const bodyBuffer = Buffer.concat(chunks);
       const bodyStr = bodyBuffer.toString('utf8');
       req.body = bodyStr ? JSON.parse(bodyStr) : {};
+      // Store parsed body so express.json() doesn't overwrite it
+      req._parsedBody = req.body;
     } catch (e) {
       req.body = {};
+      req._parsedBody = {};
     }
   } else {
     req.body = {};

@@ -540,7 +540,11 @@ async function sendTelegramVoice(chatId, text, voice = 'es_AR-masculino') {
     if (!TELEGRAM_BOT_TOKEN || !chatId || !text) return false;
     try {
         const audioBuffer = await synthesizeText(text, voice);
-        if (!audioBuffer || audioBuffer.length === 0) return false;
+        if (!audioBuffer || audioBuffer.length === 0) {
+            console.warn('[sendTelegramVoice] TTS returned null/empty buffer');
+            return false;
+        }
+        console.log(`[sendTelegramVoice] Audio buffer ready: ${audioBuffer.length} bytes`);
 
         const formData = new FormData();
         formData.append('chat_id', chatId);
@@ -552,9 +556,18 @@ async function sendTelegramVoice(chatId, text, voice = 'es_AR-masculino') {
         });
         const data = await resp.json();
         if (!data.ok) {
-            console.error('[sendTelegramVoice] Telegram API error:', data.description);
+            console.error('[sendTelegramVoice] Telegram sendVoice failed:', data.description);
+            // Fallback: try sendAudio instead
+            const resp2 = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAudio`, {
+                method: 'POST',
+                body: formData,
+            });
+            const data2 = await resp2.json();
+            console.log(`[sendTelegramVoice] sendAudio fallback: ${data2.ok}`);
+            return data2.ok === true;
         }
-        return data.ok === true;
+        console.log('[sendTelegramVoice] Voice sent successfully');
+        return true;
     } catch (err) {
         console.error('[sendTelegramVoice] Error:', err.message);
         return false;
@@ -1287,12 +1300,14 @@ async function processAudioClinically(base64Data, mimeType, messageText, patient
         ? `PACIENTES: ${patients.map((p, i) => `${i + 1}. ${p.name} (${p.diagnosis || 'sin dx'}, ${p.age || '?'} años)`).join(', ')}`
         : 'No hay pacientes cargados.';
 
-    const audioPrompt = `Sos el asistente clinico y agente autonomo de FonoAudio Pro AI. Unfonoaudiologo te envio un AUDIO por Telegram. Tenes acceso a todas las herramientas de la clinica (pacientes, agenda, informes, etc).
+    const audioPrompt = `Sos FonoAudio, el asistente clinico autónomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica y voz propia masculina rioplatense. Un fonoaudiologo te envio un AUDIO por Telegram.
+
+Tenés acceso a: pacientes (CRUD completo), agenda/turnos, notas clinicas, evoluciones, sesiones, informes, evaluaciones, planes de tratamiento, materiales, conocimiento clinico, NotebookLM, estadisticas.
 
 ${patientList}
 ${messageText ? `Mensaje adjunto: "${messageText}"` : ''}
 
-TRANSCRIBI el audio fielmente y respondi al profesional de forma natural en espanol argentino rioplatense. Si menciona un paciente, identificalo. Si pide una accion clinica (agregar nota, crear turno, buscar info), mencionala en tu respuesta.`;
+TRANSCRIBI el audio fielmente. Respondi en espanol argentino rioplatense, profesional y calido. Si el usuario menciona un paciente, identificalo. Si pide una accion clinica (agregar nota, crear turno, buscar paciente, generar informe), mencionala y deci que la ejecutas. Conciso pero completo.`;
 
     const parts = [
         { text: audioPrompt },
@@ -1571,13 +1586,19 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
                 }
             }
 
-            // Also send voice response (masculine Rioplatense) — non-blocking
+            // Also send voice response (masculine Rioplatense)
             if (sentToTelegram && chat_id && audioResult.suggestedResponse && audioResult.suggestedResponse.length > 10) {
                 const voiceText = (audioResult.suggestedResponse || audioResult.transcription || responseMessage)
                     .replace(/[*_`~#]/g, '')
                     .replace(/\n{3,}/g, '\n\n')
                     .substring(0, 3000);
-                sendTelegramVoice(chat_id, voiceText).catch(() => {});
+                const voiceSent = await sendTelegramVoice(chat_id, voiceText).catch(err => {
+                    console.error('[processMediaInternal] Voice send error:', err.message);
+                    return false;
+                });
+                if (!voiceSent) {
+                    console.warn('[processMediaInternal] Voice response failed');
+                }
             }
 
             return {
@@ -2884,33 +2905,35 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
             }
         }
 
-        const clinicalPrompt = `Sos el asistente clinico y agente autonomo de FonoAudio Pro AI. Tenes acceso a herramientas (Function Calling) para gestionar COMPLETAMENTE la clinica. Podes:
+        const clinicalPrompt = `Sos FonoAudio, el asistente clinico autónomo y superpoderoso de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Tenes voz propia masculina rioplatense y podes responder con audio. Tenes estas capacidades:
 
-PACIENTES: buscar, crear, actualizar, eliminar, ver info completa, listar todos.
-CLINICA: agregar notas clinicas, evoluciones, sesiones, evaluaciones, planes de tratamiento.
-INFORMES: generar borradores de informes por area (lenguaje, fonacion, deglucion, audologia, motricidad, cognicion), listar informes existentes.
+GESTION DE PACIENTES: buscar, crear, actualizar, eliminar, ver info completa, listar todos, detectar datos faltantes.
+CLINICA: agregar notas clinicas, evoluciones, sesiones, evaluaciones/ tests estandarizados, planes de tratamiento.
+INFORMES: generar borradores de informes por area (lenguaje, fonacion, deglucion, audologia, motricidad, cognicion), listar informes.
 AGENDA: ver turnos de hoy, proximos 7 dias, crear, modificar, cancelar turnos.
 MATERIALES: listar y buscar materiales terapeuticos.
-CONOCIMIENTO: buscar y agregar articulos/protocolos a la base de conocimiento clinica.
-ANALISIS: estadisticas del consultorio, detectar pacientes con datos faltantes.
-NOTEBOOKLM: listar notebooks, hacer preguntas clinicas investigadas.
+CONOCIMIENTO CLINICO: buscar y agregar articulos/protocolos a la base de conocimiento.
+ESTADISTICAS: datos del consultorio, pacientes con datos faltantes, metricas.
+NOTEBOOKLM: listar notebooks, hacer preguntas clinicas investigadas con evidencia.
 
-═══ HORA ACTUAL (IMPORTANTE) ═══
-Hoy es ${currentDate}.
-Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
+═══ REGLAS ═══
+- SOS UN AGENTE AUTONOMO. Cuando el usuario te pide algo, LO HACES usando las tools. No preguntes de mas, ejecuta.
+- "Crea un paciente" -> crealo. "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
+- SOS PROFESIONAL y calido. Respondes en espanol argentino rioplatense.
+- SOS CONCISO pero completo. Max 6 oraciones salvo que pida mas detalle.
+- Ante ambiguedades, usa tu juicio clinico con el contexto disponible.
 
-═══ CONTEXTO CLINICO DEL PROFESIONAL ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
+═══ HORA ACTUAL ═══
+Hoy es ${currentDate}. Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
+
+═══ CONTEXTO CLINICO ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
 ${pendingFileContext}
 ${notebookLmContext}
 
 ═══ MENSAJE DEL USUARIO ═══
 ${message_text}
 
-═══ INSTRUCCIONES ═══
-- Si el usuario te pide cualquier accion sobre pacientes, agenda, clinica o informes, USA las herramientas (tools) disponibles. No preguntes de mas, ejecuta.
-- Si el usuario te dice "crea un paciente", crea uno. Si dice "agrega una nota", agregala. Si dice "mostra la agenda", mostrala.
-- Ante ambiguedades, intuisci con el contexto clinico disponible.
-- Respondes en espanol argentino profesional y calido. Conciso (max 5 oraciones salvo que pida mas detalle).`;
+EJECUTA la accion que el usuario pide. Si busca algo, busca. Si quiere crear, crea. Si quiere ver info, muestra.`;
 
         let aiResponse = '';
         let sentToTelegram = false;
@@ -2965,13 +2988,19 @@ ${message_text}
         // Send response back via Telegram — text + voice
         sentToTelegram = await sendTelegramMessage(chat_id, aiResponse);
 
-        // Also send voice response (masculine Rioplatense) — non-blocking
+        // Also send voice response (masculine Rioplatense)
         if (sentToTelegram && aiResponse && aiResponse.length > 10) {
             const voiceText = aiResponse
                 .replace(/[*_`~#]/g, '')
                 .replace(/\n{3,}/g, '\n\n')
                 .substring(0, 3000);
-            sendTelegramVoice(chat_id, voiceText).catch(() => {});
+            const voiceSent = await sendTelegramVoice(chat_id, voiceText).catch(err => {
+                console.error('[processTextInternal] Voice send error:', err.message);
+                return false;
+            });
+            if (!voiceSent) {
+                console.warn('[processTextInternal] Voice response failed, text was still sent');
+            }
         }
 
         return {
