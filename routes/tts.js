@@ -133,16 +133,33 @@ async function synthesizeWithPiper(text) {
     });
 }
 
-// Voice mapping: map Piper voice names to Google Cloud TTS voices
+// Voice mapping: map voice IDs to Google Cloud TTS voices
 const VOICE_MAP = {
     'es_AR-daniela': { languageCode: 'es-AR', name: 'es-AR-Wavenet-A', ssmlGender: 'FEMALE' },
-    'default': { languageCode: 'es-AR', name: 'es-AR-Wavenet-A', ssmlGender: 'FEMALE' },
+    'es_AR-masculino': { languageCode: 'es-AR', name: 'es-AR-Wavenet-B', ssmlGender: 'MALE' },
+    'default': { languageCode: 'es-AR', name: 'es-AR-Wavenet-B', ssmlGender: 'MALE' },
 };
+
+// Internal function to synthesize text to audio buffer (no Express res)
+async function synthesizeText(text, voice = 'es_AR-masculino') {
+    const voiceConfig = VOICE_MAP[voice] || VOICE_MAP.default;
+    try {
+        return await synthesizeWithGoogleCloud(text, voiceConfig);
+    } catch (cloudErr) {
+        console.warn('[TTS] Google Cloud TTS failed for internal synthesis:', cloudErr.message);
+        const available = await checkPiperAvailable();
+        if (available) {
+            return await synthesizeWithPiper(text);
+        }
+        throw cloudErr;
+    }
+}
 
 router.get('/voices', (req, res) => {
     res.json({
         voices: [
-            { id: 'es_AR-daniela', name: 'Daniela (Español Argentina - Cloud/Piper)', language: 'es-AR', gender: 'female' }
+            { id: 'es_AR-masculino', name: 'Masculino (Español Argentina Rioplatense)', language: 'es-AR', gender: 'male' },
+            { id: 'es_AR-daniela', name: 'Daniela (Español Argentina - Cloud/Piper)', language: 'es-AR', gender: 'female' },
         ]
     });
 });
@@ -193,4 +210,5 @@ router.post('/', async (req, res) => {
     }
 });
 
+export { synthesizeText };
 export default router;

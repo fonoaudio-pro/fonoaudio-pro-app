@@ -5,6 +5,7 @@ import notebooklmService from '../services/notebooklmService.js';
 import clinicalPlanningService from '../services/clinicalPlanningService.js';
 import distributionService from '../services/distributionService.js';
 import notebooklmRouter from './notebooklm.js';
+import { synthesizeText } from './tts.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -527,6 +528,52 @@ async function sendTelegramDocument(chatId, documentUrl, caption) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ chat_id: chatId, document: documentUrl, caption: caption || '', parse_mode: 'HTML' }),
+        });
+        const data = await resp.json();
+        return data.ok === true;
+    } catch { return false; }
+}
+
+// Send voice message to Telegram (converts text to audio via TTS, then sends as voice)
+async function sendTelegramVoice(chatId, text, voice = 'es_AR-masculino') {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_BOT_TOKEN || !chatId || !text) return false;
+    try {
+        const audioBuffer = await synthesizeText(text, voice);
+        if (!audioBuffer || audioBuffer.length === 0) return false;
+
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('voice', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'voice.mp3');
+
+        const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVoice`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+        if (!data.ok) {
+            console.error('[sendTelegramVoice] Telegram API error:', data.description);
+        }
+        return data.ok === true;
+    } catch (err) {
+        console.error('[sendTelegramVoice] Error:', err.message);
+        return false;
+    }
+}
+
+// Send audio file to Telegram
+async function sendTelegramAudio(chatId, audioBuffer, caption) {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    if (!TELEGRAM_BOT_TOKEN || !chatId || !audioBuffer) return false;
+    try {
+        const formData = new FormData();
+        formData.append('chat_id', chatId);
+        formData.append('audio', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'audio.mp3');
+        if (caption) formData.append('caption', caption);
+
+        const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendAudio`, {
+            method: 'POST',
+            body: formData,
         });
         const data = await resp.json();
         return data.ok === true;
@@ -1240,12 +1287,12 @@ async function processAudioClinically(base64Data, mimeType, messageText, patient
         ? `PACIENTES: ${patients.map((p, i) => `${i + 1}. ${p.name} (${p.diagnosis || 'sin dx'}, ${p.age || '?'} años)`).join(', ')}`
         : 'No hay pacientes cargados.';
 
-    const audioPrompt = `Sos el asistente clínico de FonoAudio Pro AI. Un fonoaudiólogo te envió un AUDIO por Telegram.
+    const audioPrompt = `Sos el asistente clinico y agente autonomo de FonoAudio Pro AI. Unfonoaudiologo te envio un AUDIO por Telegram. Tenes acceso a todas las herramientas de la clinica (pacientes, agenda, informes, etc).
 
 ${patientList}
 ${messageText ? `Mensaje adjunto: "${messageText}"` : ''}
 
-TRANSCRIBÍ el audio fielmente y respondé al profesional de forma natural y profesional en español argentino. Si menciona un paciente, identificalo. Sugerí una acción concreta.`;
+TRANSCRIBI el audio fielmente y respondi al profesional de forma natural en espanol argentino rioplatense. Si menciona un paciente, identificalo. Si pide una accion clinica (agregar nota, crear turno, buscar info), mencionala en tu respuesta.`;
 
     const parts = [
         { text: audioPrompt },
@@ -1522,6 +1569,15 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
                         logError('Telegram Process-Media retry send', retryErr);
                     }
                 }
+            }
+
+            // Also send voice response (masculine Rioplatense) — non-blocking
+            if (sentToTelegram && chat_id && audioResult.suggestedResponse && audioResult.suggestedResponse.length > 10) {
+                const voiceText = (audioResult.suggestedResponse || audioResult.transcription || responseMessage)
+                    .replace(/[*_`~#]/g, '')
+                    .replace(/\n{3,}/g, '\n\n')
+                    .substring(0, 3000);
+                sendTelegramVoice(chat_id, voiceText).catch(() => {});
             }
 
             return {
@@ -1936,41 +1992,284 @@ router.get('/telegram/pending-file/:chatId', async (req, res) => {
 // ══════════════════════════════════════════════════════════════════
 
 const clinicalTools = [
+    // ─── PATIENT MANAGEMENT ───
     {
         name: 'search_patient',
-        description: 'Busca un paciente por nombre o diagnóstico en la base de datos de Supabase del profesional.',
+        description: 'Busca un paciente por nombre o diagnostico en la base de datos.',
         parameters: {
             type: 'OBJECT',
             properties: {
-                name: { type: 'STRING', description: 'Nombre o parte del nombre del paciente a buscar.' }
+                name: { type: 'STRING', description: 'Nombre o diagnostico del paciente.' }
             },
             required: ['name']
         }
     },
     {
-        name: 'add_clinical_evolution',
-        description: 'Agrega una entrada de evolución o nota clínica en la historia clínica del paciente.',
+        name: 'list_all_patients',
+        description: 'Lista todos los pacientes del profesional con sus datos basicos.',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+        name: 'get_patient_info',
+        description: 'Obtiene informacion completa de un paciente por ID.',
         parameters: {
             type: 'OBJECT',
             properties: {
-                patient_id: { type: 'STRING', description: 'ID único del paciente.' },
-                clinical_text: { type: 'STRING', description: 'Texto de la evolución o nota clínica observada.' }
+                patient_id: { type: 'STRING', description: 'ID del paciente.' }
+            },
+            required: ['patient_id']
+        }
+    },
+    {
+        name: 'create_patient',
+        description: 'Crea un nuevo paciente en la base de datos.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                name: { type: 'STRING', description: 'Nombre completo del paciente.' },
+                age: { type: 'STRING', description: 'Edad del paciente.' },
+                diagnosis: { type: 'STRING', description: 'Diagnostico principal.' },
+                phone: { type: 'STRING', description: 'Telefono de contacto.' },
+                email: { type: 'STRING', description: 'Email del paciente o responsable.' },
+                notes: { type: 'STRING', description: 'Notas adicionales.' }
+            },
+            required: ['name']
+        }
+    },
+    {
+        name: 'update_patient',
+        description: 'Actualiza un campo de un paciente existente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                field: { type: 'STRING', description: 'Campo a actualizar: name, age, diagnosis, phone, email, notes, gender, address.' },
+                value: { type: 'STRING', description: 'Nuevo valor del campo.' }
+            },
+            required: ['patient_id', 'field', 'value']
+        }
+    },
+    {
+        name: 'delete_patient',
+        description: 'Elimina un paciente de la base de datos.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente a eliminar.' }
+            },
+            required: ['patient_id']
+        }
+    },
+    // ─── CLINICAL NOTES & EVOLUTION ───
+    {
+        name: 'add_clinical_evolution',
+        description: 'Agrega una nota clinica o entrada de evolucion a la historia del paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                clinical_text: { type: 'STRING', description: 'Texto de la nota clinica o evolucion.' }
             },
             required: ['patient_id', 'clinical_text']
         }
     },
     {
-        name: 'generate_report_draft',
-        description: 'Crea un borrador de informe clínico centrado en un área específica (ej. lenguaje, fonación, deglución).',
+        name: 'add_session_note',
+        description: 'Agrega una nota de sesion clinica con resumen y observaciones.',
         parameters: {
             type: 'OBJECT',
             properties: {
-                patient_id: { type: 'STRING', description: 'ID único del paciente.' },
-                focus_area: { type: 'STRING', description: 'Área fonoaudiológica de enfoque para el informe.' }
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                summary: { type: 'STRING', description: 'Resumen de la sesion.' },
+                observations: { type: 'STRING', description: 'Observaciones clinicas.' },
+                next_action: { type: 'STRING', description: 'Proxima accion o tarea.' }
+            },
+            required: ['patient_id', 'summary']
+        }
+    },
+    // ─── REPORTS ───
+    {
+        name: 'generate_report_draft',
+        description: 'Genera un borrador de informe clinico para un paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                focus_area: { type: 'STRING', description: 'Area fonoaudiologica: lenguaje, fonacion, deglucion, audologia, motricidad, cognicion.' }
             },
             required: ['patient_id', 'focus_area']
         }
-    }
+    },
+    {
+        name: 'list_reports',
+        description: 'Lista los informes existentes de un paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' }
+            },
+            required: ['patient_id']
+        }
+    },
+    // ─── APPOINTMENTS ───
+    {
+        name: 'get_agenda',
+        description: 'Consulta la agenda de turnos. Puede filtrar por fecha.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                date: { type: 'STRING', description: 'Fecha en formato YYYY-MM-DD. Si se omite, muestra la agenda de hoy.' }
+            }
+        }
+    },
+    {
+        name: 'create_appointment',
+        description: 'Crea un nuevo turno/cita para un paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_name: { type: 'STRING', description: 'Nombre del paciente.' },
+                date: { type: 'STRING', description: 'Fecha YYYY-MM-DD.' },
+                time: { type: 'STRING', description: 'Hora HH:MM.' },
+                type: { type: 'STRING', description: 'Tipo de turno: consulta, control, evaluacion, sesion.' }
+            },
+            required: ['patient_name', 'date', 'time']
+        }
+    },
+    {
+        name: 'update_appointment',
+        description: 'Modifica un turno existente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                appointment_id: { type: 'STRING', description: 'ID del turno.' },
+                field: { type: 'STRING', description: 'Campo a modificar: date, time, status, type.' },
+                value: { type: 'STRING', description: 'Nuevo valor.' }
+            },
+            required: ['appointment_id', 'field', 'value']
+        }
+    },
+    {
+        name: 'cancel_appointment',
+        description: 'Cancela o elimina un turno.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                appointment_id: { type: 'STRING', description: 'ID del turno a cancelar.' }
+            },
+            required: ['appointment_id']
+        }
+    },
+    // ─── EVALUATIONS ───
+    {
+        name: 'add_evaluation',
+        description: 'Agrega una evaluacion o test estandarizado al paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                test_name: { type: 'STRING', description: 'Nombre del test o evaluacion.' },
+                result: { type: 'STRING', description: 'Resultado de la evaluacion.' },
+                area: { type: 'STRING', description: 'Area evaluada: lenguaje, fonacion, deglucion, audologia, motricidad, cognicion.' }
+            },
+            required: ['patient_id', 'test_name', 'result']
+        }
+    },
+    // ─── TREATMENT PLAN ───
+    {
+        name: 'update_treatment_plan',
+        description: 'Actualiza el plan de tratamiento de un paciente.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                patient_id: { type: 'STRING', description: 'ID del paciente.' },
+                plan_text: { type: 'STRING', description: 'Texto del plan de tratamiento o actualizacion.' }
+            },
+            required: ['patient_id', 'plan_text']
+        }
+    },
+    // ─── KNOWLEDGE BASE ───
+    {
+        name: 'search_knowledge',
+        description: 'Busca en la base de conocimiento clinica (articulos, protocolos, evidencia).',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                query: { type: 'STRING', description: 'Termino de busqueda clinica.' }
+            },
+            required: ['query']
+        }
+    },
+    {
+        name: 'add_knowledge',
+        description: 'Agrega un articulo o entrada a la base de conocimiento.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                title: { type: 'STRING', description: 'Titulo del articulo o recurso.' },
+                content: { type: 'STRING', description: 'Contenido o resumen del articulo.' },
+                category: { type: 'STRING', description: 'Categoria: lenguaje, fonacion, deglucion, audologia, general.' }
+            },
+            required: ['title', 'content']
+        }
+    },
+    // ─── MATERIALS ───
+    {
+        name: 'list_materials',
+        description: 'Lista los materiales terapeuticos disponibles.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                category: { type: 'STRING', description: 'Filtrar por categoria.' }
+            }
+        }
+    },
+    {
+        name: 'search_materials',
+        description: 'Busca materiales por titulo o tags.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                query: { type: 'STRING', description: 'Termino de busqueda.' }
+            },
+            required: ['query']
+        }
+    },
+    // ─── STATISTICS ───
+    {
+        name: 'get_statistics',
+        description: 'Obtiene estadisticas del consultorio: cantidad de pacientes, turnos, informes.',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+        name: 'check_missing_data',
+        description: 'Identifica pacientes con datos incompletos (sin telefono, sin diagnostico, etc).',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
+    // ─── NOTEBOOKLM ───
+    {
+        name: 'notebook_list',
+        description: 'Lista los notebooks clinicos disponibles en NotebookLM.',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
+        name: 'notebook_ask',
+        description: 'Hace una pregunta clinica a un notebook de NotebookLM.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                notebook_id: { type: 'STRING', description: 'ID del notebook.' },
+                question: { type: 'STRING', description: 'Pregunta clinica a investigar.' }
+            },
+            required: ['notebook_id', 'question']
+        }
+    },
+    // ─── FOLLOW-UP ───
+    {
+        name: 'get_upcoming_appointments',
+        description: 'Lista los proximos turnos de los proximos 7 dias.',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
 ];
 
 async function executeToolCall(functionName, args, user_id) {
@@ -1978,19 +2277,84 @@ async function executeToolCall(functionName, args, user_id) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) return { status: 'error', message: 'Supabase not configured' };
 
+    const headers = {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation',
+    };
+
     try {
+        // ─── PATIENT TOOLS ───
         if (functionName === 'search_patient') {
             const queryName = args.name.toLowerCase();
             const patients = await fetchPatientsForUser(user_id);
             const matches = patients.filter(p => p.name.toLowerCase().includes(queryName) || (p.diagnosis && p.diagnosis.toLowerCase().includes(queryName)));
-            return { status: 'ok', count: matches.length, patients: matches };
+            return { status: 'ok', count: matches.length, patients: matches.map(p => ({ id: p.id, name: p.name, age: p.age, diagnosis: p.diagnosis, phone: p.phone })) };
         }
 
+        if (functionName === 'list_all_patients') {
+            const patients = await fetchPatientsForUser(user_id);
+            return { status: 'ok', count: patients.length, patients: patients.map(p => ({ id: p.id, name: p.name, age: p.age, diagnosis: p.diagnosis })) };
+        }
+
+        if (functionName === 'get_patient_info') {
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === args.patient_id);
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
+            return { status: 'ok', patient };
+        }
+
+        if (functionName === 'create_patient') {
+            const newPatient = {
+                id: `pat_${Date.now()}`,
+                name: args.name,
+                age: args.age || null,
+                diagnosis: args.diagnosis || null,
+                phone: args.phone || null,
+                email: args.email || null,
+                notes: args.notes || null,
+                history: [],
+                reports: [],
+                evaluations: [],
+                documents: [],
+                treatmentPlan: {},
+                owner_id: user_id,
+                created_at: new Date().toISOString(),
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
+                method: 'POST', headers, body: JSON.stringify(newPatient),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente.`, patient: newPatient };
+        }
+
+        if (functionName === 'update_patient') {
+            const { patient_id, field, value } = args;
+            const allowedFields = ['name', 'age', 'diagnosis', 'phone', 'email', 'notes', 'gender', 'address'];
+            if (!allowedFields.includes(field)) return { status: 'error', message: `Campo "${field}" no permitido. Permitidos: ${allowedFields.join(', ')}` };
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient_id}`, {
+                method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+                body: JSON.stringify({ [field]: value }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Campo "${field}" actualizado correctamente.` };
+        }
+
+        if (functionName === 'delete_patient') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${args.patient_id}`, {
+                method: 'DELETE', headers: { ...headers, Prefer: 'return=minimal' },
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: 'Paciente eliminado correctamente.' };
+        }
+
+        // ─── CLINICAL NOTES ───
         if (functionName === 'add_clinical_evolution') {
             const { patient_id, clinical_text } = args;
             const patients = await fetchPatientsForUser(user_id);
             const patient = patients.find(p => p.id === patient_id);
-            if (!patient) return { status: 'error', message: 'Patient not found' };
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
             const now = new Date().toISOString().split('T')[0];
             const newHistoryItem = {
@@ -1999,7 +2363,7 @@ async function executeToolCall(functionName, args, user_id) {
                 date: now,
                 status: 'completed',
                 type: 'nota_clinica_telegram',
-                objectives: 'Nota clínica vía Telegram Agent',
+                objectives: 'Nota clinica via Telegram Agent',
                 observations: clinical_text,
                 summary: clinical_text,
                 planUpdates: '',
@@ -2010,31 +2374,44 @@ async function executeToolCall(functionName, args, user_id) {
             const updatedHistory = [...(patient.history || []), newHistoryItem];
             const updateRes = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
                 method: 'PATCH',
-                headers: {
-                    apikey: supabaseKey,
-                    Authorization: `Bearer ${supabaseKey}`,
-                    'Content-Type': 'application/json',
-                    Prefer: 'return=minimal',
-                },
+                headers: { ...headers, Prefer: 'return=minimal' },
                 body: JSON.stringify({ history: updatedHistory }),
             });
-
             if (!updateRes.ok) throw new Error(await updateRes.text());
-            return { status: 'ok', message: `Evolución agregada correctamente a la historia de ${patient.name}.` };
+            return { status: 'ok', message: `Evolucion agregada a la historia de ${patient.name}.` };
         }
 
+        if (functionName === 'add_session_note') {
+            const { patient_id, summary, observations, next_action } = args;
+            const now = new Date().toISOString();
+            const session = {
+                id: `sess_${Date.now()}`,
+                patient_id,
+                date: now,
+                summary,
+                observations: observations || '',
+                next_action: next_action || '',
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/sessions`, {
+                method: 'POST', headers, body: JSON.stringify(session),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Sesion clinica registrada.` };
+        }
+
+        // ─── REPORTS ───
         if (functionName === 'generate_report_draft') {
             const { patient_id, focus_area } = args;
             const patients = await fetchPatientsForUser(user_id);
             const patient = patients.find(p => p.id === patient_id);
-            if (!patient) return { status: 'error', message: 'Patient not found' };
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
-            const draft = `# INFORME CLÍNICO - ${patient.name}\nÁrea de Enfoque: ${focus_area}\nDiagnóstico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Análisis y Observaciones\nSe evalúa área de ${focus_area} evidenciando desempeño clínico acorde al plan terapéutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente Fonoaudiológico AI.`;
+            const draft = `# INFORME CLINICO - ${patient.name}\nArea: ${focus_area}\nDiagnostico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Analisis\nSe evalua area de ${focus_area} evidenciando desempeno clinico acorde al plan terapeutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente FonoAudio Pro AI.`;
 
             const reportEntry = {
                 id: `rep_${Date.now()}`,
                 date: new Date().toISOString().split('T')[0],
-                title: `Borrador Informe (${focus_area}) — ${patient.name}`,
+                title: `Informe (${focus_area}) - ${patient.name}`,
                 content: draft,
                 type: 'generico',
             };
@@ -2042,20 +2419,242 @@ async function executeToolCall(functionName, args, user_id) {
             const updatedReports = [...(patient.reports || []), reportEntry];
             await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
                 method: 'PATCH',
-                headers: {
-                    apikey: supabaseKey,
-                    Authorization: `Bearer ${supabaseKey}`,
-                    'Content-Type': 'application/json',
-                    Prefer: 'return=minimal',
-                },
+                headers: { ...headers, Prefer: 'return=minimal' },
                 body: JSON.stringify({ reports: updatedReports }),
             });
-
-            return { status: 'ok', draft, message: `Borrador de informe generado y guardado para ${patient.name}.` };
+            return { status: 'ok', draft, message: `Borrador de informe generado para ${patient.name}.` };
         }
 
-        return { status: 'error', message: `Unknown tool: ${functionName}` };
+        if (functionName === 'list_reports') {
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === args.patient_id);
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
+            return { status: 'ok', count: (patient.reports || []).length, reports: patient.reports || [] };
+        }
+
+        // ─── APPOINTMENTS ───
+        if (functionName === 'get_agenda') {
+            const today = new Date().toISOString().split('T')[0];
+            const dateFilter = args.date || today;
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${dateFilter}&order=time.asc`, {
+                method: 'GET', headers,
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const appointments = await res.json();
+            return { status: 'ok', date: dateFilter, count: appointments.length, appointments };
+        }
+
+        if (functionName === 'get_upcoming_appointments') {
+            const today = new Date().toISOString().split('T')[0];
+            const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=gte.${today}&date=lte.${nextWeek}&order=date.asc,time.asc`, {
+                method: 'GET', headers,
+            });
+            if (!res.ok) throw new Error(await res.text());
+            const appointments = await res.json();
+            return { status: 'ok', count: appointments.length, appointments };
+        }
+
+        if (functionName === 'create_appointment') {
+            const { patient_name, date, time, type } = args;
+            const appointment = {
+                id: `apt_${Date.now()}`,
+                patient_name,
+                date,
+                time,
+                type: type || 'consulta',
+                status: 'programado',
+                professional_id: user_id,
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
+                method: 'POST', headers, body: JSON.stringify(appointment),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Turno creado para ${patient_name} el ${date} a las ${time}.` };
+        }
+
+        if (functionName === 'update_appointment') {
+            const { appointment_id, field, value } = args;
+            const allowedFields = ['date', 'time', 'status', 'type'];
+            if (!allowedFields.includes(field)) return { status: 'error', message: `Campo "${field}" no permitido.` };
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, {
+                method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
+                body: JSON.stringify({ [field]: value }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Turno actualizado.` };
+        }
+
+        if (functionName === 'cancel_appointment') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${args.appointment_id}`, {
+                method: 'DELETE', headers: { ...headers, Prefer: 'return=minimal' },
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: 'Turno cancelado.' };
+        }
+
+        // ─── EVALUATIONS ───
+        if (functionName === 'add_evaluation') {
+            const { patient_id, test_name, result, area } = args;
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === patient_id);
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
+
+            const evaluation = {
+                id: `eval_${Date.now()}`,
+                test_name,
+                result,
+                area: area || 'general',
+                date: new Date().toISOString().split('T')[0],
+            };
+            const updatedEvals = [...(patient.evaluations || []), evaluation];
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
+                method: 'PATCH',
+                headers: { ...headers, Prefer: 'return=minimal' },
+                body: JSON.stringify({ evaluations: updatedEvals }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Evaluacion "${test_name}" agregada a ${patient.name}.` };
+        }
+
+        // ─── TREATMENT PLAN ───
+        if (functionName === 'update_treatment_plan') {
+            const { patient_id, plan_text } = args;
+            const patients = await fetchPatientsForUser(user_id);
+            const patient = patients.find(p => p.id === patient_id);
+            if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
+
+            const plan = {
+                ...(patient.treatmentPlan || {}),
+                lastUpdate: new Date().toISOString(),
+                summary: plan_text,
+                history: [...(patient.treatmentPlan?.history || []), { date: new Date().toISOString(), text: plan_text }],
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
+                method: 'PATCH',
+                headers: { ...headers, Prefer: 'return=minimal' },
+                body: JSON.stringify({ treatmentPlan: plan }),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Plan de tratamiento de ${patient.name} actualizado.` };
+        }
+
+        // ─── KNOWLEDGE BASE ───
+        if (functionName === 'search_knowledge') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/assistant_knowledge?or=(title.ilike.%${args.query}%,content.ilike.%${args.query}%)&limit=5`, {
+                method: 'GET', headers,
+            });
+            if (!res.ok) return { status: 'ok', count: 0, results: [] };
+            const results = await res.json();
+            return { status: 'ok', count: results.length, results };
+        }
+
+        if (functionName === 'add_knowledge') {
+            const { title, content, category } = args;
+            const entry = {
+                id: `kb_${Date.now()}`,
+                title,
+                content,
+                category: category || 'general',
+                created_at: new Date().toISOString(),
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/assistant_knowledge`, {
+                method: 'POST', headers, body: JSON.stringify(entry),
+            });
+            if (!res.ok) throw new Error(await res.text());
+            return { status: 'ok', message: `Entrada "${title}" agregada a la base de conocimiento.` };
+        }
+
+        // ─── MATERIALS ───
+        if (functionName === 'list_materials') {
+            let url = `${supabaseUrl}/rest/v1/materials?limit=20&order=created_at.desc`;
+            if (args.category) url += `&category=eq.${args.category}`;
+            const res = await fetch(url, { method: 'GET', headers });
+            if (!res.ok) return { status: 'ok', count: 0, materials: [] };
+            const materials = await res.json();
+            return { status: 'ok', count: materials.length, materials: materials.map(m => ({ id: m.id, title: m.title, category: m.category, type: m.type })) };
+        }
+
+        if (functionName === 'search_materials') {
+            const res = await fetch(`${supabaseUrl}/rest/v1/materials?or=(title.ilike.%${args.query}%,tags.ilike.%${args.query}%)&limit=10`, {
+                method: 'GET', headers,
+            });
+            if (!res.ok) return { status: 'ok', count: 0, materials: [] };
+            const materials = await res.json();
+            return { status: 'ok', count: materials.length, materials: materials.map(m => ({ id: m.id, title: m.title, category: m.category, url: m.url })) };
+        }
+
+        // ─── STATISTICS ───
+        if (functionName === 'get_statistics') {
+            const patients = await fetchPatientsForUser(user_id);
+            const today = new Date().toISOString().split('T')[0];
+            const aptRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}`, { method: 'GET', headers });
+            const todayApts = aptRes.ok ? await aptRes.json() : [];
+
+            const diagCounts = {};
+            patients.forEach(p => {
+                const d = p.diagnosis || 'Sin diagnostico';
+                diagCounts[d] = (diagCounts[d] || 0) + 1;
+            });
+
+            return {
+                status: 'ok',
+                total_patients: patients.length,
+                today_appointments: todayApts.length,
+                diagnoses_breakdown: diagCounts,
+            };
+        }
+
+        if (functionName === 'check_missing_data') {
+            const patients = await fetchPatientsForUser(user_id);
+            const missing = patients.filter(p => !p.phone || !p.diagnosis || !p.age || !p.email);
+            return {
+                status: 'ok',
+                count: missing.length,
+                patients: missing.map(p => ({
+                    id: p.id,
+                    name: p.name,
+                    missing: [
+                        !p.phone && 'telefono',
+                        !p.diagnosis && 'diagnostico',
+                        !p.age && 'edad',
+                        !p.email && 'email',
+                    ].filter(Boolean),
+                })),
+            };
+        }
+
+        // ─── NOTEBOOKLM ───
+        if (functionName === 'notebook_list') {
+            try {
+                const backendUrl = process.env.BACKEND_URL || (process.env.VERCEL === '1' ? '' : 'http://localhost:3001');
+                const res = await fetch(`${backendUrl}/api/notebooklm/notebooks?limit=10`);
+                const data = await res.json();
+                const notebooks = Array.isArray(data) ? data : data.notebooks || [];
+                return { status: 'ok', count: notebooks.length, notebooks: notebooks.map(n => ({ id: n.id, title: n.title })) };
+            } catch (e) {
+                return { status: 'ok', count: 0, notebooks: [], note: 'NotebookLM no disponible' };
+            }
+        }
+
+        if (functionName === 'notebook_ask') {
+            try {
+                const backendUrl = process.env.BACKEND_URL || (process.env.VERCEL === '1' ? '' : 'http://localhost:3001');
+                const res = await fetch(`${backendUrl}/api/notebooklm/notebooks/${args.notebook_id}/ask`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: args.question }),
+                });
+                const data = await res.json();
+                return { status: 'ok', answer: data.answer || 'Sin respuesta disponible.' };
+            } catch (e) {
+                return { status: 'error', message: 'NotebookLM no disponible' };
+            }
+        }
+
+        return { status: 'error', message: `Herramienta desconocida: ${functionName}` };
     } catch (e) {
+        console.error(`[executeToolCall] Error in ${functionName}:`, e.message);
         return { status: 'error', message: e.message };
     }
 }
@@ -2285,23 +2884,33 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
             }
         }
 
-        const clinicalPrompt = `Sos el asistente clínico y agente autónomo de FonoAudio Pro AI, una plataforma profesional de fonoaudiología. Tenés acceso a herramientas clínicas (Function Calling) para buscar pacientes, registrar notas en la historia clínica y generar borradores de informes.
+        const clinicalPrompt = `Sos el asistente clinico y agente autonomo de FonoAudio Pro AI. Tenes acceso a herramientas (Function Calling) para gestionar COMPLETAMENTE la clinica. Podes:
+
+PACIENTES: buscar, crear, actualizar, eliminar, ver info completa, listar todos.
+CLINICA: agregar notas clinicas, evoluciones, sesiones, evaluaciones, planes de tratamiento.
+INFORMES: generar borradores de informes por area (lenguaje, fonacion, deglucion, audologia, motricidad, cognicion), listar informes existentes.
+AGENDA: ver turnos de hoy, proximos 7 dias, crear, modificar, cancelar turnos.
+MATERIALES: listar y buscar materiales terapeuticos.
+CONOCIMIENTO: buscar y agregar articulos/protocolos a la base de conocimiento clinica.
+ANALISIS: estadisticas del consultorio, detectar pacientes con datos faltantes.
+NOTEBOOKLM: listar notebooks, hacer preguntas clinicas investigadas.
 
 ═══ HORA ACTUAL (IMPORTANTE) ═══
 Hoy es ${currentDate}.
 Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
 
-═══ CONTEXTO CLÍNICO DEL PROFESIONAL ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
+═══ CONTEXTO CLINICO DEL PROFESIONAL ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
 ${pendingFileContext}
 ${notebookLmContext}
 
 ═══ MENSAJE DEL USUARIO ═══
 ${message_text}
 
-═══ INSTRUCCIONES DE AGENTE ═══
-- Si el usuario te pide buscar un paciente, agregar una nota clínica, evolución o informe, USÁ las herramientas (tools) disponibles.
-- Respondé en español argentino profesional y cálido.
-- Sé conciso pero informativo (máx 5 oraciones).`;
+═══ INSTRUCCIONES ═══
+- Si el usuario te pide cualquier accion sobre pacientes, agenda, clinica o informes, USA las herramientas (tools) disponibles. No preguntes de mas, ejecuta.
+- Si el usuario te dice "crea un paciente", crea uno. Si dice "agrega una nota", agregala. Si dice "mostra la agenda", mostrala.
+- Ante ambiguedades, intuisci con el contexto clinico disponible.
+- Respondes en espanol argentino profesional y calido. Conciso (max 5 oraciones salvo que pida mas detalle).`;
 
         let aiResponse = '';
         let sentToTelegram = false;
@@ -2353,8 +2962,17 @@ ${message_text}
             }
         }
 
-        // Send response back via Telegram
+        // Send response back via Telegram — text + voice
         sentToTelegram = await sendTelegramMessage(chat_id, aiResponse);
+
+        // Also send voice response (masculine Rioplatense) — non-blocking
+        if (sentToTelegram && aiResponse && aiResponse.length > 10) {
+            const voiceText = aiResponse
+                .replace(/[*_`~#]/g, '')
+                .replace(/\n{3,}/g, '\n\n')
+                .substring(0, 3000);
+            sendTelegramVoice(chat_id, voiceText).catch(() => {});
+        }
 
         return {
             status: 'ok',
