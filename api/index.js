@@ -30,5 +30,27 @@ export default async function handler(req, res) {
     const module = await import('../fonoaudio-server.js');
     cachedApp = module.app;
   }
+
+  // Parse JSON body for POST requests (Vercel doesn't do this automatically)
+  if (req.method === 'POST') {
+    try {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(chunk);
+      }
+      const bodyBuffer = Buffer.concat(chunks);
+      const bodyStr = bodyBuffer.toString('utf8');
+      req.body = bodyStr ? JSON.parse(bodyStr) : {};
+    } catch (e) {
+      req.body = {};
+    }
+  } else {
+    req.body = {};
+  }
+
+  // Attach the Express app so req.app.locals works
+  req.app = cachedApp;
+
+  // Dispatch to Express
   cachedApp(req, res);
 }
