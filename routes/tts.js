@@ -33,8 +33,8 @@ async function synthesizeGoogleOAuth(text, voiceName, ssmlGender) {
     const { google } = await import('googleapis');
     const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
     oauth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-    const ttsClient = google.texttospeech({ version: 'v1', auth: oauth2Client });
-    const response = await ttsClient.text().synthesize({
+    const tts = google.texttospeech({ version: 'v1', auth: oauth2Client });
+    const response = await tts.text.synthesize({
         input: { text: text.trim() },
         voice: { languageCode: 'es-AR', name: voiceName, ssmlGender },
         audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 0 },
