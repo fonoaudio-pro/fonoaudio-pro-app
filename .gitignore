@@ -17,6 +17,9 @@ __pycache__/
 # Backups
 backups/
 archives/
+extracted_temp/
+deployment*.tar*
+files_list.txt
 
 # Piper TTS resources (local-only)
 espeak-ng-data/
