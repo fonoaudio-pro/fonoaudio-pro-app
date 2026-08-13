@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "fonoaudio-server.js",
+      "use": "@vercel/node",
+      "config": {
+        "maxDuration": 60,
+        "includeFiles": [
+          "routes/**",
+          "services/**",
+          "utils/**",
+          "config/**",
+          "types/**",
+          "node_modules/@supabase/**",
+          "node_modules/googleapis/**",
+          "node_modules/@google/**",
+          "node_modules/pdf-parse/**",
+          "node_modules/pdfjs-dist/**"
+        ]
+      }
+    },
+    {
+      "src": "vite.config.ts",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/fonoaudio-server.js"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/dist/$1"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/worker/check-reminders",
+      "schedule": "*/15 * * * *"
+    }
+  ],
+  "env": {
+    "VERCEL": "1"
+  }
+}

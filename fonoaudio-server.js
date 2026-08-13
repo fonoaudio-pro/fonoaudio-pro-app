@@ -35,6 +35,8 @@ import clinicalRouter from './routes/clinical.js';
 import communicationRouter from './routes/communication.js';
 import workJournalRouter from './routes/workJournal.js';
 
+console.log('[FonoAudio] Server module loaded - build 2026-08-13-v2');
+
 const app = express();
 app.set('trust proxy', true);
 app.use(express.json({ limit: '50mb' }));
