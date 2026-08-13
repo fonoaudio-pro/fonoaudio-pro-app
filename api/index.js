@@ -26,36 +26,9 @@ if (typeof globalThis.DOMRect === 'undefined') {
 let cachedApp;
 
 export default async function handler(req, res) {
-  console.log('[index.js] Incoming request:', req.method, req.url);
-
   if (!cachedApp) {
     const module = await import('../fonoaudio-server.js');
     cachedApp = module.app;
   }
-
-  // Parse body for POST requests
-  if (req.method === 'POST') {
-    try {
-      const chunks = [];
-      for await (const chunk of req) {
-        chunks.push(chunk);
-      }
-      const bodyBuffer = Buffer.concat(chunks);
-      const bodyStr = bodyBuffer.toString('utf8');
-      req.body = bodyStr ? JSON.parse(bodyStr) : {};
-      console.log('[index.js] Body parsed, keys:', Object.keys(req.body || {}));
-    } catch (e) {
-      req.body = {};
-      console.log('[index.js] Body parse error:', e.message);
-    }
-  } else {
-    req.body = {};
-  }
-
-  // Attach the Express app so req.app.locals works
-  req.app = cachedApp;
-
-  // Dispatch to Express (do NOT strip /api prefix — routes are already mounted at /api)
-  console.log('[index.js] Dispatching to Express with URL:', req.url);
   cachedApp(req, res);
 }
