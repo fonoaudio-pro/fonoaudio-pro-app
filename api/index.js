@@ -24,10 +24,14 @@ if (typeof globalThis.DOMRect === 'undefined') {
 
 // Use dynamic import to ensure polyfills are set before fonoaudio-server.js is loaded
 let cachedApp;
-let parsedBody;
 
 export default async function handler(req, res) {
-  // Parse JSON body for POST requests (Vercel doesn't do this automatically)
+  if (!cachedApp) {
+    const module = await import('../fonoaudio-server.js');
+    cachedApp = module.app;
+  }
+
+  // Parse body for POST requests
   if (req.method === 'POST') {
     try {
       const chunks = [];
@@ -36,23 +40,24 @@ export default async function handler(req, res) {
       }
       const bodyBuffer = Buffer.concat(chunks);
       const bodyStr = bodyBuffer.toString('utf8');
-      parsedBody = bodyStr ? JSON.parse(bodyStr) : {};
+      req.body = bodyStr ? JSON.parse(bodyStr) : {};
     } catch (e) {
-      parsedBody = {};
+      req.body = {};
     }
   } else {
-    parsedBody = {};
+    req.body = {};
   }
 
-  if (!cachedApp) {
-    const module = await import('../fonoaudio-server.js');
-    cachedApp = module.app;
-  }
-
-  // Inject parsed body into req so Express app can access it
-  req.body = parsedBody;
+  // Attach the Express app so req.app.locals works
   req.app = cachedApp;
 
-  // Call Express app which will handle routing
+  // Normalize the URL — Vercel passes /api/telegram/webhook but Express routes are /telegram/webhook
+  // The vercel.json rewrites /api/(.*) to /api/index.js, so req.url is /api/telegram/webhook
+  if (req.url && req.url.startsWith('/api/')) {
+    req.url = req.url.replace(/^\/api/, '');
+    console.log('[index.js] Normalized URL:', req.url);
+  }
+
+  // Dispatch to Express
   cachedApp(req, res);
 }
