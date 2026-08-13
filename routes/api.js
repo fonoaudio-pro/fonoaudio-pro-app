@@ -465,19 +465,20 @@ async function sendTelegramMessage(chatId, text, parseMode = 'HTML') {
     try {
         let cleanedText = text;
         if (parseMode === 'Markdown') {
-            // MarkdownV2 requires escaping special chars
             cleanedText = text.replace(/[_*\[\]()~`>+#=|-]/g, '\\$&');
         } else if (parseMode === 'HTML') {
-            // Escape HTML special chars FIRST, then apply markdown→HTML conversions
             cleanedText = text
                 .replace(/&/g, '&amp;')
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;');
-            // Now convert simple markdown to HTML (use simple replace, not lookarounds)
             cleanedText = cleanedText
                 .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
                 .replace(/\*(.*?)\*/g, '<b>$1</b>')
                 .replace(/_(.*?)_\s/g, '<i>$1</i> ');
+        }
+        // Truncate if too long (Telegram limit is 4096 chars)
+        if (cleanedText.length > 4000) {
+            cleanedText = cleanedText.substring(0, 3990) + '\n\n(mensaje truncado)';
         }
         const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
             method: 'POST',
@@ -487,6 +488,17 @@ async function sendTelegramMessage(chatId, text, parseMode = 'HTML') {
         const data = await resp.json();
         if (!data.ok) {
             console.error('[sendTelegramMessage] Telegram API error:', data.description || 'unknown', '| text preview:', cleanedText.substring(0, 200));
+            // If HTML parsing failed, retry without parse_mode
+            if (data.description && (data.description.includes('parse') || data.description.includes('markdown'))) {
+                console.log('[sendTelegramMessage] Retrying without parse_mode...');
+                const retryResp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId, text: cleanedText }),
+                });
+                const retryData = await retryResp.json();
+                return retryData.ok === true;
+            }
         }
         return data.ok === true;
     } catch { return false; }
@@ -1215,154 +1227,86 @@ router.get('/telegram/file/:fileId', async (req, res) => {
 // --- AUDIO CLINICAL PROCESSING (transcribe + intent + patient + action) ---
 
 async function processAudioClinically(base64Data, mimeType, messageText, patients, aiModel) {
-    // Explicit check: if aiModel is null, return error immediately
     if (!aiModel) {
-        console.error('[processAudioClinically] AI model is NULL — cannot process audio. GOOGLE_API_KEY may be missing in Vercel env.');
         return {
             status: 'error',
             error: true,
-            type: 'audio_clinical',
-            transcription: '',
-            intent: 'error',
-            patientDetected: null,
-            actionSuggested: 'ninguno',
-            clinicalSummary: '',
-            suggestedResponse: '⚠️ *No pude procesar el audio*\n\nEl modelo de IA de Gemini no está inicializado. Esto suele ocurrir cuando `GOOGLE_API_KEY` no está configurado en el entorno de Vercel.\n\n_Contactá al administrador para configurar la clave de API de Google Gemini._',
+            suggestedResponse: 'No pude procesar el audio porque el modelo de IA no está disponible. Escribime por texto y te ayudo.',
             rawResponse: '',
         };
     }
 
     const patientList = patients.length > 0
-        ? `\nPACIENTES DEL PROFESIONAL:\n${patients.map((p, i) => `${i + 1}. ${p.name} — ${p.diagnosis || 'sin diagnóstico'}, ${p.age || '?'} años`).join('\n')}`
-        : '\nNo hay pacientes cargados en el sistema.';
+        ? `PACIENTES: ${patients.map((p, i) => `${i + 1}. ${p.name} (${p.diagnosis || 'sin dx'}, ${p.age || '?'} años)`).join(', ')}`
+        : 'No hay pacientes cargados.';
 
-    const audioPrompt = `Sos el asistente clínico de FonoAudio Pro AI. Recibiste un AUDIO HABLADO por Telegram de un fonoaudiólogo.
+    const audioPrompt = `Sos el asistente clínico de FonoAudio Pro AI. Un fonoaudiólogo te envió un AUDIO por Telegram.
 
-═══ INSTRUCCIÓN CRÍTICA ═══
-Este audio es una ENTRADA CONVERSACIONAL, no un archivo genico. El profesional te está hablando. Tu trabajo es:
-1. TRANSCRIBIR el audio fielmente.
-2. ENTENDER la intención del profesional (¿qué quiere hacer?).
-3. IDENTIFICAR el paciente al que se refiere (si menciona alguno).
-4. SUGERIR una acción clínica concreta.
-5. RESPONDER al profesional de forma natural y útil.
-
-═══ CONTEXTO ═══
 ${patientList}
-${messageText ? `Mensaje adjunto del usuario: "${messageText}"` : ''}
+${messageText ? `Mensaje adjunto: "${messageText}"` : ''}
 
-═══ FORMATO DE RESPUESTA ═══
-Respondé EXACTAMENTE con este formato JSON (sin markdown, sin \`\`\`):
-
-{
-  "transcripcion": "[transcripción completa y fiel del audio]",
-  "intencion": "[qué quiere hacer el profesional:ej. crear nota,agendar cita,consultar sobre paciente,enviar material,recordatorio,consulta clínica,otro]",
-  "paciente_detectado": "[nombre del paciente si lo menciona, o null]",
-  "accion_sugerida": "[nota_clinica | sesion | informe | recordatorio | consulta | material | ninguno]",
-  "resumen_clinico": "[resumen conciso de lo que dice el audio, orientado a fonoaudiología]",
-  "respuesta_sugerida": "[respuesta natural y profesional que le darías al fonoaudiólogo]"
-}
-
-═══ REGLAS ═══
-- Si el audio dice "agendá una cita con Juan para el viernes", intención="agendar cita", paciente="Juan", acción="consulta"
-- Si el audio dice "el resultado de María mejoró mucho", intención="actualizar paciente", paciente="María", acción="nota_clinica"
-- Si el audio dice "generame una guía para Pedro", intención="crear material", paciente="Pedro", acción="material"
-- Si el audio dice "¿cuándo tengo cita con Losada?", intención="consultar agenda", paciente="Losada", acción="consulta"
-- Si el audio es una nota clínica dictada (ej. "paciente refiere dolor de garganta..."), acción="nota_clinica"
-- Si el audio es un resumen de sesión, acción="sesion"
-- Si no se detecta paciente, paciente_detectado=null y la respuesta debe preguntar a qué paciente se refiere
-- TRANSCRIBÍ el audio COMPLETO, palabra por palabra. No resumas la transcripción.
-- La respuesta_sugerida debe ser algo que le dirías al fonoaudiólogo por chat (ej. "Perfecto, ¿querés que guarde esto como nota clínica de Juan?")
-- Usá español argentino profesional.
-- NO inventes datos clínicos que no estén en el audio.`;
+TRANSCRIBÍ el audio fielmente y respondé al profesional de forma natural y profesional en español argentino. Si menciona un paciente, identificalo. Sugerí una acción concreta.`;
 
     const parts = [
         { text: audioPrompt },
         { inlineData: { mimeType, data: base64Data } }
     ];
 
-    const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
-    logDebug('processAudioClinically', `Gemini result - ok: ${geminiResult.ok}, text length: ${geminiResult.text ? geminiResult.text.length : 0}, error: ${geminiResult.error?.message?.slice(0, 100)}`);
-    if (!geminiResult.ok) {
-        console.error('[Audio Clinical] All Gemini models failed:', geminiResult.error?.message);
-
-        // Save to pending queue for later analysis
-        await saveToPendingQueue({
-            user_id: null, // will be set by caller
-            chat_id: null,
-            media_type: 'audio',
-            file_name: null,
-            mime_type: mimeType,
-            file_id: null,
-            partial_analysis: null,
-            error_message: geminiResult.error?.message?.slice(0, 200),
-            metadata: { originalPrompt: 'audio_clinical' },
-        });
-
-        return {
-            status: 'error',
-            type: 'audio_clinical',
-            transcription: '',
-            intent: 'error',
-            patientDetected: null,
-            actionSuggested: 'ninguno',
-            clinicalSummary: '',
-            suggestedResponse: `No pude procesar el audio (todos los modelos de IA temporalmente no disponibles).\n\nTu audio quedó guardado en la cola de procesamiento pendiente. Cuando el servicio se restablezca, se analizará automáticamente.\n\nMientras tanto, podés:\n• Escribirme por texto con los datos del paciente\n• Guardar la nota manualmente desde la app`,
-            rawResponse: '',
-            error: true,
-            queued: true,
-        };
-    }
-    const rawText = geminiResult.text;
-
-    // Try to parse JSON from response
-    let parsed = null;
     try {
-        // Try direct parse
-        parsed = JSON.parse(rawText);
-    } catch {
-        // Try extracting JSON from markdown code blocks
-        const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
-        if (jsonMatch) {
-            try { parsed = JSON.parse(jsonMatch[1]); } catch {}
+        const geminiResult = await callGeminiResilient(parts, aiModel, GEMINI_MODEL_CHAIN[0]);
+        if (!geminiResult.ok || !geminiResult.text) {
+            return {
+                status: 'error',
+                error: true,
+                suggestedResponse: 'No pude procesar el audio en este momento. Intentá de nuevo o escribime por texto.',
+                rawResponse: geminiResult.error?.message || '',
+            };
         }
-        // Try finding JSON object in text
-        if (!parsed) {
-            const objMatch = rawText.match(/\{[\s\S]*\}/);
-            if (objMatch) {
-                try { parsed = JSON.parse(objMatch[0]); } catch {}
+
+        const text = geminiResult.text.trim();
+
+        // Try to detect patient name from the response
+        let patientDetected = null;
+        let matchedPatient = null;
+        if (patients.length > 0) {
+            for (const p of patients) {
+                if (text.toLowerCase().includes(p.name.toLowerCase())) {
+                    patientDetected = p.name;
+                    matchedPatient = p;
+                    break;
+                }
             }
         }
-    }
 
-    if (parsed && parsed.transcripcion) {
-        logDebug('processAudioClinically', `JSON parsed! transcription: ${parsed.transcripcion?.slice(0, 60)}`);
+        // If no patient detected from AI response, try matching from message text
+        if (!matchedPatient && messageText && patients.length > 0) {
+            const match = matchPatient(text, patients, messageText);
+            if (match) {
+                matchedPatient = match.patient;
+                patientDetected = match.patient.name;
+            }
+        }
+
         return {
             status: 'ok',
             type: 'audio_clinical',
-            transcription: parsed.transcripcion || '',
-            intent: parsed.intencion || 'consulta',
-            patientDetected: parsed.paciente_detectado || null,
-            actionSuggested: parsed.accion_sugerida || 'nota_clinica',
-            clinicalSummary: parsed.resumen_clinico || '',
-            suggestedResponse: parsed.respuesta_sugerida || '',
-            rawResponse: rawText,
+            transcription: text,
+            intent: 'consulta',
+            patientDetected,
+            actionSuggested: 'nota_clinica',
+            clinicalSummary: text,
+            suggestedResponse: text,
+            matchedPatient,
+            rawResponse: text,
+        };
+    } catch (e) {
+        return {
+            status: 'error',
+            error: true,
+            suggestedResponse: `Error procesando audio: ${e.message}`,
+            rawResponse: e.message,
         };
     }
-
-    logDebug('processAudioClinically', `JSON parse FAILED. rawText length: ${rawText.length}`);
-    // Fallback: return raw response without structured data
-    return {
-        status: 'ok',
-        type: 'audio_clinical',
-        transcription: rawText,
-        intent: 'consulta',
-        patientDetected: null,
-        actionSugerida: 'nota_clinica',
-        clinicalSummary: rawText,
-        suggestedResponse: rawText,
-        rawResponse: rawText,
-        parseFailed: true,
-    };
 }
 
 // --- TELEGRAM MULTIMODAL AI PROCESSING (with patient matching + action suggestions) ---
@@ -1416,22 +1360,52 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
 
         if (isAudio) {
             logDebug('Telegram Process-Media', `Audio detected (${mimeType}). Routing to clinical audio handler.`);
-            const audioResult = await processAudioClinically(base64Data, mimeType, message_text, patients, aiModel);
+
+            let audioResult;
+            try {
+                audioResult = await processAudioClinically(base64Data, mimeType, message_text, patients, aiModel);
+            } catch (audioErr) {
+                logError('Telegram Process-Media processAudioClinically threw', audioErr);
+                audioResult = {
+                    status: 'error',
+                    error: true,
+                    suggestedResponse: `Error inesperado procesando audio: ${audioErr.message}`,
+                };
+            }
+
             logDebug('Telegram Process-Media', `processAudioClinically returned. error: ${audioResult.error}, transcription: ${audioResult.transcription?.slice(0, 50)}, suggestedResponse: ${audioResult.suggestedResponse?.slice(0, 50)}`);
 
             // If audio processing failed, send error to Telegram
             if (audioResult.error) {
                 logDebug('Telegram Process-Media', 'Audio processing FAILED - sending error to Telegram');
-                const sent = await sendTelegramMessage(chat_id, audioResult.suggestedResponse);
+                const errorMsg = audioResult.suggestedResponse || 'No pude procesar el audio. Intenta de nuevo.';
+                let sent = false;
+                try {
+                    sent = await sendTelegramMessage(chat_id, errorMsg);
+                } catch (sendErr) {
+                    logError('Telegram Process-Media send error msg', sendErr);
+                }
+                if (!sent && chat_id && TELEGRAM_BOT_TOKEN) {
+                    try {
+                        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id, text: errorMsg }),
+                        });
+                        sent = true;
+                    } catch (retryErr) {
+                        logError('Telegram Process-Media retry send error', retryErr);
+                    }
+                }
                 logDebug('Telegram Process-Media', `Error message sent result: ${sent}`);
                 return {
                     status: 'error',
                     type: 'audio_clinical',
-                    response: audioResult.suggestedResponse,
+                    response: errorMsg,
                     media_type: 'audio',
                     mime_type: mimeType,
                     file_name: fileName,
-                    sent_to_telegram: true,
+                    sent_to_telegram: sent,
                 };
             }
 
@@ -1487,45 +1461,66 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
                 }, 30 * 60 * 1000);
             }
 
-            // Build Telegram response
-            let responseMessage = `🎙️ *Audio procesado*\n\n`;
-            responseMessage += `*Transcripción:*\n_${audioResult.transcription}_\n\n`;
+            // Build Telegram response — plain text, no parse_mode to avoid formatting errors
+            let responseMessage = `Audio procesado\n\n`;
+            responseMessage += `Transcripcion:\n${audioResult.transcription}\n\n`;
             if (audioResult.patientDetected) {
-                responseMessage += `*Paciente detectado:* ${audioResult.patientDetected}\n`;
+                responseMessage += `Paciente detectado: ${audioResult.patientDetected}\n`;
             }
-            responseMessage += `*Intención:* ${audioResult.intent}\n`;
-            responseMessage += `*Acción sugerida:* ${audioResult.actionSuggested}\n\n`;
+            responseMessage += `Accion sugerida: ${audioResult.actionSuggested}\n\n`;
 
             if (matchedPatient) {
-                responseMessage += `Detecté que esto corresponde a *${matchedPatient.name}* (${matchedPatient.diagnosis || 'sin diagnóstico'}).\n\n`;
-                responseMessage += `¿Qué querés hacer?\n`;
-                responseMessage += `  • "1" — Guardar como nota clínica\n`;
-                responseMessage += `  • "2" — Guardar como sesión\n`;
-                responseMessage += `  • "3" — Guardar como informe\n`;
-                responseMessage += `  • "no" — Descartar`;
+                responseMessage += `Detecte que esto corresponde a ${matchedPatient.name} (${matchedPatient.diagnosis || 'sin diagnostico'}).\n\n`;
+                responseMessage += `Que queres hacer?\n`;
+                responseMessage += `  1 - Guardar como nota clinica\n`;
+                responseMessage += `  2 - Guardar como sesion\n`;
+                responseMessage += `  3 - Guardar como informe\n`;
+                responseMessage += `  no - Descartar`;
             } else if (patients.length > 0) {
-                responseMessage += `¿A qué paciente corresponde?\n`;
+                responseMessage += `A que paciente corresponde?\n`;
                 patients.slice(0, 6).forEach((p, i) => {
-                    responseMessage += `  • ${i + 1}. ${p.name}\n`;
+                    responseMessage += `  ${i + 1}. ${p.name}\n`;
                 });
-                responseMessage += `\nO escribí "no" para cancelar.`;
+                responseMessage += `\nO escribi "no" para cancelar.`;
             } else {
                 responseMessage += audioResult.suggestedResponse;
             }
 
-            // Send to Telegram — use sendTelegramMessage helper which handles markdown→HTML conversion
+            // Send to Telegram — plain text, no parse_mode
             let sentToTelegram = false;
             if (chat_id && TELEGRAM_BOT_TOKEN) {
                 try {
                     logDebug('Telegram Process-Media', `Sending response to Telegram: ${responseMessage.slice(0, 100)}`);
-                    sentToTelegram = await sendTelegramMessage(chat_id, responseMessage, 'HTML');
+                    sentToTelegram = await sendTelegramMessage(chat_id, responseMessage);
                     logDebug('Telegram Process-Media', `sendTelegramMessage returned: ${sentToTelegram}`);
                     if (!sentToTelegram) {
                         logError('Telegram Process-Media sendTelegramMessage', new Error('sendMessage returned false'));
+                        // Second attempt: try sending via raw fetch
+                        try {
+                            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ chat_id, text: responseMessage }),
+                            });
+                            sentToTelegram = true;
+                        } catch (retryErr) {
+                            logError('Telegram Process-Media retry send', retryErr);
+                        }
                     }
                 } catch (tgErr) {
                     logError('Telegram Process-Media send response', tgErr);
                     logDebug('Telegram Process-Media', `Error sending response: ${tgErr.message}`);
+                    // Second attempt: try sending via raw fetch
+                    try {
+                        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id, text: responseMessage }),
+                        });
+                        sentToTelegram = true;
+                    } catch (retryErr) {
+                        logError('Telegram Process-Media retry send', retryErr);
+                    }
                 }
             }
 
@@ -2768,20 +2763,31 @@ router.post('/telegram/webhook', async (req, res) => {
                     }
                 } catch (mediaErr) {
                     logError('Telegram Webhook processMediaInternal', mediaErr);
-                    // Try to notify user
+                    // GUARANTEED fallback: always notify user on error
                     if (chat_id && process.env.TELEGRAM_BOT_TOKEN) {
                         try {
                             const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
                             await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ chat_id, text: `❌ Error procesando el audio: ${mediaErr.message}`, parse_mode: 'HTML' })
+                                body: JSON.stringify({ chat_id, text: `Error procesando el archivo: ${mediaErr.message}` })
                             });
                         } catch (tgErr) { logError('Telegram Webhook notify user', tgErr); }
                     }
                 }
             } else {
                 logDebug('Telegram Webhook', `file_id is empty for media type: ${media_type}`);
+                // Notify user if file_id is empty
+                if (chat_id && process.env.TELEGRAM_BOT_TOKEN) {
+                    try {
+                        const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+                        await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ chat_id, text: 'No pude descargar el archivo. Intentá enviarlo de nuevo.' })
+                        });
+                    } catch (tgErr) { logError('Telegram Webhook notify user', tgErr); }
+                }
             }
         } else if (message_text) {
             logDebug('Telegram Webhook', `Text message received, routing to processTextInternal`);
@@ -2791,6 +2797,19 @@ router.post('/telegram/webhook', async (req, res) => {
         res.json({ ok: true });
     } catch (e) {
         logError('Telegram Webhook outer catch', e);
+        // GUARANTEED fallback: try to notify user even on unexpected error
+        try {
+            const msg = req.body?.message;
+            const chat_id = msg?.chat?.id;
+            if (chat_id && process.env.TELEGRAM_BOT_TOKEN) {
+                const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+                await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id, text: `Ocurrió un error inesperado. Probá de nuevo o escribí por texto.` })
+                });
+            }
+        } catch (notifyErr) { logError('Telegram Webhook final fallback notify', notifyErr); }
         res.status(200).json({ ok: true, error: e.message }); // Always return 200 to Telegram
     }
 });

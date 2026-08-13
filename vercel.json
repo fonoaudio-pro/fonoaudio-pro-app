@@ -26,6 +26,11 @@
       "dest": "/$1"
     }
   ],
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30
+    }
+  },
   "env": {
     "VERCEL": "1"
   }
