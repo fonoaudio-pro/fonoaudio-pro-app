@@ -154,20 +154,40 @@ async function synthesizeText(text, voice = 'es_AR-masculino') {
     const cfg = VOICE_MAP[voice] || VOICE_MAP.default;
 
     // Backend 1: Google OAuth2 (most reliable if configured)
-    try { return await synthesizeGoogleOAuth(text, cfg.voiceName, cfg.ssmlGender); } catch (e) { console.warn('[TTS] OAuth2 failed:', e.message); }
+    try {
+        const buf = await synthesizeGoogleOAuth(text, cfg.voiceName, cfg.ssmlGender);
+        console.log('[TTS] Backend USED: Google OAuth2, voice:', cfg.voiceName, 'size:', buf.length);
+        return buf;
+    } catch (e) { console.warn('[TTS] OAuth2 failed:', e.message); }
 
     // Backend 2: Google Cloud TTS API key
-    try { return await synthesizeGoogleApiKey(text, cfg.voiceName, cfg.ssmlGender); } catch (e) { console.warn('[TTS] API key failed:', e.message); }
+    try {
+        const buf = await synthesizeGoogleApiKey(text, cfg.voiceName, cfg.ssmlGender);
+        console.log('[TTS] Backend USED: Google API key, voice:', cfg.voiceName, 'size:', buf.length);
+        return buf;
+    } catch (e) { console.warn('[TTS] API key failed:', e.message); }
 
     // Backend 3: OpenAI TTS
-    try { return await synthesizeOpenAI(text); } catch (e) { console.warn('[TTS] OpenAI failed:', e.message); }
+    try {
+        const buf = await synthesizeOpenAI(text);
+        console.log('[TTS] Backend USED: OpenAI, size:', buf.length);
+        return buf;
+    } catch (e) { console.warn('[TTS] OpenAI failed:', e.message); }
 
-    // Backend 4: Google Translate TTS (free fallback)
-    try { return await synthesizeGoogleTranslate(text); } catch (e) { console.warn('[TTS] Translate fallback failed:', e.message); }
+    // Backend 4: Google Translate TTS (free fallback, NO voice selection)
+    try {
+        const buf = await synthesizeGoogleTranslate(text);
+        console.log('[TTS] Backend USED: Google Translate TTS (FREE - no voice selection), size:', buf.length);
+        return buf;
+    } catch (e) { console.warn('[TTS] Translate fallback failed:', e.message); }
 
     // Backend 5: Piper local
     if (await checkPiperAvailable()) {
-        try { return await synthesizePiper(text); } catch (e) { console.warn('[TTS] Piper failed:', e.message); }
+        try {
+            const buf = await synthesizePiper(text);
+            console.log('[TTS] Backend USED: Piper local, size:', buf.length);
+            return buf;
+        } catch (e) { console.warn('[TTS] Piper failed:', e.message); }
     }
 
     console.error('[TTS] ALL backends failed. No audio generated.');
@@ -198,5 +218,5 @@ router.post('/', async (req, res) => {
     }
 });
 
-export { synthesizeText };
+export { synthesizeText, synthesizeGoogleOAuth, synthesizeGoogleApiKey, synthesizeOpenAI, synthesizeGoogleTranslate };
 export default router;
