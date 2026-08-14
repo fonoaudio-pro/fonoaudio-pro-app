@@ -3461,6 +3461,54 @@ router.post('/telegram/webhook', async (req, res) => {
     }
 });
 
+// Debug: test full voice send flow
+router.get('/telegram/test-voice', async (req, res) => {
+    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+    const chat_id = req.query.chat_id || '5854700506';
+    const debug = { steps: [] };
+
+    try {
+        // Step 1: Test synthesizeText
+        debug.steps.push({ step: 'synthesizeText', status: 'calling...' });
+        let audioBuffer = null;
+        try {
+            audioBuffer = await synthesizeText('Hola, soy FonoAudio, tu asistente clinico con voz masculina rioplatense.', 'es_AR-masculino');
+            debug.steps.push({ step: 'synthesizeText', status: audioBuffer ? `OK (${audioBuffer.length} bytes)` : 'NULL' });
+        } catch (ttsErr) {
+            debug.steps.push({ step: 'synthesizeText', status: 'ERROR', error: ttsErr.message });
+        }
+
+        if (!audioBuffer || audioBuffer.length === 0) {
+            return res.json({ ok: false, debug, message: 'TTS returned null/empty' });
+        }
+
+        // Step 2: Send voice to Telegram
+        debug.steps.push({ step: 'sendVoice', status: 'calling...' });
+        if (!TELEGRAM_BOT_TOKEN) {
+            return res.json({ ok: false, debug, message: 'No TELEGRAM_BOT_TOKEN' });
+        }
+
+        // Check if FormData exists
+        debug.steps.push({ step: 'formDataCheck', status: typeof FormData !== 'undefined' ? 'EXISTS' : 'MISSING' });
+
+        const formData = new FormData();
+        formData.append('chat_id', chat_id);
+        formData.append('voice', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'voice.mp3');
+
+        const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVoice`, {
+            method: 'POST',
+            body: formData,
+        });
+        const data = await resp.json();
+        debug.steps.push({ step: 'sendVoice', status: data.ok ? 'OK' : 'FAILED', description: data.description, error_code: data.error_code });
+
+        return res.json({ ok: data.ok, debug, telegram: data });
+    } catch (err) {
+        debug.steps.push({ step: 'error', status: err.message });
+        return res.json({ ok: false, debug, error: err.message });
+    }
+});
+
 router.get('/telegram/setup-webhook', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_BOT_TOKEN) {
