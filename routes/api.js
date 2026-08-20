@@ -40,6 +40,65 @@ function clearLog() { globalErrorLog.length = 0; globalDebugLog.length = 0; }
 
 const router = express.Router();
 
+// ══════════════════════════════════════════════════════════════════
+// VOICE MODE: intelligent voice response system
+// ══════════════════════════════════════════════════════════════════
+const voiceModeChats = new Map(); // chatId -> { enabled, expiresAt }
+const VOICE_MODE_DURATION_MS = 30 * 60 * 1000; // 30 minutes
+
+function isVoiceModeActive(chatId) {
+    const state = voiceModeChats.get(chatId);
+    if (!state) return false;
+    if (state.expiresAt && Date.now() > state.expiresAt) {
+        voiceModeChats.delete(chatId);
+        return false;
+    }
+    return state.enabled;
+}
+
+function setVoiceMode(chatId, enabled) {
+    voiceModeChats.set(chatId, {
+        enabled,
+        expiresAt: enabled ? Date.now() + VOICE_MODE_DURATION_MS : null,
+    });
+}
+
+const VOICE_KEYWORDS = [
+    'decime en voz', 'decime con voz', 'hablá', 'hablame', 'hablame en voz',
+    'modo voz', 'modo audio', 'activá voz', 'activar voz', 'activa voz',
+    'respondé con audio', 'responde con audio', 'respuesta de audio',
+    'decime en audio', 'audio por favor', 'quiero escuchar', 'escucharte',
+    'decime aloud', 'voz por favor', 'audio',
+    'jarvis', 'hermes', 'modo jarvis',
+];
+
+const VOICE_STOP_KEYWORDS = [
+    'modo texto', 'solo texto', 'desactivá voz', 'desactivar voz',
+    'desactiva voz', 'para voz', 'stop voz', 'silencio', 'modo silencio',
+];
+
+function wantsVoice(messageText) {
+    const lower = messageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return VOICE_KEYWORDS.some(kw => lower.includes(kw.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+}
+
+function wantsStopVoice(messageText) {
+    const lower = messageText.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return VOICE_STOP_KEYWORDS.some(kw => lower.includes(kw.normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+}
+
+function shouldSendVoice(chatId, messageText, aiResponse) {
+    if (wantsVoice(messageText)) return true;
+    if (isVoiceModeActive(chatId)) return true;
+    if (aiResponse && aiResponse.startsWith('[AUDIO]')) return true;
+    if (aiResponse && aiResponse.startsWith('[VOICE]')) return true;
+    return false;
+}
+
+function stripVoiceMarkers(text) {
+    return text.replace(/^\[(AUDIO|VOICE)\]\s*/i, '');
+}
+
 // Admin endpoint: update profile role using service role key (bypasses RLS)
 router.post('/admin/role', async (req, res) => {
     try {
@@ -1586,8 +1645,8 @@ async function processMediaInternal(file_id, media_type, message_text, chat_id, 
                 }
             }
 
-            // Also send voice response (masculine Rioplatense)
-            if (sentToTelegram && chat_id && audioResult.suggestedResponse && audioResult.suggestedResponse.length > 10) {
+            // Send voice ONLY if user requested it or voice mode is active
+            if (sentToTelegram && chat_id && shouldSendVoice(chat_id, message_text, '') && audioResult.suggestedResponse && audioResult.suggestedResponse.length > 10) {
                 const voiceText = (audioResult.suggestedResponse || audioResult.transcription || responseMessage)
                     .replace(/[*_`~#]/g, '')
                     .replace(/\n{3,}/g, '\n\n')
@@ -2199,12 +2258,14 @@ const clinicalTools = [
     // ─── TREATMENT PLAN ───
     {
         name: 'update_treatment_plan',
-        description: 'Actualiza el plan de tratamiento de un paciente.',
+        description: 'Actualiza el plan de tratamiento de un paciente. IMPORTANTE: Si el paciente ya tiene un plan, este tool MERGEA (conserva lo existente y agrega/modifica solo lo que se pide). Si el usuario dice "modificar" o "agregar", leé el plan actual primero y PRESERVÁ todo lo existente, cambiando SOLO lo solicitado.',
         parameters: {
             type: 'OBJECT',
             properties: {
                 patient_id: { type: 'STRING', description: 'ID del paciente.' },
-                plan_text: { type: 'STRING', description: 'Texto del plan de tratamiento o actualizacion.' }
+                plan_text: { type: 'STRING', description: 'Texto COMPLETO del plan de tratamiento. Si es una modificacion, inclui TODO el plan existente mas los cambios. NUNCA borres contenido existente.' },
+                action: { type: 'STRING', description: 'Si es "create" crea nuevo. Si es "update" o "merge" modifica el existente preservando lo que no se cambia.' },
+                section: { type: 'STRING', description: 'Que parte se modifica: general, objetivos, estrategias, frecuencia, observaciones, o null para plan completo.' }
             },
             required: ['patient_id', 'plan_text']
         }
@@ -2540,16 +2601,46 @@ async function executeToolCall(functionName, args, user_id) {
 
         // ─── TREATMENT PLAN ───
         if (functionName === 'update_treatment_plan') {
-            const { patient_id, plan_text } = args;
+            const { patient_id, plan_text, action, section } = args;
             const patients = await fetchPatientsForUser(user_id);
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
+            const existingPlan = patient.treatmentPlan || {};
+            const existingSummary = existingPlan.summary || '';
+            let finalSummary = plan_text;
+
+            // MERGE logic: if updating and existing plan exists, intelligently merge
+            if ((action === 'update' || action === 'merge') && existingSummary && plan_text) {
+                if (section && section !== 'null') {
+                    // Section-specific update: parse and replace only that section
+                    const sectionRegex = new RegExp(`(═+\\s*${section.toUpperCase()}[\\s\\S]*?)(?=═+\\s*[A-Z]|$)`, 'i');
+                    if (sectionRegex.test(existingSummary)) {
+                        finalSummary = existingSummary.replace(sectionRegex, `\n${plan_text}\n`);
+                    } else {
+                        // Section doesn't exist yet, append it
+                        finalSummary = existingSummary + `\n\n══ ${section.toUpperCase()} ══\n${plan_text}`;
+                    }
+                } else {
+                    // General update: if plan_text is clearly an addition, append. If it's a rewrite, use it but preserve structure.
+                    const isAppend = plan_text.toLowerCase().startsWith('agregar') || plan_text.toLowerCase().startsWith('añadir') || plan_text.toLowerCase().startsWith('aggiornar') || plan_text.toLowerCase().startsWith('modificar');
+                    if (isAppend) {
+                        finalSummary = existingSummary + '\n\n' + plan_text.replace(/^(agregar|añadir|aggiornar|modificar)\s*/i, '');
+                    } else {
+                        // Full replacement but log the old one in history
+                        finalSummary = plan_text;
+                    }
+                }
+            }
+
             const plan = {
-                ...(patient.treatmentPlan || {}),
+                ...existingPlan,
                 lastUpdate: new Date().toISOString(),
-                summary: plan_text,
-                history: [...(patient.treatmentPlan?.history || []), { date: new Date().toISOString(), text: plan_text }],
+                summary: finalSummary,
+                history: [
+                    ...(existingPlan.history || []),
+                    { date: new Date().toISOString(), text: plan_text, action: action || 'create', previousSummary: action === 'update' ? existingSummary : undefined }
+                ],
             };
             const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
                 method: 'PATCH',
@@ -2557,7 +2648,7 @@ async function executeToolCall(functionName, args, user_id) {
                 body: JSON.stringify({ treatmentPlan: plan }),
             });
             if (!res.ok) throw new Error(await res.text());
-            return { status: 'ok', message: `Plan de tratamiento de ${patient.name} actualizado.` };
+            return { status: 'ok', message: `Plan de tratamiento de ${patient.name} actualizado. ${action === 'update' ? 'Se preservó el contenido existente.' : 'Plan creado.'}` };
         }
 
         // ─── KNOWLEDGE BASE ───
@@ -2684,7 +2775,24 @@ async function executeToolCall(functionName, args, user_id) {
 async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
-    // ─── STEP 0: Check if this is an ACTION response to a pending file ───
+    // ─── STEP 0: Check voice mode commands ───
+    if (wantsStopVoice(message_text)) {
+        setVoiceMode(chat_id, false);
+        if (chat_id && TELEGRAM_BOT_TOKEN) {
+            await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id, text: 'Modo voz desactivado. Ahora respondo solo con texto. Para reactivar, decí "modo voz" o "audio".' }),
+            }).catch(() => {});
+        }
+        return { status: 'ok', response: 'Modo voz desactivado', sent_to_telegram: true };
+    }
+
+    if (wantsVoice(message_text)) {
+        setVoiceMode(chat_id, true);
+    }
+
+    // ─── STEP 1: Check if this is an ACTION response to a pending file ───
     try {
         const pending = chat_id ? await getPendingFile(chat_id) : null;
         const lowerText = message_text.trim().toLowerCase();
@@ -2905,8 +3013,9 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
             }
         }
 
-        const clinicalPrompt = `Sos FonoAudio, el asistente clinico autónomo y superpoderoso de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Tenes voz propia masculina rioplatense y podes responder con audio. Tenes estas capacidades:
+        const clinicalPrompt = `Sos FonoAudio, el asistente clinico autonomo y superpoderoso de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Sos experto en fonoaudiologia con razonamiento clinico avanzado.
 
+═══ CAPACIDADES ═══
 GESTION DE PACIENTES: buscar, crear, actualizar, eliminar, ver info completa, listar todos, detectar datos faltantes.
 CLINICA: agregar notas clinicas, evoluciones, sesiones, evaluaciones/ tests estandarizados, planes de tratamiento.
 INFORMES: generar borradores de informes por area (lenguaje, fonacion, deglucion, audologia, motricidad, cognicion), listar informes.
@@ -2916,12 +3025,27 @@ CONOCIMIENTO CLINICO: buscar y agregar articulos/protocolos a la base de conocim
 ESTADISTICAS: datos del consultorio, pacientes con datos faltantes, metricas.
 NOTEBOOKLM: listar notebooks, hacer preguntas clinicas investigadas con evidencia.
 
+═══ RAZONAMIENTO CLINICO (CRITICO) ═══
+ANTES de ejecutar cualquier tool, PENSÁ paso a paso:
+1. ¿Qué me está pidiendo exactamente el usuario?
+2. ¿Necesito leer datos existentes ANTES de modificar?
+3. ¿Qué datos ya existen que debo preservar?
+4. ¿Cuál es la mejor acción clínica?
+
+REGLA DE ORO PARA MODIFICACIONES:
+- Si el usuario dice "modificar plan", "agregar al plan", "cambiar frecuencia", PRIMERO leé el plan actual con get_patient_info, DESPUÉS mergeá los cambios preservando todo lo existente.
+- NUNCA borres contenido existente a menos que el usuario lo pida EXPLICITAMENTE.
+- Si dice "agregar", AGREGÁ al final. Si dice "modificar", CAMBIÁ solo lo que indica.
+- Si dice "reemplazar todo", AHÍ sí reemplazá completo.
+
 ═══ REGLAS ═══
 - SOS UN AGENTE AUTONOMO. Cuando el usuario te pide algo, LO HACES usando las tools. No preguntes de mas, ejecuta.
 - "Crea un paciente" -> crealo. "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
 - SOS PROFESIONAL y calido. Respondes en espanol argentino rioplatense.
 - SOS CONCISO pero completo. Max 6 oraciones salvo que pida mas detalle.
 - Ante ambiguedades, usa tu juicio clinico con el contexto disponible.
+- Cuando listes datos, resumi la info clave, no solo numeros.
+- Si ves algo anomalo en los datos clinicos, MENCIONALO.
 
 ═══ HORA ACTUAL ═══
 Hoy es ${currentDate}. Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
@@ -2933,7 +3057,7 @@ ${notebookLmContext}
 ═══ MENSAJE DEL USUARIO ═══
 ${message_text}
 
-EJECUTA la accion que el usuario pide. Si busca algo, busca. Si quiere crear, crea. Si quiere ver info, muestra.`;
+PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, buscala primero con las tools.`;
 
         let aiResponse = '';
         let sentToTelegram = false;
@@ -2985,12 +3109,13 @@ EJECUTA la accion que el usuario pide. Si busca algo, busca. Si quiere crear, cr
             }
         }
 
-        // Send response back via Telegram — text + voice
-        sentToTelegram = await sendTelegramMessage(chat_id, aiResponse);
+        // Send response back via Telegram — text
+        const cleanResponse = stripVoiceMarkers(aiResponse);
+        sentToTelegram = await sendTelegramMessage(chat_id, cleanResponse);
 
-        // Also send voice response (masculine Rioplatense)
-        if (sentToTelegram && aiResponse && aiResponse.length > 10) {
-            const voiceText = aiResponse
+        // Send voice ONLY if: user requested it, voice mode is active, or AI tagged it [AUDIO]/[VOICE]
+        if (sentToTelegram && shouldSendVoice(chat_id, message_text, aiResponse) && cleanResponse && cleanResponse.length > 10) {
+            const voiceText = cleanResponse
                 .replace(/[*_`~#]/g, '')
                 .replace(/\n{3,}/g, '\n\n')
                 .substring(0, 3000);
@@ -3005,7 +3130,7 @@ EJECUTA la accion que el usuario pide. Si busca algo, busca. Si quiere crear, cr
 
         return {
             status: 'ok',
-            response: aiResponse,
+            response: cleanResponse,
             sent_to_telegram: sentToTelegram,
         };
     } catch (e) {

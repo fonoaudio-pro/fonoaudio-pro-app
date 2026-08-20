@@ -362,13 +362,17 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
             },
             {
               name: "update_treatment_plan",
-              description: "Actualiza el plan de tratamiento de un paciente.",
+              description: "Actualiza el plan de tratamiento de un paciente. CRITICO: Si el paciente ya tiene un plan, MERGEA (conserva lo existente y modifica solo lo que se pide). Para 'modificar' o 'agregar', primero leé el plan actual con get_patient_info y preservá todo lo que no se cambia.",
               parameters: {
                 type: GenAIType.OBJECT,
                 properties: {
                   patientName: { type: GenAIType.STRING },
                   general: { type: GenAIType.STRING },
-                  strategies: { type: GenAIType.STRING }
+                  strategies: { type: GenAIType.STRING },
+                  objectives: { type: GenAIType.STRING },
+                  frequency: { type: GenAIType.STRING },
+                  observations: { type: GenAIType.STRING },
+                  action: { type: GenAIType.STRING, enum: ["create", "update", "merge"] }
                 },
                 required: ["patientName"]
               }
@@ -666,13 +670,17 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
             },
             {
               name: "update_treatment_plan",
-              description: "Actualiza el plan de tratamiento de un paciente.",
+              description: "Actualiza el plan de tratamiento de un paciente. CRITICO: Si el paciente ya tiene un plan, MERGEA (conserva lo existente y modifica solo lo que se pide). Para 'modificar' o 'agregar', primero leé el plan actual con get_patient_info y preservá todo lo que no se cambia.",
               parameters: {
                 type: GenAIType.OBJECT,
                 properties: {
                   patientName: { type: GenAIType.STRING },
                   general: { type: GenAIType.STRING },
-                  strategies: { type: GenAIType.STRING }
+                  strategies: { type: GenAIType.STRING },
+                  objectives: { type: GenAIType.STRING },
+                  frequency: { type: GenAIType.STRING },
+                  observations: { type: GenAIType.STRING },
+                  action: { type: GenAIType.STRING, enum: ["create", "update", "merge"] }
                 },
                 required: ["patientName"]
               }
@@ -1484,12 +1492,52 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
                         result = { error: `No encontré un paciente con el nombre "${fc.args.patientName}".`, message: `No encontré a "${fc.args.patientName}".` };
                         break;
                       }
-                      const updates: any = {};
-                      if (fc.args.general) updates.treatmentPlan = { ...pPlan.treatmentPlan, general: fc.args.general };
-                      if (fc.args.strategies) updates.treatmentPlan = { ...(updates.treatmentPlan || pPlan.treatmentPlan), strategies: fc.args.strategies };
-                      await updatePatientField({ patientId: pPlan.id, field: 'treatmentPlan', value: updates.treatmentPlan || pPlan.treatmentPlan });
-                      showFeedback(`Plan de ${pPlan.name} actualizado`, 'success');
-                      result = { success: true, patient: pPlan.name, message: `Plan de tratamiento de ${pPlan.name} actualizado.` };
+                      // MERGE logic: preserve existing, update only what's requested
+                      const existingPlan = pPlan.treatmentPlan || {};
+                      const action = (fc.args.action as string) || 'update';
+                      
+                      let updatedPlan: any = { ...existingPlan, lastUpdate: new Date().toISOString() };
+                      
+                      if (fc.args.general) {
+                        if (action === 'update' || action === 'merge') {
+                          // Merge: append to existing general or replace if clearly different
+                          updatedPlan.general = existingPlan.general 
+                            ? existingPlan.general + '\n\n' + fc.args.general 
+                            : fc.args.general;
+                        } else {
+                          updatedPlan.general = fc.args.general;
+                        }
+                      }
+                      if (fc.args.strategies) {
+                        if (action === 'update' || action === 'merge') {
+                          updatedPlan.strategies = existingPlan.strategies
+                            ? existingPlan.strategies + '\n\n' + fc.args.strategies
+                            : fc.args.strategies;
+                        } else {
+                          updatedPlan.strategies = fc.args.strategies;
+                        }
+                      }
+                      if (fc.args.objectives) updatedPlan.objectives = fc.args.objectives;
+                      if (fc.args.frequency) updatedPlan.frequency = fc.args.frequency;
+                      if (fc.args.observations) {
+                        if (action === 'update' || action === 'merge') {
+                          updatedPlan.observations = existingPlan.observations
+                            ? existingPlan.observations + '\n\n' + fc.args.observations
+                            : fc.args.observations;
+                        } else {
+                          updatedPlan.observations = fc.args.observations;
+                        }
+                      }
+                      
+                      // Add to history
+                      updatedPlan.history = [
+                        ...(existingPlan.history || []),
+                        { date: new Date().toISOString(), text: JSON.stringify(fc.args), action }
+                      ];
+                      
+                      await updatePatientField({ patientId: pPlan.id, field: 'treatmentPlan', value: updatedPlan });
+                      showFeedback(`Plan de ${pPlan.name} actualizado (merge)`, 'success');
+                      result = { success: true, patient: pPlan.name, message: `Plan de tratamiento de ${pPlan.name} actualizado. Se preservó el contenido existente.` };
                       break;
                     }
                     case "add_evaluation": {
