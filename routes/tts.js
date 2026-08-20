@@ -1,5 +1,7 @@
 import express from 'express';
-import { MsEdgeTTS } from '@travisvn/edge-tts';
+import crypto from 'crypto';
+import pkg from 'ws';
+const { WebSocket } = pkg;
 
 const router = express.Router();
 
@@ -12,26 +14,124 @@ const VOICE_MAP = {
     'default': { voice: 'es-AR-TomasNeural', label: 'Masculino' },
 };
 
+const TRUSTED_CLIENT_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
+const EDGE_WSS_URL = `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${TRUSTED_CLIENT_TOKEN}`;
+
+function generateSecMs() {
+    const ttl = 864000000; // 10 days
+    const now = Date.now();
+    const expires = now + ttl;
+    return `1${expires}d`;
+}
+
+function generateRequestId() {
+    return crypto.randomUUID();
+}
+
+function escapeXml(text) {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+}
+
+function buildSSML(text, voice) {
+    return `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-AR'>
+<voice name='${voice}'>
+${escapeXml(text)}
+</voice>
+</speak>`;
+}
+
 // ══════════════════════════════════════════════════════════════════
-// BACKEND 1: Edge TTS (Microsoft) — FREE, no API key needed
+// BACKEND 1: Edge TTS via WebSocket — FREE, no API key needed
 // ══════════════════════════════════════════════════════════════════
 async function synthesizeEdgeTTS(text, voiceName) {
     if (!text || !text.trim()) throw new Error('Empty text');
-    const tts = new MsEdgeTTS();
-    await tts.setMetadata(voiceName, MsEdgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
-    const readable = tts.toStream(text.trim());
-    const chunks = [];
-    for await (const chunk of readable) {
-        if (chunk instanceof Buffer) {
-            chunks.push(chunk);
-        } else if (typeof chunk === 'string') {
-            chunks.push(Buffer.from(chunk, 'utf-8'));
-        }
-    }
-    const buffer = Buffer.concat(chunks);
-    if (buffer.length < 100) throw new Error('Edge TTS returned empty audio');
-    console.log('[TTS] Edge TTS succeeded, voice:', voiceName, 'size:', buffer.length);
-    return buffer;
+
+    return new Promise((resolve, reject) => {
+        const requestId = generateRequestId();
+        const connectionId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
+        const secMs = generateSecMs();
+
+        const url = `${EDGE_WSS_URL}&ConnectionId=${connectionId}`;
+        const ws = new WebSocket(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0',
+                'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
+                'Sec-WebSocket-Protocol': 'synapse-crossorigin',
+            },
+        });
+
+        const audioChunks = [];
+        let resolved = false;
+
+        const timeout = setTimeout(() => {
+            if (!resolved) {
+                resolved = true;
+                ws.close();
+                reject(new Error('Edge TTS timeout'));
+            }
+        }, 30000);
+
+        ws.on('open', () => {
+            // Send config
+            const configMsg = `Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-96kbitrate-mono-mp3"}}}}`;
+            ws.send(configMsg);
+
+            // Send SSML
+            const ssml = buildSSML(text, voiceName);
+            const msgId = generateRequestId();
+            const speechMsg = `X-RequestId:${msgId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${new Date().toISOString()}\r\nPath:ssml\r\n\r\n${ssml}`;
+            ws.send(speechMsg);
+        });
+
+        ws.on('message', (data, isBinary) => {
+            if (isBinary) {
+                // Binary audio data — extract MP3 bytes after the header
+                const buf = Buffer.from(data);
+                // Edge TTS sends: header + audio bytes. Header ends with "Path:audio\r\n\r\n"
+                const headerEnd = buf.indexOf(Buffer.from('Path:audio\r\n\r\n'));
+                if (headerEnd !== -1) {
+                    const audioStart = headerEnd + 'Path:audio\r\n\r\n'.length;
+                    if (audioStart < buf.length) {
+                        audioChunks.push(buf.slice(audioStart));
+                    }
+                } else {
+                    // Sometimes audio arrives without header marker
+                    audioChunks.push(buf);
+                }
+            }
+        });
+
+        ws.on('close', () => {
+            clearTimeout(timeout);
+            if (!resolved) {
+                resolved = true;
+                if (audioChunks.length > 0) {
+                    const buffer = Buffer.concat(audioChunks);
+                    if (buffer.length < 100) {
+                        reject(new Error('Edge TTS returned empty audio'));
+                    } else {
+                        console.log('[TTS] Edge TTS succeeded, voice:', voiceName, 'size:', buffer.length);
+                        resolve(buffer);
+                    }
+                } else {
+                    reject(new Error('Edge TTS: no audio received'));
+                }
+            }
+        });
+
+        ws.on('error', (err) => {
+            clearTimeout(timeout);
+            if (!resolved) {
+                resolved = true;
+                reject(new Error(`Edge TTS WebSocket error: ${err.message}`));
+            }
+        });
+    });
 }
 
 // ══════════════════════════════════════════════════════════════════
