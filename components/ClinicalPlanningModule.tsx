@@ -18,29 +18,31 @@ const ClinicalPlanningModule: React.FC<Props> = ({ patient, onAnalysisComplete, 
         setIsLoading(true);
         setError(null);
         try {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+            const response = await fetch(`${VITE_BACKEND_URL}/api/clinical-planning/${patient.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ patient, action: 'analyze' }),
+            });
 
-            const patientName = patient.name || 'Paciente';
-            const mockAnalysis: ClinicalPlanningAnalysis = {
-                motivo_de_consulta_resumido: `Evaluación de ${patientName} para planificación de intervención en fonoaudiología.`,
-                datos_clinicos_relevantes: 'Datos obtenidos de la historia clínica del paciente. Se recomienda completar con evaluaciones específicas.',
-                hipotesis_o_focos_de_trabajo: 'Trabajo en progreso según los ejes clínicos activos del paciente.',
-                evaluaciones_o_baterias_sugeridas: ['Evaluación articulatoria', 'Evaluación de fluidez', 'Screening auditivo'],
-                que_observar_en_sesion: 'Observar producciones fonológicas, comprensión auditiva y habilidades pragmáticas.',
-                objetivos_inmediatos: ['Mejorar intelligibilidad del habla', 'Aumentar vocabulario activo', 'Fomentar comunicación funcional'],
-                materiales_necesarios: ['Pictogramas ARASAAC', 'Tableros de comunicación', 'Estímulos visuales'],
-                estructura_de_sesion_30_min: 'Apertura (5 min) → Actividad principal (15 min) → Juego funcional (5 min) → Cierre (5 min)',
-                riesgos_o_alertas: ['Verificar participación de la familia en las tareas domiciliarias'],
-                preguntas_para_profundizar: ['¿Cómo es la comunicación en el hogar?', '¿Qué actividades genera más rechazo?'],
-                borrador_de_plan: 'Plan de intervención de 3 meses con reevaluación mensual.'
-            };
+            if (!response.ok) {
+                throw new Error(`Error del servidor: ${response.status}`);
+            }
 
-            setAnalysis(mockAnalysis);
-            onAnalysisComplete(mockAnalysis);
-            addToast?.({ message: 'Análisis generado (modo stub — backend no disponible).', type: 'success' });
+            const result = await response.json();
+
+            if (result.status === 'error') {
+                throw new Error(result.message || 'Error al generar análisis');
+            }
+
+            const analysisData = result.analysis || result;
+            setAnalysis(analysisData);
+            onAnalysisComplete(analysisData);
+            addToast?.({ message: 'Análisis clínico generado correctamente.', type: 'success' });
         } catch (err: any) {
             console.error('[ClinicalPlanningModule] Error:', err);
-            setError(err.message || 'Error al generar análisis.');
+            setError(err.message || 'Error al generar análisis. Verificá la conexión con el servidor.');
+            addToast?.({ message: 'No se pudo generar el análisis. Intentá de nuevo.', type: 'error' });
         } finally {
             setIsLoading(false);
         }
@@ -107,7 +109,6 @@ const ClinicalPlanningModule: React.FC<Props> = ({ patient, onAnalysisComplete, 
                         className="bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center gap-2 mx-auto text-sm"
                     >
                         <Sparkles size={18} /> Iniciar Análisis con IA
-                        <span className="px-1.5 py-0.5 text-[8px] font-bold text-amber-200 bg-amber-600/30 rounded ml-1">STUB</span>
                     </button>
                 </div>
             )}

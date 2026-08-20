@@ -77,7 +77,6 @@ export function MaterialReviewTray({
         <div className="flex items-center gap-2">
           <Inbox size={16} className="text-blue-600 dark:text-blue-400" />
           <h4 className="font-bold text-sm text-slate-800 dark:text-white">Bandeja de Revisión</h4>
-          <span className="px-1.5 py-0.5 text-[8px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded">STUB</span>
           {pendingCount > 0 && (
             <span className="px-1.5 py-0.5 text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 rounded-full" data-testid="pending-count">
               {pendingCount} pendiente{pendingCount !== 1 ? 's' : ''}

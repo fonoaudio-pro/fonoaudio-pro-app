@@ -116,19 +116,36 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ patientId, onCompl
         setIsGenerating(true);
         setError(null);
         try {
-            await new Promise(resolve => setTimeout(resolve, 800));
+            const VITE_BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+            const response = await fetch(`${VITE_BACKEND_URL}/api/process`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'generate_session_summary',
+                    patient_id: patientId,
+                    observations: draft.observations,
+                    objectives: draft.objectives,
+                    session_date: new Date().toISOString(),
+                }),
+            });
 
-            const obs = draft.observations || '';
-            const obj = draft.objectives || '';
-            const generatedSummary = `Resumen de sesión clínica:\n\n${obs.split('\n').filter(Boolean).map(l => `• ${l.trim()}`).join('\n')}\n\nObjetivos abordados: ${obj || 'No especificados'}.\n\nSe recomienda continuar con el plan de intervención establecido y reevaluar progreso en la próxima sesión.`;
+            if (!response.ok) {
+                throw new Error(`Error del servidor: ${response.status}`);
+            }
+
+            const result = await response.json();
+
+            if (result.status === 'error') {
+                throw new Error(result.message || 'Error al generar resumen');
+            }
 
             setDraft(prev => ({
                 ...prev,
-                summary: generatedSummary,
-                planUpdates: 'Continuar intervención según objetivos. Monitorear evolución semanal.',
-                nextAction: 'Próxima sesión: reevaluación de progreso y ajuste de plan.'
+                summary: result.summary || draft.observations,
+                planUpdates: result.plan_updates || 'Continuar intervención según objetivos. Monitorear evolución semanal.',
+                nextAction: result.next_action || 'Próxima sesión: reevaluación de progreso y ajuste de plan.'
             }));
-            addToast({ message: 'Resumen generado (modo stub — backend no disponible).', type: 'success' });
+            addToast({ message: 'Resumen de sesión generado correctamente.', type: 'success' });
         } catch (err: any) {
             addToast({ message: 'Error al generar resumen: ' + err.message, type: 'error' });
         } finally {

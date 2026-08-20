@@ -107,12 +107,7 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
     setAuthOk(true);
     const list = Array.isArray(r) ? r : r.notebooks || [];
     if (list.length === 0 && (!r || !r.error)) {
-      // Fallback mock notebooks for instant demo / usability if external RPC fails or empty
-      setNotebooks([
-        { id: 'nb-demo-1', title: 'Fundamentos de Fonoaudiología y Lenguaje', sourceCount: 5 },
-        { id: 'nb-demo-2', title: 'Audiología Clínica y Pruebas Perceptuales', sourceCount: 3 },
-        { id: 'nb-demo-3', title: 'Deglución y Trastornos Orofaciales', sourceCount: 4 }
-      ]);
+      setNotebooks([]);
     } else {
       setNotebooks(list);
     }
@@ -149,21 +144,6 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadSources = useCallback(async (nbId: string) => {
-    if (nbId.includes('demo') || nbId.includes('test') || nbId === 'cuaderno-test-real') {
-      setSources([
-        { id: 'src-1', title: '¿Cómo interpretar una logoaudiometría y timpanometría?', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-2', title: 'Audiometría - Wikipedia, la enciclopedia libre', type: 'url', status: 'ready', url: 'https://es.wikipedia.org/wiki/Audiometr%C3%ADa' },
-        { id: 'src-3', title: 'Audiometría: fuentes de error en la práctica clínica', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-4', title: 'Cumplir ISO 8253-1 en Audiometría tonal liminar', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-5', title: 'Equivalencia de Listas de Palabras en Logoaudiometría', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-6', title: 'GUÍA DE PROCEDIMIENTOS CLÍNICOS EN AUDIOLOGÍA', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-7', title: 'Mascaramento em audiometria tonal e vocal', type: 'text', status: 'ready', url: '#' },
-        { id: 'src-8', title: 'Normalización de las pruebas auditivas infantiles', type: 'url', status: 'ready', url: '#' },
-        { id: 'src-9', title: 'Anatomía de la Medición: Vía Aérea vs. Vía Ósea', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-10', title: 'Dossier Clínico: Evaluación Audiológica Integral', type: 'pdf', status: 'ready', url: '#' }
-      ]);
-      return;
-    }
     const r = await apiCall(`/notebooks/${nbId}/sources`);
     if (Array.isArray(r)) setSources(r);
     else if (r.sources) setSources(r.sources);
@@ -171,51 +151,6 @@ export default function NotebookLMSection({ onNavigate }: NotebookLMSectionProps
   }, [apiCall]);
 
   const loadArtifacts = useCallback(async (nbId: string) => {
-    if (nbId.includes('demo') || nbId.includes('test') || nbId === 'cuaderno-test-real') {
-      setArtifacts([
-        { 
-          id: 'art-1', 
-          title: 'Dossier Clínico: Evaluación Audiológica Integral (Estudio y Resumen)', 
-          type: 'slide-deck', 
-          type_id: 'slide-deck', 
-          status: 'completed', 
-          status_id: 2, 
-          created_at: new Date().toISOString(), 
-          url: 'https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf' 
-        },
-        { 
-          id: 'art-2', 
-          title: 'Podcast de Repaso: Vía Aérea vs Vía Ósea y Enmascaramiento', 
-          type: 'audio', 
-          type_id: 'audio', 
-          status: 'completed', 
-          status_id: 2, 
-          created_at: new Date().toISOString(), 
-          url: 'https://actions.google.com/sounds/v1/ambiences/rain_heavy.ogg' 
-        },
-        { 
-          id: 'art-3', 
-          title: 'Quiz Clínico: Interpretación de Logoaudiometría', 
-          type: 'quiz', 
-          type_id: 'quiz', 
-          status: 'completed', 
-          status_id: 2, 
-          created_at: new Date().toISOString(),
-          content: 'Pregunta 1: ¿Cuál es el umbral normal de audición?\nRespuesta: Entre 0 y 25 dB HL.\n\nPregunta 2: ¿Qué evalúa la logoaudiometría?\nRespuesta: El porcentaje de discriminación y inteligibilidad de la palabra.'
-        },
-        { 
-          id: 'art-4', 
-          title: 'Mapa Mental: Protocolos de Calidad ISO 8253-1', 
-          type: 'mind-map', 
-          type_id: 'mind-map', 
-          status: 'completed', 
-          status_id: 2, 
-          created_at: new Date().toISOString(),
-          content: '• Calibración anual obligatoria\n• Condiciones acústicas de la cabina\n• Uso de enmascaramiento enmascarado\n• Registro clínico estandarizado'
-        }
-      ]);
-      return;
-    }
     const r = await apiCall(`/notebooks/${nbId}/artifacts`);
     const raw = r.artifacts || (Array.isArray(r) ? r : []);
     setArtifacts(raw.map((a: Artifact) => {

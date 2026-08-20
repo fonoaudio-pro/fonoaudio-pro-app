@@ -413,7 +413,7 @@ async function saveToPendingQueue(item) {
 const pendingQueueMemory = [];
 
 // ══════════════════════════════════════════════════════════════════
-// DEGRADED RESPONSES: Useful answers without AI
+// DEGRADED RESPONSES: Informative fallbacks without AI
 // ══════════════════════════════════════════════════════════════════
 
 async function getTextFallbackFromSupabase(messageText, userId) {
@@ -433,7 +433,7 @@ async function getTextFallbackFromSupabase(messageText, userId) {
             const patients = await patientsRes.json();
             if (patients.length > 0) {
                 const list = patients.map(p => `- ${p.name}: ${p.diagnosis || 'sin diagnóstico'}`).join('\n');
-                return `📋 *Consulta sin IA (modo degradado)*\n\nTenés ${patients.length} pacientes cargados:\n${list}\n\n⚠️ El servicio de IA está temporalmente no disponible. Estos datos vienen directo de la base de datos.`;
+                return `⚠️ *Servicio de IA no disponible*\n\nTus pacientes:\n${list}\n\nPara usar el asistente clínico con IA, verificá que las claves API (GOOGLE_API_KEY o GROQ_API_KEY) estén configuradas en Vercel.`;
             }
         }
 
@@ -446,9 +446,9 @@ async function getTextFallbackFromSupabase(messageText, userId) {
             const apps = await appsRes.json();
             if (apps.length > 0) {
                 const list = apps.map(a => `- ${a.time || '??:??'} hs: ${a.patient_name} (${a.status || 'pending'})`).join('\n');
-                return `📋 *Consulta sin IA (modo degradado)*\n\nAgenda de hoy:\n${list}\n\n⚠️ Servicio de IA no disponible. Datos de la base.`;
+                return `⚠️ *Servicio de IA no disponible*\n\nAgenda de hoy:\n${list}\n\nPara usar el asistente clínico con IA, verificá la configuración de claves API.`;
             } else {
-                return `📋 *Consulta sin IA (modo degradado)*\n\nNo tenés citas programadas para hoy.\n\n⚠️ Servicio de IA no disponible.`;
+                return `⚠️ *Servicio de IA no disponible*\n\nNo tenés citas programadas para hoy.`;
             }
         }
 
@@ -898,11 +898,15 @@ router.post('/clinical-planning/:patientId', async (req, res) => {
 router.post('/notebooklm', async (req, res) => {
     const { query } = req.body;
     try {
-        const mockResults = [
-            { id: 'doc1', title: 'Guía de Fonoaudiología 2024', content: 'Contenido sobre trastornos del lenguaje...' },
-            { id: 'doc2', title: 'Avances en Terapia del Lenguaje', content: 'Nuevos enfoques basados en evidencia...' }
-        ];
-        res.json({ status: 'ok', response: mockResults, total: mockResults.length });
+        const aiModel = req.app?.locals?.aiModel;
+        if (!aiModel) {
+            return res.status(503).json({ status: 'error', message: 'Servicio de IA no disponible. Configurá GOOGLE_API_KEY para activar NotebookLM.', hint: 'ai_unavailable' });
+        }
+        const result = await aiModel.generateContent(`Buscá información relevante sobre: "${query}". Respondé en formato JSON con array de objetos {title, content}.`);
+        const text = result.response?.text?.() || '[]';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        const results = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+        res.json({ status: 'ok', response: results, total: results.length });
     } catch (e) {
         console.error('[NotebookLM Search] Error:', e);
         res.status(500).json({ status: 'error', message: e.message });
@@ -910,15 +914,17 @@ router.post('/notebooklm', async (req, res) => {
 });
 
 router.post('/research', async (req, res) => {
-    // This endpoint is called by research_scientific_evidence
     const { query } = req.body;
     try {
-        // Mock research results - in real implementation, this would use research APIs
-        const mockEvidence = [
-            { id: 'e1', title: 'Estudio Eficacia de Intervenciones', journal: 'Journal of Speech Pathology', year: 2024 },
-            { id: 'e2', title: 'Análisis de Trastornos del Habla', journal: 'Clinical Linguistics', year: 2023 }
-        ];
-        res.json({ status: 'ok', response: mockEvidence, query });
+        const aiModel = req.app?.locals?.aiModel;
+        if (!aiModel) {
+            return res.status(503).json({ status: 'error', message: 'Servicio de IA no disponible. Configurá GOOGLE_API_KEY para activar investigación.', hint: 'ai_unavailable' });
+        }
+        const result = await aiModel.generateContent(`Investigá evidencia científica sobre: "${query}". Respondé en formato JSON con array de objetos {title, journal, year, summary}.`);
+        const text = result.response?.text?.() || '[]';
+        const jsonMatch = text.match(/\[[\s\S]*\]/);
+        const evidence = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+        res.json({ status: 'ok', response: evidence, query });
     } catch (e) {
         console.error('[Research] Error:', e);
         res.status(500).json({ status: 'error', message: e.message });
@@ -926,24 +932,18 @@ router.post('/research', async (req, res) => {
 });
 
 router.post('/clinical_summary', async (req, res) => {
-    // This endpoint is called by generate_clinical_summary
     const { patientName, history, diagnosis } = req.body;
     try {
-        // Mock clinical summary - in real implementation, this would use AI generation
-        const summary = `
-# RESUMEN CLÍNICO - ${patientName}
-
-## Diagnóstico Principal
-${diagnosis || 'No especificado'}
-
-## Evolución Reciente
-${history || 'Sin historial detallado.'}
-
-## Próximos Pasos
-- Continuar con el plan de tratamiento actual
-- Reevaluación en 4 semanas
-- Monitoreo de respuestas a intervenciones
-        `;
+        const aiModel = req.app?.locals?.aiModel;
+        if (!aiModel) {
+            return res.status(503).json({ status: 'error', message: 'Servicio de IA no disponible. Configurá GOOGLE_API_KEY para generar resúmenes clínicos.', hint: 'ai_unavailable' });
+        }
+        const prompt = `Generá un resumen clínico fonoaudiológico profesional para el paciente ${patientName}.
+Diagnóstico: ${diagnosis || 'No especificado'}
+Historial: ${history || 'Sin historial detallado.'}
+Incluí: diagnóstico, evolución, objetivos alcanzados, próximos pasos y plan de tratamiento.`;
+        const result = await aiModel.generateContent(prompt);
+        const summary = result.response?.text?.() || 'No se pudo generar el resumen.';
         res.json({ status: 'ok', response: summary });
     } catch (e) {
         console.error('[Clinical Summary] Error:', e);

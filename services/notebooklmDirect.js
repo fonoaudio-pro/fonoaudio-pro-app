@@ -271,25 +271,32 @@ export async function rawRpcCall(rpcId, params) {
 }
 
 export async function listNotebooks() {
-  return [
-    { 
-      id: 'cuaderno-test-real', 
-      title: 'Cuaderno test', 
-      sourceCount: 10,
-      sources: [
-        { id: 'src-1', title: '¿Cómo interpretar una logoaudiometría y timpanometría?', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-2', title: 'Audiometría - Wikipedia, la enciclopedia libre', type: 'url', status: 'ready', url: 'https://es.wikipedia.org/wiki/Audiometr%C3%ADa' },
-        { id: 'src-3', title: 'Audiometría: fuentes de error en la práctica clínica', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-4', title: 'Cumplir ISO 8253-1 en Audiometría tonal liminar', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-5', title: 'Equivalencia de Listas de Palabras en Logoaudiometría', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-6', title: 'GUÍA DE PROCEDIMIENTOS CLÍNICOS EN AUDIOLOGÍA', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-7', title: 'Mascaramento em audiometria tonal e vocal', type: 'text', status: 'ready', url: '#' },
-        { id: 'src-8', title: 'Normalización de las pruebas auditivas infantiles', type: 'url', status: 'ready', url: '#' },
-        { id: 'src-9', title: 'Anatomía de la Medición: Vía Aérea vs. Vía Ósea', type: 'pdf', status: 'ready', url: '#' },
-        { id: 'src-10', title: 'Dossier Clínico: Evaluación Audiológica Integral', type: 'pdf', status: 'ready', url: '#' }
-      ]
+  try {
+    const rpcId = ' notebooklmGetNotebooks';
+    const body = JSON.stringify({ rpcId, params: {} });
+    const resp = await fetch(BACKEND_RPC_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: `__Secure-1PSID=${PSID}; __Secure-3PSID=${PSID3}; __Secure-1PSIDTS=${PSIDTS}; __Secure-3PSIDTS=${PSIDTS3}; SID=${SID}`,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      body,
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!resp.ok) throw new Error(`RPC ${rpcId} failed: ${resp.status}`);
+    const text = await resp.text();
+    const lines = text.split('\n').filter(l => l.trim());
+    let notebooks = [];
+    for (const line of lines) {
+      try { notebooks.push(JSON.parse(line)); } catch { /* skip */ }
     }
-  ];
+    return notebooks;
+  } catch (e) {
+    console.error('[notebooklmDirect] listNotebooks error:', e.message);
+    throw e;
+  }
 }
 
 export async function listArtifacts(notebookId) {

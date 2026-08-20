@@ -76,12 +76,8 @@ async function generateWithFallback(prompt: string, systemPrompt: string, option
         try {
             return await callGemini(prompt, systemPrompt);
         } catch (geminiError) {
-            console.warn('[AI Report] Both AI providers failed, using clinical fallback template generator:', geminiError);
-            // Intelligent clinical fallback so the user is never blocked by a red banner
-            const patientName = options?.patientName || options?.patient?.name || 'Paciente';
-            const diagnosis = options?.patient?.diagnosis || 'Trastorno fonoaudiológico en evaluación';
-            const sectionName = options?.section || 'Sección Clínica';
-            return `<p><strong>${sectionName}:</strong> Evaluación realizada a ${patientName} con diagnóstico presuntivo de ${diagnosis}. Se observan indicadores funcionales acordes al cuadro clínico, requiriendo continuidad en el plan de intervención terapéutica pautado.</p>`;
+            console.error('[AI Report] Both AI providers failed:', geminiError);
+            throw new Error('No se pudo generar el contenido con IA. Verificá la configuración de las claves API (GROQ_API_KEY o GOOGLE_API_KEY).');
         }
     }
 }

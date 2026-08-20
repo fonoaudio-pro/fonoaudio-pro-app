@@ -107,112 +107,6 @@ Firma,
   },
 ];
 
-const DEMO_EMAILS: GmailMessage[] = [
-  {
-    id: 'demo-msg-1',
-    threadId: 'demo-thread-1',
-    subject: 'Actividad de fonemas para casa de Lucas',
-    from: 'María González <maria.gonzalez@example.com>',
-    date: new Date(Date.now() - 2 * 3600000).toISOString(),
-    snippet: 'Hola Ornella, te escribo para comentarte que Lucas estuvo haciendo las actividades de fonemas y queríamos consultarte...',
-    labelIds: ['INBOX', 'UNREAD'],
-    isRead: false
-  },
-  {
-    id: 'demo-msg-2',
-    threadId: 'demo-thread-2',
-    subject: 'Consulta por informe de evolución - Voz',
-    from: 'Pedro Gómez <pedro.gomez@example.com>',
-    date: new Date(Date.now() - 24 * 3600000).toISOString(),
-    snippet: 'Estimada Ornella, quería preguntarte si lograste avanzar con el informe de proceso terapéutico para presentar en la obra social...',
-    labelIds: ['INBOX'],
-    isRead: true
-  },
-  {
-    id: 'demo-msg-3',
-    threadId: 'demo-thread-3',
-    subject: 'Derivación clínica - Diagnóstico de disfonía funcional',
-    from: 'Clínica Otorrinolaringología <orl.clinica@example.com>',
-    date: new Date(Date.now() - 48 * 3600000).toISOString(),
-    snippet: 'Estimada colega, le enviamos la derivación del paciente Juan Losada por cuadro de disfonía funcional para iniciar tratamiento fonoaudiológico...',
-    labelIds: ['INBOX'],
-    isRead: true
-  }
-];
-
-const DEMO_EMAIL_DETAILS: Record<string, GmailMessageDetail> = {
-  'demo-msg-1': {
-    id: 'demo-msg-1',
-    threadId: 'demo-thread-1',
-    subject: 'Actividad de fonemas para casa de Lucas',
-    from: 'María González <maria.gonzalez@example.com>',
-    date: new Date(Date.now() - 2 * 3600000).toISOString(),
-    snippet: 'Hola Ornella, te escribo para comentarte que Lucas estuvo haciendo las actividades de fonemas y queríamos consultarte...',
-    labelIds: ['INBOX', 'UNREAD'],
-    isRead: false,
-    to: 'Ornella Barbiani <contacto@fonoaudio.com>',
-    body: `Hola Ornella, ¿cómo estás?
-Te escribo para comentarte que Lucas estuvo haciendo las actividades de fonemas esta semana.
-Le cuesta bastante la pronunciación de la /rr/, sobre todo al inicio de las palabras.
-¿Tendrás algún pictograma o material interactivo que nos puedas mandar por correo para que practiquemos el fin de semana?
-Muchas gracias!
-María (mamá de Lucas)`,
-    bodyHtml: `<p>Hola Ornella, ¿cómo estás?</p>
-<p>Te escribo para comentarte que Lucas estuvo haciendo las actividades de fonemas esta semana.</p>
-<p>Le cuesta bastante la pronunciación de la /rr/, sobre todo al inicio de las palabras.</p>
-<p>¿Tendrás algún pictograma o material interactivo que nos puedas mandar por correo para que practiquemos el fin de semana?</p>
-<p>Muchas gracias!</p>
-<p>María (mamá de Lucas)</p>`
-  },
-  'demo-msg-2': {
-    id: 'demo-msg-2',
-    threadId: 'demo-thread-2',
-    subject: 'Consulta por informe de evolución - Voz',
-    from: 'Pedro Gómez <pedro.gomez@example.com>',
-    date: new Date(Date.now() - 24 * 3600000).toISOString(),
-    snippet: 'Estimada Ornella, quería preguntarte si lograste avanzar con el informe de proceso terapéutico para presentar en la obra social...',
-    labelIds: ['INBOX'],
-    isRead: true,
-    to: 'Ornella Barbiani <contacto@fonoaudio.com>',
-    body: `Estimada Ornella,
-Quería consultarle si logró avanzar con el informe del proceso terapéutico de voz de Pedro.
-La obra social me lo está solicitando para autorizar las sesiones de los próximos meses.
-Dígame si necesita que le pase algún dato adicional de la credencial.
-Un saludo cordial,
-Pedro Gómez`,
-    bodyHtml: `<p>Estimada Ornella,</p>
-<p>Quería consultarle si logró avanzar con el informe del proceso terapéutico de voz de Pedro.</p>
-<p>La obra social me lo está solicitando para autorizar las sesiones de los próximos meses.</p>
-<p>Dígame si necesita que le pase algún dato adicional de la credencial.</p>
-<p>Un saludo cordial,</p>
-<p>Pedro Gómez</p>`
-  },
-  'demo-msg-3': {
-    id: 'demo-msg-3',
-    threadId: 'demo-thread-3',
-    subject: 'Derivación clínica - Diagnóstico de disfonía funcional',
-    from: 'Clínica Otorrinolaringología <orl.clinica@example.com>',
-    date: new Date(Date.now() - 48 * 3600000).toISOString(),
-    snippet: 'Estimada colega, le enviamos la derivación del paciente Juan Losada por cuadro de disfonía funcional para iniciar tratamiento fonoaudiológico...',
-    labelIds: ['INBOX'],
-    isRead: true,
-    to: 'Ornella Barbiani <contacto@fonoaudio.com>',
-    body: `Estimada colega,
-Le derivamos al paciente Juan Losada, de 45 años, con diagnóstico clínico de disfonía funcional.
-Presenta fatiga vocal y tensión laríngea asociada a uso profesional de la voz.
-Sugerimos evaluación fonoaudiológica e inicio de terapia de rehabilitación de voz.
-Quedamos a su entera disposición.
-Dr. Roberto Martínez
-Clínica ORL Especializada`,
-    bodyHtml: `<p>Estimada colega,</p>
-<p>Le derivamos al paciente Juan Losada, de 45 años, con diagnóstico clínico de disfonía funcional.</p>
-<p>Presenta fatiga vocal y tensión laríngea asociada a uso profesional de la voz.</p>
-<p>Sugerimos evaluación fonoaudiológica e inicio de terapia de rehabilitación de voz.</p>
-<p>Quedamos a su entera disposición.</p>
-<p>Dr. Roberto Martínez<br/>Clínica ORL Especializada</p>`
-  }
-};
-
 export default function ComunicacionSection({ userId, patients, onSelectPatient }: ComunicacionSectionProps) {
   const [activeTab, setActiveTab] = useState<TabType>('gmail');
   const [gmailMessages, setGmailMessages] = useState<GmailMessage[]>([]);
@@ -225,7 +119,7 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
   const [nextPageToken, setNextPageToken] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [gmailView, setGmailView] = useState<'inbox' | 'sent'>('inbox');
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [isGoogleConnected, setIsGoogleConnected] = useState<boolean | null>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
 
   const loadGmailMessages = useCallback(async (query?: string, pageToken?: string) => {
@@ -236,7 +130,7 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
       const effectiveQuery = query || searchQuery || (gmailView === 'sent' ? 'in:sent' : 'in:inbox');
       const result = await GmailService.listMessages(userId, effectiveQuery, pageToken);
       if (result && result.messages && result.messages.length > 0) {
-        setIsDemoMode(false);
+        setIsGoogleConnected(true);
         if (pageToken) {
           setGmailMessages(prev => [...prev, ...result.messages]);
         } else {
@@ -244,22 +138,13 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
         }
         setNextPageToken(result.nextPageToken);
       } else {
-        // Fall back to high-fidelity demo emails automatically
-        setIsDemoMode(true);
-        setGmailMessages(DEMO_EMAILS.filter(m => {
-          if (gmailView === 'sent') return false;
-          if (searchQuery) {
-            return m.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                   m.snippet.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                   m.from.toLowerCase().includes(searchQuery.toLowerCase());
-          }
-          return true;
-        }));
+        setIsGoogleConnected(result?.hint === 'Google not connected' ? false : (gmailMessages.length === 0 ? false : true));
+        setGmailMessages([]);
         setNextPageToken(null);
       }
     } catch (e: any) {
-      setIsDemoMode(true);
-      setGmailMessages(DEMO_EMAILS);
+      setIsGoogleConnected(false);
+      setGmailMessages([]);
       setNextPageToken(null);
     } finally {
       setIsLoading(false);
@@ -279,30 +164,12 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
     setIsLoadingDetail(true);
     setSelectedMessage(null);
     try {
-      if (message.id.startsWith('demo-msg-')) {
-        const detail = DEMO_EMAIL_DETAILS[message.id];
-        setSelectedMessage(detail);
-        
-        let patientMatch = null;
-        if (message.id === 'demo-msg-1') {
-          patientMatch = patients.find(p => p.name.toLowerCase().includes('lucas') || p.name.toLowerCase().includes('gonzález'));
-        } else if (message.id === 'demo-msg-2') {
-          patientMatch = patients.find(p => p.name.toLowerCase().includes('pedro') || p.name.toLowerCase().includes('gómez'));
-        } else if (message.id === 'demo-msg-3') {
-          patientMatch = patients.find(p => p.name.toLowerCase().includes('juan') || p.name.toLowerCase().includes('losada'));
-        }
-        setSelectedPatient(patientMatch);
-
-        // Mark as read in local state
+      const result = await GmailService.getMessage(userId, message.id);
+      setSelectedMessage(result.message);
+      setSelectedPatient(result.patient);
+      if (!message.isRead) {
+        await GmailService.markAsRead(userId, message.id);
         setGmailMessages(prev => prev.map(m => m.id === message.id ? { ...m, isRead: true } : m));
-      } else {
-        const result = await GmailService.getMessage(userId, message.id);
-        setSelectedMessage(result.message);
-        setSelectedPatient(result.patient);
-        if (!message.isRead) {
-          await GmailService.markAsRead(userId, message.id);
-          setGmailMessages(prev => prev.map(m => m.id === message.id ? { ...m, isRead: true } : m));
-        }
       }
     } catch (e: any) {
       setError(e.message);
@@ -314,15 +181,9 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
   const handleSendEmail = async (to: string, subject: string, body: string) => {
     if (!userId) return;
     try {
-      if (isDemoMode) {
-        // Simular envío exitoso en modo demo
-        setShowCompose(false);
-        alert('Email enviado correctamente (Simulación de demostración)');
-      } else {
-        await GmailService.sendMessage(userId, to, subject, body);
-        setShowCompose(false);
-        loadGmailMessages();
-      }
+      await GmailService.sendMessage(userId, to, subject, body);
+      setShowCompose(false);
+      loadGmailMessages();
     } catch (e: any) {
       setError(e.message);
     }
@@ -505,13 +366,30 @@ export default function ComunicacionSection({ userId, patients, onSelectPatient 
                   </button>
                 )}
 
-                {!isLoading && gmailMessages.length === 0 && !error && (
+                {!isLoading && gmailMessages.length === 0 && !error && isGoogleConnected === false && (
+                  <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
+                    <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/20 rounded-2xl flex items-center justify-center mb-4">
+                      <AlertCircle size={28} className="text-amber-500" />
+                    </div>
+                    <p className="font-medium text-slate-700 dark:text-slate-300">Cuenta de Google desvinculada o expirada</p>
+                    <p className="text-sm mt-1 mb-4 text-center px-8">No se pudieron cargar los emails. Reconectá tu cuenta de Google para acceder a tu bandeja.</p>
+                    <button
+                      onClick={() => window.location.href = '/configuracion'}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-xl transition-colors flex items-center gap-2"
+                    >
+                      <ExternalLink size={14} />
+                      Reconectar Google
+                    </button>
+                  </div>
+                )}
+
+                {!isLoading && gmailMessages.length === 0 && !error && isGoogleConnected !== false && (
                   <div className="flex flex-col items-center justify-center h-64 text-slate-500 dark:text-slate-400">
                     <div className="w-16 h-16 bg-slate-100 dark:bg-slate-800 rounded-2xl flex items-center justify-center mb-4">
                       <Mail size={28} className="opacity-50" />
                     </div>
-                    <p className="font-medium">No hay emails</p>
-                    <p className="text-sm mt-1">Conecta tu cuenta de Google en Configuración</p>
+                    <p className="font-medium">No hay emails en esta vista</p>
+                    <p className="text-sm mt-1">Probá con otra búsqueda o cambiá de pestaña</p>
                   </div>
                 )}
 

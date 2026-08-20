@@ -12,32 +12,6 @@ const MATERIALS_KEY = 'fonoaudio_generated_materials';
 const PIPELINE_LOG_KEY = 'fonoaudio_pipeline_log';
 const MAX_LOG_ENTRIES = 500;
 
-const MOCK_IMAGES: Record<MaterialType, { url: string; title: string; description: string }[]> = {
-  home_guide: [
-    { url: 'https://api.arasaac.org/api/pictograms/5269', title: 'Guía de estimulación del lenguaje en casa', description: 'Actividades diarias para estimular el lenguaje expresivo del niño.' },
-    { url: 'https://api.arasaac.org/api/pictograms/5270', title: 'Rutina de comunicación familiar', description: 'Estructura de interacción familiar para mejorar la comunicación.' },
-  ],
-  pecs_sequence: [
-    { url: 'https://api.arasaac.org/api/pictograms/5271', title: 'Secuencia PECS: Pedir alimento', description: 'Pasos para el intercambio visual de petición de alimento.' },
-    { url: 'https://api.arasaac.org/api/pictograms/5272', title: 'Secuencia PECS: Petición de ayuda', description: 'Secuencia de 4 pasos para solicitar ayuda con imagen.' },
-  ],
-  therapy_sequence: [
-    { url: 'https://api.arasaac.org/api/pictograms/5273', title: 'Secuencia de higiene bucal', description: 'Pasos para la rutina de higiene bucal con apoyo visual.' },
-    { url: 'https://api.arasaac.org/api/pictograms/5274', title: 'Secuencia de alimentación', description: 'Pasos para la rutina de alimentación con apoyo visual.' },
-  ],
-  vocabulary_cards: [
-    { url: 'https://api.arasaac.org/api/pictograms/5275', title: 'Tarjetas: Partes del cuerpo', description: 'Set de tarjetas con vocabulario de partes del cuerpo.' },
-    { url: 'https://api.arasaac.org/api/pictograms/5276', title: 'Tarjetas: Alimentos', description: 'Set de tarjetas con vocabulario de alimentos.' },
-  ],
-  visual_resource: [
-    { url: 'https://api.arasaac.org/api/pictograms/5277', title: 'Tablero de comunicación', description: 'Tablero de comunicación con pictogramas básicos.' },
-    { url: 'https://api.arasaac.org/api/pictograms/5278', title: 'Semáforo de emociones', description: 'Recurso visual para identificar estados emocionales.' },
-  ],
-  custom: [
-    { url: 'https://api.arasaac.org/api/pictograms/5279', title: 'Material personalizado', description: 'Material generado según necesidad específica del paciente.' },
-  ],
-};
-
 export class MultimediaPipelineService {
   static async requestMaterial(params: {
     patientId: string;
@@ -97,61 +71,25 @@ export class MultimediaPipelineService {
     const request = requests.find(r => r.id === requestId);
     if (!request) return null;
 
-    // Update request status
-    request.status = 'generating';
+    request.status = 'failed';
     localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
 
-    // Simulate generation delay (500ms in stub)
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    const mockOptions = MOCK_IMAGES[request.material_type];
-    const mock = mockOptions[Math.floor(Math.random() * mockOptions.length)];
-
-    const material: GeneratedMaterial = {
-      id: crypto.randomUUID(),
-      request_id: request.id,
-      patient_id: request.patient_id,
-      patient_name: request.patient_name,
-      material_type: request.material_type,
-      title: mock.title,
-      description: mock.description,
-      image_url: mock.url,
-      thumbnail_url: mock.url,
-      source: request.source,
-      source_reference: request.source_reference,
-      clinical_goal: request.clinical_goal,
-      requested_by: request.requested_by,
-      requested_by_name: request.requested_by_name,
-      created_at: new Date().toISOString(),
-      status: 'ready',
-    };
-
-    // Save material
-    const materials = this.getAllMaterials();
-    materials.unshift(material);
-    localStorage.setItem(MATERIALS_KEY, JSON.stringify(materials));
-
-    // Update request status
-    request.status = 'ready';
-    localStorage.setItem(REQUESTS_KEY, JSON.stringify(requests));
+    console.warn('[MultimediaPipeline] Generación de material no disponible en producción. Conectá un servicio de generación de imágenes (ej. ComfyUI, DALL-E) para habilitar esta función.');
 
     this.addLogEntry({
       id: crypto.randomUUID(),
       timestamp: new Date().toISOString(),
-      action: 'generate',
-      material_id: material.id,
+      action: 'generate_failed',
       material_type: request.material_type,
       patient_id: request.patient_id,
       patient_name: request.patient_name,
       user_id: request.requested_by,
       user_name: request.requested_by_name,
-      status: 'ready',
+      status: 'failed',
     });
 
-    console.log('[MultimediaPipeline] STUB: Material generated', {
-      id: material.id,
-      title: material.title,
-      type: material.material_type,
+    return null;
+  }
     });
 
     return material;
