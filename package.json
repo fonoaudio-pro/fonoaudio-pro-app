@@ -59,7 +59,6 @@
     "tesseract.js": "^6.0.1",
     "three": "^0.182.0",
     "uuid": "^14.0.0",
-    "ws": "^8.21.3",
     "zustand": "^5.0.0"
   },
   "devDependencies": {
