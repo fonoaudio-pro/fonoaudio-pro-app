@@ -19,43 +19,48 @@ function escapeXml(t) {
 async function synthesizeEdgeTTS(text, voiceName) {
     if (!text?.trim()) throw new Error('Empty text');
 
+    let WebSocketImpl;
+    try {
+        const wsMod = await import('ws');
+        WebSocketImpl = wsMod.default || wsMod;
+    } catch {
+        WebSocketImpl = globalThis.WebSocket;
+    }
+    if (!WebSocketImpl) throw new Error('No WebSocket implementation available');
+
     const connectionId = crypto.randomUUID().replace(/-/g, '').substring(0, 32);
     const requestId = crypto.randomUUID();
     const ssml = `<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='es-AR'><voice name='${voiceName}'>${escapeXml(text.trim())}</voice></speak>`;
 
     return new Promise((resolve, reject) => {
-        const ws = new WebSocket(`${EDGE_WSS}&ConnectionId=${connectionId}`);
+        const ws = new WebSocketImpl(`${EDGE_WSS}&ConnectionId=${connectionId}`);
         const chunks = [];
         let done = false;
 
         const timer = setTimeout(() => {
-            if (!done) { done = true; ws.close(); reject(new Error('Edge TTS timeout (30s)')); }
-        }, 30000);
+            if (!done) { done = true; try { ws.close(); } catch {} reject(new Error('Edge TTS timeout')); }
+        }, 25000);
 
-        ws.addEventListener('open', () => {
+        ws.on('open', () => {
             ws.send(`Content-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-96kbitrate-mono-mp3"}}}}`);
             ws.send(`X-RequestId:${requestId}\r\nContent-Type:application/ssml+xml\r\nX-Timestamp:${new Date().toISOString()}\r\nPath:ssml\r\n\r\n${ssml}`);
         });
 
-        ws.addEventListener('message', (event) => {
-            const data = event.data;
-            if (data instanceof Blob) {
-                data.arrayBuffer().then(buf => {
-                    const b = Buffer.from(buf);
-                    const marker = Buffer.from('Path:audio\r\n\r\n');
-                    const idx = b.indexOf(marker);
-                    if (idx !== -1) {
-                        chunks.push(b.slice(idx + marker.length));
-                    } else if (b.length > 0) {
-                        chunks.push(b);
-                    }
-                });
-            } else if (typeof data === 'string' && data.includes('Path:audio')) {
-                // text frame with audio marker — skip
+        ws.on('message', (data, isBinary) => {
+            if (isBinary) {
+                const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+                const marker = Buffer.from('Path:audio\r\n\r\n');
+                const idx = buf.indexOf(marker);
+                if (idx !== -1) {
+                    const audio = buf.slice(idx + marker.length);
+                    if (audio.length > 0) chunks.push(audio);
+                } else if (buf.length > 100) {
+                    chunks.push(buf);
+                }
             }
         });
 
-        ws.addEventListener('close', () => {
+        ws.on('close', () => {
             clearTimeout(timer);
             if (done) return;
             done = true;
@@ -65,13 +70,13 @@ async function synthesizeEdgeTTS(text, voiceName) {
                 console.log('[TTS] Edge TTS OK, voice:', voiceName, 'bytes:', buf.length);
                 resolve(buf);
             } else {
-                reject(new Error('Edge TTS: no audio data'));
+                reject(new Error('Edge TTS: no audio'));
             }
         });
 
-        ws.addEventListener('error', (e) => {
+        ws.on('error', (e) => {
             clearTimeout(timer);
-            if (!done) { done = true; reject(new Error(`Edge TTS WS error: ${e.message || e.type}`)); }
+            if (!done) { done = true; reject(new Error(`Edge TTS error: ${e.message || e.type}`)); }
         });
     });
 }
