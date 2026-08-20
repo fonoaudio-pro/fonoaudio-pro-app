@@ -1,97 +1,41 @@
 import express from 'express';
-import { v4 as uuidv4 } from 'uuid';
-import fs from 'fs';
-import path from 'path';
-import { TEMP_DIR } from '../config/serverConfig.js';
+import { MsEdgeTTS } from '@travisvn/edge-tts';
 
 const router = express.Router();
 
-const PIPER_COMMAND = process.env.PIPER_COMMAND || 'piper';
-const VOICE_MODEL_PATH = process.env.VOICE_MODEL_PATH;
-let piperAvailable = null;
-
-async function checkPiperAvailable() {
-    if (process.env.VERCEL === '1') return false;
-    if (piperAvailable !== null) return piperAvailable;
-    try {
-        const testPath = VOICE_MODEL_PATH || path.join(process.cwd(), 'es_AR-daniela-high.onnx');
-        piperAvailable = fs.existsSync(testPath) && fs.existsSync(PIPER_COMMAND);
-    } catch { piperAvailable = false; }
-    return piperAvailable;
-}
+// ══════════════════════════════════════════════════════════════════
+// VOICE MAP: Free Argentine Spanish Edge TTS voices
+// ══════════════════════════════════════════════════════════════════
+const VOICE_MAP = {
+    'es_AR-masculino': { voice: 'es-AR-TomasNeural', label: 'Masculino' },
+    'es_AR-daniela': { voice: 'es-AR-ElenaNeural', label: 'Femenino' },
+    'default': { voice: 'es-AR-TomasNeural', label: 'Masculino' },
+};
 
 // ══════════════════════════════════════════════════════════════════
-// BACKEND 1: Google Cloud TTS via OAuth2 (requires Calendar OAuth)
+// BACKEND 1: Edge TTS (Microsoft) — FREE, no API key needed
 // ══════════════════════════════════════════════════════════════════
-async function synthesizeGoogleOAuth(text, voiceName, ssmlGender) {
-    const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
-    const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-    const GOOGLE_REFRESH_TOKEN = process.env.GOOGLE_REFRESH_TOKEN;
-    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REFRESH_TOKEN) {
-        throw new Error('Google OAuth2 credentials not configured');
+async function synthesizeEdgeTTS(text, voiceName) {
+    if (!text || !text.trim()) throw new Error('Empty text');
+    const tts = new MsEdgeTTS();
+    await tts.setMetadata(voiceName, MsEdgeTTS.OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+    const readable = tts.toStream(text.trim());
+    const chunks = [];
+    for await (const chunk of readable) {
+        if (chunk instanceof Buffer) {
+            chunks.push(chunk);
+        } else if (typeof chunk === 'string') {
+            chunks.push(Buffer.from(chunk, 'utf-8'));
+        }
     }
-    const { google } = await import('googleapis');
-    const oauth2Client = new google.auth.OAuth2(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
-    oauth2Client.setCredentials({ refresh_token: GOOGLE_REFRESH_TOKEN });
-    const tts = google.texttospeech({ version: 'v1', auth: oauth2Client });
-    const response = await tts.text.synthesize({
-        input: { text: text.trim() },
-        voice: { languageCode: 'es-AR', name: voiceName, ssmlGender },
-        audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 0 },
-    });
-    if (!response.data?.audioContent) throw new Error('No audioContent in OAuth response');
-    console.log('[TTS] Google OAuth2 TTS succeeded');
-    return Buffer.from(response.data.audioContent, 'base64');
-}
-
-// ══════════════════════════════════════════════════════════════════
-// BACKEND 1: Google Cloud TTS via dedicated API key (NO OAuth dependency)
-// ══════════════════════════════════════════════════════════════════
-async function synthesizeGoogleApiKey(text, voiceName, ssmlGender) {
-    const TTS_API_KEY = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_CLOUD_TTS_KEY || process.env.GOOGLE_API_KEY;
-    if (!TTS_API_KEY) throw new Error('No Google API key configured for TTS');
-    const resp = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${TTS_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            input: { text: text.trim() },
-            voice: { languageCode: 'es-AR', name: voiceName, ssmlGender },
-            audioConfig: { audioEncoding: 'MP3', speakingRate: 1.0, pitch: 0 },
-        }),
-        signal: AbortSignal.timeout(30000),
-    });
-    if (!resp.ok) throw new Error(`Google TTS API key error: ${resp.status}`);
-    const data = await resp.json();
-    if (!data.audioContent) throw new Error('No audioContent in API key response');
-    console.log('[TTS] Google API key TTS succeeded with voice:', voiceName);
-    return Buffer.from(data.audioContent, 'base64');
-}
-
-// ══════════════════════════════════════════════════════════════════
-// BACKEND 3: OpenAI TTS (if OPENAI_API_KEY is available)
-// ══════════════════════════════════════════════════════════════════
-async function synthesizeOpenAI(text) {
-    const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-    if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
-    const resp = await fetch('https://api.openai.com/v1/audio/speech', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${OPENAI_API_KEY}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            model: 'tts-1',
-            input: text.substring(0, 4000),
-            voice: 'onyx',
-            response_format: 'mp3',
-        }),
-        signal: AbortSignal.timeout(30000),
-    });
-    if (!resp.ok) throw new Error(`OpenAI TTS error: ${resp.status}`);
-    const buffer = Buffer.from(await resp.arrayBuffer());
-    console.log('[TTS] OpenAI TTS succeeded');
+    const buffer = Buffer.concat(chunks);
+    if (buffer.length < 100) throw new Error('Edge TTS returned empty audio');
+    console.log('[TTS] Edge TTS succeeded, voice:', voiceName, 'size:', buffer.length);
     return buffer;
 }
 
 // ══════════════════════════════════════════════════════════════════
-// BACKEND 4: Google Translate TTS (free, no credentials needed)
+// BACKEND 2: Google Translate TTS (free fallback, no voice selection)
 // ══════════════════════════════════════════════════════════════════
 async function synthesizeGoogleTranslate(text) {
     const cleanText = text.replace(/[^\w\s.,;:!?¡¿áéíóúñüÁÉÍÓÚÑÜ-]/g, '').substring(0, 200);
@@ -105,100 +49,46 @@ async function synthesizeGoogleTranslate(text) {
     });
     if (!resp.ok) throw new Error(`Google Translate TTS error: ${resp.status}`);
     const buffer = Buffer.from(await resp.arrayBuffer());
-    if (buffer.length < 100) throw new Error('Audio buffer too small, likely an error');
-    console.log('[TTS] Google Translate TTS succeeded');
+    if (buffer.length < 100) throw new Error('Audio buffer too small');
+    console.log('[TTS] Google Translate TTS succeeded (no voice selection)');
     return buffer;
 }
 
 // ══════════════════════════════════════════════════════════════════
-// BACKEND 5: Piper local (dev only, never on Vercel)
+// ROBUST SYNTHESIS: Edge TTS → Google Translate (emergency fallback)
 // ══════════════════════════════════════════════════════════════════
-async function synthesizePiper(text) {
-    const { spawn } = await import('child_process');
-    const filename = `${uuidv4()}.wav`;
-    const outputPath = path.join(TEMP_DIR, filename);
-    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
-    return new Promise((resolve, reject) => {
-        const piper = spawn(PIPER_COMMAND, [
-            '-m', VOICE_MODEL_PATH || path.join(process.cwd(), 'es_AR-daniela-high.onnx'),
-            '-f', outputPath, '--noise-scale', '0.6', '--noise-w-scale', '0.8', '--length-scale', '0.7'
-        ]);
-        let stderr = '';
-        piper.stderr.on('data', d => stderr += d.toString());
-        piper.stdin.write(text);
-        piper.stdin.end();
-        const timeout = setTimeout(() => { piper.kill(); reject(new Error('Piper timeout')); }, 30000);
-        piper.on('close', code => {
-            clearTimeout(timeout);
-            if (code !== 0 || !fs.existsSync(outputPath)) { reject(new Error(`Piper error (${code})`)); return; }
-            const buffer = fs.readFileSync(outputPath);
-            try { fs.unlinkSync(outputPath); } catch {}
-            console.log('[TTS] Piper local TTS succeeded');
-            resolve(buffer);
-        });
-        piper.on('error', err => { clearTimeout(timeout); reject(err); });
-    });
-}
-
-// ══════════════════════════════════════════════════════════════════
-// ROBUST SYNTHESIS: tries all backends in order
-// ══════════════════════════════════════════════════════════════════
-const VOICE_MAP = {
-    'es_AR-masculino': { voiceName: 'es-AR-Wavenet-B', ssmlGender: 'MALE' },
-    'es_AR-daniela': { voiceName: 'es-AR-Wavenet-A', ssmlGender: 'FEMALE' },
-    'default': { voiceName: 'es-AR-Wavenet-B', ssmlGender: 'MALE' },
-};
-
 async function synthesizeText(text, voice = 'es_AR-masculino') {
     if (!text || !text.trim()) return null;
     const cfg = VOICE_MAP[voice] || VOICE_MAP.default;
 
-    // Backend 1: Google Cloud TTS via API key (prioritized to avoid OAuth expiration issues)
+    // Backend 1: Edge TTS (Microsoft) — FREE, high quality, Argentine voices
     try {
-        const buf = await synthesizeGoogleApiKey(text, cfg.voiceName, cfg.ssmlGender);
-        console.log('[TTS] Backend USED: Google API key, voice:', cfg.voiceName, 'size:', buf.length);
+        const buf = await synthesizeEdgeTTS(text, cfg.voice);
         return buf;
-    } catch (e) { console.warn('[TTS] API key failed:', e.message); }
+    } catch (e) {
+        console.warn('[TTS] Edge TTS failed:', e.message);
+    }
 
-    // Backend 2: Google OAuth2 (fallback if OAuth is active and valid)
-    try {
-        const buf = await synthesizeGoogleOAuth(text, cfg.voiceName, cfg.ssmlGender);
-        console.log('[TTS] Backend USED: Google OAuth2, voice:', cfg.voiceName, 'size:', buf.length);
-        return buf;
-    } catch (e) { console.warn('[TTS] OAuth2 failed:', e.message); }
-
-    // Backend 3: OpenAI TTS
-    try {
-        const buf = await synthesizeOpenAI(text);
-        console.log('[TTS] Backend USED: OpenAI, size:', buf.length);
-        return buf;
-    } catch (e) { console.warn('[TTS] OpenAI failed:', e.message); }
-
-    // Backend 4: Google Translate TTS (free fallback, NO voice selection)
+    // Backend 2: Google Translate TTS (emergency fallback, no voice selection)
     try {
         const buf = await synthesizeGoogleTranslate(text);
-        console.log('[TTS] Backend USED: Google Translate TTS (FREE - no voice selection), size:', buf.length);
         return buf;
-    } catch (e) { console.warn('[TTS] Translate fallback failed:', e.message); }
-
-    // Backend 5: Piper local
-    if (await checkPiperAvailable()) {
-        try {
-            const buf = await synthesizePiper(text);
-            console.log('[TTS] Backend USED: Piper local, size:', buf.length);
-            return buf;
-        } catch (e) { console.warn('[TTS] Piper failed:', e.message); }
+    } catch (e) {
+        console.warn('[TTS] Google Translate fallback failed:', e.message);
     }
 
     console.error('[TTS] ALL backends failed. No audio generated.');
     return null;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ROUTES
+// ══════════════════════════════════════════════════════════════════
 router.get('/voices', (req, res) => {
     res.json({
         voices: [
-            { id: 'es_AR-masculino', name: 'Masculino (Espanol Argentina Rioplatense)', language: 'es-AR', gender: 'male' },
-            { id: 'es_AR-daniela', name: 'Daniela (Espanol Argentina)', language: 'es-AR', gender: 'female' },
+            { id: 'es_AR-masculino', name: 'Masculino (Tomas - es-AR)', language: 'es-AR', gender: 'male', engine: 'edge-tts' },
+            { id: 'es_AR-daniela', name: 'Daniela (Elena - es-AR)', language: 'es-AR', gender: 'female', engine: 'edge-tts' },
         ]
     });
 });
@@ -218,5 +108,5 @@ router.post('/', async (req, res) => {
     }
 });
 
-export { synthesizeText, synthesizeGoogleOAuth, synthesizeGoogleApiKey, synthesizeOpenAI, synthesizeGoogleTranslate };
+export { synthesizeText };
 export default router;

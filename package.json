@@ -57,6 +57,7 @@
     "recharts": "^3.4.1",
     "tesseract.js": "^6.0.1",
     "three": "^0.182.0",
+    "@travisvn/edge-tts": "^1.0.0",
     "uuid": "^14.0.0",
     "zustand": "^5.0.0",
     "@tanstack/react-query": "^5.0.0"
