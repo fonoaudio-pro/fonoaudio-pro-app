@@ -45,11 +45,11 @@ async function synthesizeGoogleOAuth(text, voiceName, ssmlGender) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// BACKEND 2: Google Cloud TTS via dedicated TTS API key
+// BACKEND 1: Google Cloud TTS via dedicated API key (NO OAuth dependency)
 // ══════════════════════════════════════════════════════════════════
 async function synthesizeGoogleApiKey(text, voiceName, ssmlGender) {
-    const TTS_API_KEY = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_CLOUD_TTS_KEY;
-    if (!TTS_API_KEY) throw new Error('GOOGLE_TTS_API_KEY not configured');
+    const TTS_API_KEY = process.env.GOOGLE_TTS_API_KEY || process.env.GOOGLE_CLOUD_TTS_KEY || process.env.GOOGLE_API_KEY;
+    if (!TTS_API_KEY) throw new Error('No Google API key configured for TTS');
     const resp = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${TTS_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,7 +63,7 @@ async function synthesizeGoogleApiKey(text, voiceName, ssmlGender) {
     if (!resp.ok) throw new Error(`Google TTS API key error: ${resp.status}`);
     const data = await resp.json();
     if (!data.audioContent) throw new Error('No audioContent in API key response');
-    console.log('[TTS] Google API key TTS succeeded');
+    console.log('[TTS] Google API key TTS succeeded with voice:', voiceName);
     return Buffer.from(data.audioContent, 'base64');
 }
 
@@ -153,19 +153,19 @@ async function synthesizeText(text, voice = 'es_AR-masculino') {
     if (!text || !text.trim()) return null;
     const cfg = VOICE_MAP[voice] || VOICE_MAP.default;
 
-    // Backend 1: Google OAuth2 (most reliable if configured)
-    try {
-        const buf = await synthesizeGoogleOAuth(text, cfg.voiceName, cfg.ssmlGender);
-        console.log('[TTS] Backend USED: Google OAuth2, voice:', cfg.voiceName, 'size:', buf.length);
-        return buf;
-    } catch (e) { console.warn('[TTS] OAuth2 failed:', e.message); }
-
-    // Backend 2: Google Cloud TTS API key
+    // Backend 1: Google Cloud TTS via API key (prioritized to avoid OAuth expiration issues)
     try {
         const buf = await synthesizeGoogleApiKey(text, cfg.voiceName, cfg.ssmlGender);
         console.log('[TTS] Backend USED: Google API key, voice:', cfg.voiceName, 'size:', buf.length);
         return buf;
     } catch (e) { console.warn('[TTS] API key failed:', e.message); }
+
+    // Backend 2: Google OAuth2 (fallback if OAuth is active and valid)
+    try {
+        const buf = await synthesizeGoogleOAuth(text, cfg.voiceName, cfg.ssmlGender);
+        console.log('[TTS] Backend USED: Google OAuth2, voice:', cfg.voiceName, 'size:', buf.length);
+        return buf;
+    } catch (e) { console.warn('[TTS] OAuth2 failed:', e.message); }
 
     // Backend 3: OpenAI TTS
     try {

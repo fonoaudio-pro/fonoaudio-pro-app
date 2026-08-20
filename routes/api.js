@@ -3461,62 +3461,6 @@ router.post('/telegram/webhook', async (req, res) => {
     }
 });
 
-// Debug: test full voice send flow
-router.get('/telegram/test-voice', async (req, res) => {
-    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const chat_id = req.query.chat_id || '5854700506';
-    const debug = { backends: {} };
-
-    // Test each backend individually
-    const text = 'Hola, soy FonoAudio con voz masculina rioplatense.';
-    const voiceName = 'es-AR-Wavenet-B';
-    const ssmlGender = 'MALE';
-
-    // Backend 1: Google OAuth2
-    try {
-        const buf = await synthesizeGoogleOAuth(text, voiceName, ssmlGender);
-        debug.backends.oauth2 = { ok: true, size: buf.length };
-    } catch (e) { debug.backends.oauth2 = { ok: false, error: e.message }; }
-
-    // Backend 2: Google API key
-    try {
-        const buf = await synthesizeGoogleApiKey(text, voiceName, ssmlGender);
-        debug.backends.apiKey = { ok: true, size: buf.length };
-    } catch (e) { debug.backends.apiKey = { ok: false, error: e.message }; }
-
-    // Backend 3: OpenAI
-    try {
-        const buf = await synthesizeOpenAI(text);
-        debug.backends.openai = { ok: true, size: buf.length };
-    } catch (e) { debug.backends.openai = { ok: false, error: e.message }; }
-
-    // Backend 4: Google Translate (free)
-    try {
-        const buf = await synthesizeGoogleTranslate(text);
-        debug.backends.translate = { ok: true, size: buf.length };
-    } catch (e) { debug.backends.translate = { ok: false, error: e.message }; }
-
-    // Now use the full synthesizeText which picks the first working backend
-    try {
-        const audioBuffer = await synthesizeText(text, 'es_AR-masculino');
-        debug.synthesizeText = audioBuffer ? `OK (${audioBuffer.length} bytes)` : 'NULL';
-
-        if (audioBuffer && TELEGRAM_BOT_TOKEN && chat_id) {
-            const formData = new FormData();
-            formData.append('chat_id', chat_id);
-            formData.append('voice', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'voice.mp3');
-            const resp = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendVoice`, { method: 'POST', body: formData });
-            const data = await resp.json();
-            debug.sendVoice = data.ok ? 'OK' : `FAILED: ${data.description}`;
-        }
-    } catch (err) { debug.error = err.message; }
-
-    return res.json({ ok: true, debug });
-});
-
-// Import backend functions for testing
-import { synthesizeGoogleOAuth, synthesizeGoogleApiKey, synthesizeOpenAI, synthesizeGoogleTranslate } from './tts.js';
-
 router.get('/telegram/setup-webhook', async (req, res) => {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
     if (!TELEGRAM_BOT_TOKEN) {
