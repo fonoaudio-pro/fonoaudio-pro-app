@@ -19,24 +19,27 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, ex
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
 
-        const rect = canvas.getBoundingClientRect();
-        canvas.width = rect.width * 2;
-        canvas.height = rect.height * 2;
-        ctx.scale(2, 2);
+        const resizeCanvas = () => {
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width;
+            canvas.height = rect.height;
 
-        ctx.strokeStyle = '#1e293b';
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
+            ctx.strokeStyle = '#1e293b';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
 
-        if (existingSignature) {
-            const img = new Image();
-            img.onload = () => {
-                ctx.drawImage(img, 0, 0, rect.width, rect.height);
-                setHasDrawn(true);
-            };
-            img.src = existingSignature;
-        }
+            if (existingSignature) {
+                const img = new Image();
+                img.onload = () => {
+                    ctx.drawImage(img, 0, 0, rect.width, rect.height);
+                    setHasDrawn(true);
+                };
+                img.src = existingSignature;
+            }
+        };
+
+        resizeCanvas();
     }, [existingSignature]);
 
     const getPos = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -44,7 +47,8 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, ex
         if (!canvas) return { x: 0, y: 0 };
         const rect = canvas.getBoundingClientRect();
         if ('touches' in e) {
-            return { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+            const touch = e.touches[0] || e.changedTouches[0];
+            return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
         }
         return { x: e.clientX - rect.left, y: e.clientY - rect.top };
     }, []);
@@ -101,12 +105,11 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, ex
                 if (!canvas) return;
                 const ctx = canvas.getContext('2d');
                 if (!ctx) return;
-                const rect = canvas.getBoundingClientRect();
                 ctx.clearRect(0, 0, canvas.width, canvas.height);
-                const scale = Math.min(rect.width / img.width, rect.height / img.height);
+                const scale = Math.min(canvas.width / img.width, canvas.height / img.height);
                 const w = img.width * scale;
                 const h = img.height * scale;
-                ctx.drawImage(img, (rect.width - w) / 2, (rect.height - h) / 2, w, h);
+                ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
                 setHasDrawn(true);
             };
             img.src = ev.target?.result as string;
@@ -131,7 +134,8 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, ex
                     <div className="border-2 border-dashed border-slate-300 rounded-xl overflow-hidden bg-slate-50 relative">
                         <canvas
                             ref={canvasRef}
-                            className="w-full h-40 cursor-crosshair touch-none"
+                            className="w-full aspect-[5/2] min-h-[180px] cursor-crosshair"
+                            style={{ touchAction: 'none' }}
                             onMouseDown={startDraw}
                             onMouseMove={draw}
                             onMouseUp={stopDraw}
@@ -146,26 +150,27 @@ export const SignaturePad: React.FC<SignaturePadProps> = ({ onSave, onCancel, ex
                             </div>
                         )}
                     </div>
+                </div>
 
-                    <div className="flex items-center gap-2 mt-3">
-                        <button onClick={clear} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
-                            <Eraser size={14} /> Limpiar
+                <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                        <button onClick={clear} className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                            <Eraser size={14} /> Limpiar trazo
                         </button>
-                        <label className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer">
+                        <label className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer">
                             <Upload size={14} /> Subir imagen
                             <input type="file" accept="image/*" className="hidden" onChange={handleFileUpload} />
                         </label>
                     </div>
-                </div>
-
-                <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
-                    <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
-                        Cancelar
-                    </button>
-                    <button onClick={handleSave} disabled={!hasDrawn}
-                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                        <Check size={16} /> Usar esta firma
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button onClick={onCancel} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 rounded-lg transition-colors">
+                            Cancelar
+                        </button>
+                        <button onClick={handleSave} disabled={!hasDrawn}
+                            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                            <Check size={16} /> Guardar firma
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

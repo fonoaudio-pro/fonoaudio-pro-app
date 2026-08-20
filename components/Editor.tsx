@@ -8,7 +8,7 @@ import Highlight from '@tiptap/extension-highlight';
 import FontFamily from '@tiptap/extension-font-family';
 import {
   Bold, Italic, Underline as UnderlineIcon, AlignLeft, AlignCenter, AlignRight,
-  List, ListOrdered, Heading1, Heading2, Heading3, Palette, Highlighter, Undo, Redo
+  List, ListOrdered, Heading1, Heading2, Heading3, Palette, Highlighter, Undo, Redo, Printer
 } from 'lucide-react';
 
 // Custom extension for font size
@@ -113,6 +113,10 @@ const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAss
     }
   }, [content, editor]);
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   if (!editor) {
     return null;
   }
@@ -130,92 +134,85 @@ const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAss
 
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden bg-white flex flex-col h-full shadow-inner transition-colors duration-300">
+      {/* Print styles */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          .editor-print-content, .editor-print-content * { visibility: visible !important; }
+          .editor-print-content { position: absolute; left: 0; top: 0; width: 100%; padding: 40px; }
+          .no-print { display: none !important; }
+        }
+      `}</style>
+
       {/* Assistant Activity Indicator */}
       {isAssistantActive && (
-        <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 flex items-center gap-2">
+        <div className="bg-blue-50 border-b border-blue-200 px-3 py-2 flex items-center gap-2 no-print">
           <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
           <span className="text-xs text-blue-700 font-medium">Asistente escribiendo...</span>
         </div>
       )}
 
       {/* Toolbar */}
-      <div className="bg-gray-50 border-b border-gray-200 p-2 flex flex-wrap gap-1 items-center sticky top-0 z-10 transition-colors duration-300">
-        {/* Font Family */}
-        <select
-          onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
-          className="px-2 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 bg-white text-slate-900"
-          defaultValue=""
-        >
-          <option value="">Fuente</option>
-          {fontFamilies.map((font) => (
-            <option key={font.value} value={font.value}>
-              {font.label}
-            </option>
-          ))}
-        </select>
+      <div className="bg-gray-50 border-b border-gray-200 p-2 flex flex-wrap gap-1 items-center sticky top-0 z-10 transition-colors duration-300 no-print">
+        {/* Typography Group */}
+        <div className="flex items-center gap-1">
+          <select
+            onChange={(e) => editor.chain().focus().setFontFamily(e.target.value).run()}
+            className="px-2 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 bg-white text-slate-900 max-w-[120px]"
+            defaultValue=""
+          >
+            <option value="">Fuente</option>
+            {fontFamilies.map((font) => (
+              <option key={font.value} value={font.value}>
+                {font.label}
+              </option>
+            ))}
+          </select>
 
-        {/* Font Size */}
-        <select
-          onChange={(e) => editor.chain().focus().setFontSize(e.target.value).run()}
-          className="px-2 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 bg-white text-slate-900"
-          defaultValue=""
-        >
-          <option value="">Tamaño</option>
-          {fontSizes.map((size) => (
-            <option key={size} value={size}>
-              {size.replace('px', '')}
-            </option>
-          ))}
-        </select>
-
-        <div className="w-px h-6 bg-gray-300 mx-1"></div>
-
-        {/* Undo/Redo */}
-        <button
-          onClick={() => editor.chain().focus().undo().run()}
-          disabled={!editor.can().chain().focus().undo().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${!editor.can().chain().focus().undo().run() ? 'opacity-50 cursor-not-allowed' : ''}`}
-          title="Deshacer"
-        >
-          <Undo size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().redo().run()}
-          disabled={!editor.can().chain().focus().redo().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${!editor.can().chain().focus().redo().run() ? 'opacity-50 cursor-not-allowed' : ''}`}
-          title="Rehacer"
-        >
-          <Redo size={16} />
-        </button>
+          <select
+            onChange={(e) => editor.chain().focus().setFontSize(e.target.value).run()}
+            className="px-2 py-1 border border-gray-300 rounded text-sm hover:bg-gray-100 bg-white text-slate-900 w-16"
+            defaultValue=""
+          >
+            <option value="">Tamaño</option>
+            {fontSizes.map((size) => (
+              <option key={size} value={size}>
+                {size.replace('px', '')}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-        {/* Text Formatting */}
-        <button
-          onClick={() => editor.chain().focus().toggleBold().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Negrita"
-        >
-          <Bold size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleItalic().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Cursiva"
-        >
-          <Italic size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleUnderline().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Subrayado"
-        >
-          <UnderlineIcon size={16} />
-        </button>
+        {/* Formatting Group */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => editor.chain().focus().toggleBold().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('bold') ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Negrita"
+          >
+            <Bold size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleItalic().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('italic') ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Cursiva"
+          >
+            <Italic size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleUnderline().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('underline') ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Subrayado"
+          >
+            <UnderlineIcon size={16} />
+          </button>
+        </div>
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-        {/* Text Color */}
+        {/* Colors Group */}
         <div className="flex items-center gap-1">
           <Palette size={14} className="text-gray-600" />
           <input
@@ -226,7 +223,6 @@ const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAss
           />
         </div>
 
-        {/* Highlight Color */}
         <div className="flex items-center gap-1">
           <Highlighter size={14} className="text-gray-600" />
           <input
@@ -239,79 +235,116 @@ const Editor: React.FC<EditorProps> = ({ content, onChange, onEditorReady, isAss
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-        {/* Alignment */}
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('left').run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Alinear izquierda"
-        >
-          <AlignLeft size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('center').run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Centrar"
-        >
-          <AlignCenter size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().setTextAlign('right').run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'right' }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Alinear derecha"
-        >
-          <AlignRight size={16} />
-        </button>
+        {/* Alignment Group */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'left' }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Alinear izquierda"
+          >
+            <AlignLeft size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'center' }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Centrar"
+          >
+            <AlignCenter size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive({ textAlign: 'right' }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Alinear derecha"
+          >
+            <AlignRight size={16} />
+          </button>
+        </div>
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-        {/* Headings */}
-        <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Título 1"
-        >
-          H1
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Título 2"
-        >
-          H2
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Título 3"
-        >
-          H3
-        </button>
+        {/* Headings Group */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 1 }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Título 1"
+          >
+            H1
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 2 }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Título 2"
+          >
+            H2
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 font-bold text-sm ${editor.isActive('heading', { level: 3 }) ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Título 3"
+          >
+            H3
+          </button>
+        </div>
 
         <div className="w-px h-6 bg-gray-300 mx-1"></div>
 
-        {/* Lists */}
-        <button
-          onClick={() => editor.chain().focus().toggleBulletList().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Lista con viñetas"
-        >
-          <List size={16} />
-        </button>
-        <button
-          onClick={() => editor.chain().focus().toggleOrderedList().run()}
-          className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : ''}`}
-          title="Lista numerada"
-        >
-          <ListOrdered size={16} />
-        </button>
+        {/* Lists Group */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => editor.chain().focus().toggleBulletList().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('bulletList') ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Lista con viñetas"
+          >
+            <List size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${editor.isActive('orderedList') ? 'bg-blue-100 text-blue-700' : ''}`}
+            title="Lista numerada"
+          >
+            <ListOrdered size={16} />
+          </button>
+        </div>
+
+        <div className="w-px h-6 bg-gray-300 mx-1"></div>
+
+        {/* Undo/Redo + Print Group */}
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => editor.chain().focus().undo().run()}
+            disabled={!editor.can().chain().focus().undo().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${!editor.can().chain().focus().undo().run() ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title="Deshacer"
+          >
+            <Undo size={16} />
+          </button>
+          <button
+            onClick={() => editor.chain().focus().redo().run()}
+            disabled={!editor.can().chain().focus().redo().run()}
+            className={`p-1.5 rounded hover:bg-gray-200 text-slate-700 ${!editor.can().chain().focus().redo().run() ? 'opacity-50 cursor-not-allowed' : ''}`}
+            title="Rehacer"
+          >
+            <Redo size={16} />
+          </button>
+          <button
+            onClick={handlePrint}
+            className="p-1.5 rounded hover:bg-gray-200 text-slate-700"
+            title="Imprimir"
+          >
+            <Printer size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Editor Content */}
-      <EditorContent
-        editor={editor}
-        className="flex-1 p-8 overflow-y-auto outline-none text-slate-900 prose prose-lg max-w-none"
-        style={{ minHeight: '400px' }}
-      />
+      <div className="editor-print-content flex-1">
+        <EditorContent
+          editor={editor}
+          className="flex-1 p-8 overflow-y-auto outline-none text-slate-900 prose prose-lg max-w-none"
+          style={{ minHeight: '400px' }}
+        />
+      </div>
     </div>
   );
 };
