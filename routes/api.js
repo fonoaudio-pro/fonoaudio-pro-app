@@ -2406,13 +2406,17 @@ async function executeToolCall(functionName, args, user_id) {
                 evaluations: [],
                 documents: [],
                 treatmentPlan: {},
-                owner_id: user_id,
+                professional_id: user_id,
                 created_at: new Date().toISOString(),
             };
             const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
                 method: 'POST', headers, body: JSON.stringify(newPatient),
             });
-            if (!res.ok) throw new Error(await res.text());
+            if (!res.ok) {
+                const errBody = await res.text();
+                console.error(`[executeToolCall] create_patient Supabase error (${res.status}):`, errBody);
+                throw new Error(`Error DB al crear paciente (${res.status}): ${errBody}`);
+            }
             return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente.`, patient: newPatient };
         }
 
@@ -2479,6 +2483,7 @@ async function executeToolCall(functionName, args, user_id) {
             const session = {
                 id: `sess_${Date.now()}`,
                 patient_id,
+                professional_id: user_id,
                 date: now,
                 summary,
                 observations: observations || '',
@@ -3114,8 +3119,11 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
                 }
             } catch (toolErr) {
                 console.error('[Gemini Tool Calling Error]:', toolErr);
-                const geminiResult = await callGeminiResilient([{ text: clinicalPrompt }], aiModel, GEMINI_MODEL_CHAIN[0]);
-                aiResponse = geminiResult.ok ? geminiResult.text : 'Error procesando la consulta con el agente.';
+                const errorDetail = toolErr?.message || String(toolErr);
+                const geminiResult = await callGeminiResilient([
+                    { text: `El usuario pidió: ${message_text}\n\nSe intentó ejecutar una herramienta pero falló con este error:\n${errorDetail}\n\nExplicale al usuario qué pasó de forma clara y concisa, y sugerile cómo resolverlo.` }
+                ], aiModel, GEMINI_MODEL_CHAIN[0]);
+                aiResponse = geminiResult.ok ? geminiResult.text : `Ocurrió un error al procesar tu pedido: ${errorDetail}. Por favor intentá de nuevo.`;
             }
         }
 
@@ -3481,15 +3489,26 @@ async function autoSetupWebhook(req) {
 async function findProfessionalId() {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) return null;
+    if (!supabaseUrl || !supabaseKey) {
+        console.warn('[findProfessionalId] Supabase not configured');
+        return null;
+    }
     try {
         const res = await fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
             headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            console.error(`[findProfessionalId] Supabase error: ${res.status} ${await res.text()}`);
+            return null;
+        }
         const rows = await res.json();
-        return rows?.[0]?.id || null;
-    } catch {
+        if (!rows || rows.length === 0) {
+            console.warn('[findProfessionalId] No profiles found in DB');
+            return null;
+        }
+        return rows[0].id;
+    } catch (e) {
+        console.error('[findProfessionalId] Exception:', e.message);
         return null;
     }
 }
@@ -3513,6 +3532,10 @@ router.post('/telegram/webhook', async (req, res) => {
         const hasMedia = !!(msg.photo || msg.audio || msg.video || msg.document || msg.voice);
 
         console.log(`[Telegram Webhook] Update received. chatId: ${chat_id}, textLen: ${message_text.length}, hasMedia: ${hasMedia}, aiModel: ${aiModel ? 'SET' : 'NULL'}, user_id: ${user_id || 'none'}`);
+
+        if (!user_id) {
+            console.error('[Telegram Webhook] No professional ID found. Bot may not work correctly.');
+        }
 
         if (hasMedia) {
             let file_id = '';
