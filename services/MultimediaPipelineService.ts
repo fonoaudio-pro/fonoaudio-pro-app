@@ -90,10 +90,6 @@ export class MultimediaPipelineService {
 
     return null;
   }
-    });
-
-    return material;
-  }
 
   static async approveMaterial(materialId: string, userId: string, userName: string): Promise<boolean> {
     const materials = this.getAllMaterials();
