@@ -2388,10 +2388,15 @@ async function executeToolCall(functionName, args, user_id) {
         }
 
         if (functionName === 'create_patient') {
+            const parseAge = (val) => {
+                if (!val) return null;
+                const num = String(val).match(/\d+/);
+                return num ? parseInt(num[0], 10) : null;
+            };
             const newPatient = {
                 id: `pat_${Date.now()}`,
                 name: args.name,
-                age: args.age || null,
+                age: parseAge(args.age),
                 diagnosis: args.diagnosis || null,
                 phone: args.phone || null,
                 email: args.email || null,
@@ -2415,9 +2420,14 @@ async function executeToolCall(functionName, args, user_id) {
             const { patient_id, field, value } = args;
             const allowedFields = ['name', 'age', 'diagnosis', 'phone', 'email', 'notes', 'gender', 'address'];
             if (!allowedFields.includes(field)) return { status: 'error', message: `Campo "${field}" no permitido. Permitidos: ${allowedFields.join(', ')}` };
+            let finalValue = value;
+            if (field === 'age') {
+                const num = String(value).match(/\d+/);
+                finalValue = num ? parseInt(num[0], 10) : null;
+            }
             const res = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient_id}`, {
                 method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
-                body: JSON.stringify({ [field]: value }),
+                body: JSON.stringify({ [field]: finalValue }),
             });
             if (!res.ok) throw new Error(await res.text());
             return { status: 'ok', message: `Campo "${field}" actualizado correctamente.` };
