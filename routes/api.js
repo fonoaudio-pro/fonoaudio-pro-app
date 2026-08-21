@@ -2393,8 +2393,9 @@ async function executeToolCall(functionName, args, user_id) {
                 const num = String(val).match(/\d+/);
                 return num ? parseInt(num[0], 10) : null;
             };
+            const patientId = `pat_${Date.now()}`;
             const newPatient = {
-                id: `pat_${Date.now()}`,
+                id: patientId,
                 name: args.name,
                 age: parseAge(args.age),
                 diagnosis: args.diagnosis || null,
@@ -2407,8 +2408,11 @@ async function executeToolCall(functionName, args, user_id) {
                 documents: [],
                 treatmentPlan: {},
                 professional_id: user_id,
+                owner_id: user_id,
+                consultorio: args.consultorio || null,
                 created_at: new Date().toISOString(),
             };
+            console.log(`[executeToolCall] create_patient: name=${args.name}, age=${newPatient.age}, professional_id=${user_id}`);
             const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
                 method: 'POST', headers, body: JSON.stringify(newPatient),
             });
