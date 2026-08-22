@@ -49,25 +49,42 @@ const FollowUpWorklist: React.FC<FollowUpWorklistProps> = ({ onPatientSelect }) 
     setIsLoading(true);
     setError(null);
     try {
-      // Load both sources independently so one failing doesn't break the other
+      // Source 1: backend API (service role) — reliable, bypasses browser RLS
+      let missingData: { patientId: string; patientName: string; alerts: FollowUpAlert[] }[] = [];
+      try {
+        const resp = await fetch('/api/followup/missing-data');
+        if (resp.ok) {
+          const json = await resp.json();
+          if (json.status === 'ok' && Array.isArray(json.results)) {
+            missingData = json.results.map((r: any) => ({
+              patientId: r.patientId,
+              patientName: r.patientName,
+              alerts: r.missing.map((field: string) => ({
+                type: 'FOLLOW_UP_NEEDED' as FollowUpType,
+                severity: 'medium' as FollowUpSeverity,
+                reason: `Ficha incompleta — falta: ${field}`,
+                suggestedAction: 'Completar el campo en la Ficha Clínica antes de aprobar la historia.',
+                reasonHash: btoa(`FOLLOW_UP_NEEDED|dato_faltante_${field.replace(/ /g, '_')}`).replace(/=/g, ''),
+                detectedAt: new Date().toISOString(),
+              })),
+            }));
+          }
+        }
+      } catch (e) {
+        console.error('[FollowUpWorklist] /api/followup/missing-data failed:', e);
+      }
+
+      // Source 2: followUpService alerts (entregas fallidas, señales clínicas)
       let alertData: Awaited<ReturnType<typeof followUpService.getPatientsWithAlerts>> = [];
-      let missingData: Awaited<ReturnType<typeof followUpService.getPatientsWithMissingData>> = [];
+      try {
+        alertData = await followUpService.getPatientsWithAlerts();
+      } catch (e) {
+        console.error('[FollowUpWorklist] getPatientsWithAlerts failed:', e);
+      }
 
-      const [alertRes, missingRes] = await Promise.allSettled([
-        followUpService.getPatientsWithAlerts(),
-        followUpService.getPatientsWithMissingData(),
-      ]);
-
-      if (alertRes.status === 'fulfilled') alertData = alertRes.value;
-      else console.error('[FollowUpWorklist] getPatientsWithAlerts failed:', alertRes.reason);
-
-      if (missingRes.status === 'fulfilled') missingData = missingRes.value;
-      else console.error('[FollowUpWorklist] getPatientsWithMissingData failed:', missingRes.reason);
-
-      // If BOTH failed, show error
-      if (alertRes.status === 'rejected' && missingRes.status === 'rejected') {
-        const msg = (missingRes.reason?.message || alertRes.reason?.message || 'Error desconocido');
-        throw new Error(msg);
+      if (missingData.length === 0 && alertData.length === 0) {
+        setItems([]);
+        return;
       }
 
       // Merge by patient: combine alerts from both sources, dedupe by reasonHash

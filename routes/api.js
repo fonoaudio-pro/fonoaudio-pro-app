@@ -1239,10 +1239,56 @@ router.get('/telegram/missing-data', async (req, res) => {
     }
 });
 
+router.get('/followup/missing-data', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ status: 'error', message: 'Supabase env not configured' });
+        }
+        const { createClient } = await import('@supabase/supabase-js');
+        const sb = createClient(supabaseUrl, supabaseKey);
+
+        const { data: patients, error: patErr } = await sb.from('patients').select('id, name');
+        if (patErr) throw patErr;
+        const { data: records, error: recErr } = await sb.from('clinical_records').select(
+            'patient_id, chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history'
+        );
+        if (recErr) throw recErr;
+
+        const recById = {};
+        (records || []).forEach(r => { recById[r.patient_id] = r; });
+
+        const results = [];
+        for (const p of (patients || [])) {
+            const cr = recById[p.id];
+            const missing = [];
+            if (!cr) missing.push('Ficha clínica sin crear');
+            else {
+                if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('Motivo de consulta (chief_complaint)');
+                if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('Diagnóstico principal');
+                if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('Áreas afectadas');
+                if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('Historia personal');
+                if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('Historia familiar');
+                if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) missing.push('Historia médica');
+                if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) missing.push('Historia del desarrollo');
+            }
+            if (missing.length > 0) {
+                results.push({
+                    patientId: p.id,
+                    patientName: p.name,
+                    missing,
+                });
+            }
+        }
+
+        res.json({ status: 'ok', totalPatients: (patients || []).length, incompleteCount: results.length, results });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 router.post('/telegram/send', async (req, res) => {
-    const { chatId: reqChatId, message, fileUrl, photo, video, audio, voice, document, caption, parse_mode } = req.body;
-    const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-    const chatId = reqChatId || process.env.TELEGRAM_CHAT_ID;
     console.log(`[Telegram] chatId: ${chatId}, media: ${photo ? 'photo' : video ? 'video' : audio ? 'audio' : voice ? 'voice' : document ? 'document' : 'text'}, msgLen: ${message?.length || 0}`);
 
     if (!TELEGRAM_BOT_TOKEN) {
