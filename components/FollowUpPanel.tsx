@@ -79,7 +79,7 @@ const FollowUpPanel: React.FC<FollowUpPanelProps> = ({ patientId }) => {
     setIsProcessing(followUpAlert.reasonHash);
     try {
       // Update bus if alert came from bus
-      const busAlert = busFollowUpAlerts.find(a => a.id === followUpAlert.reasonHash);
+      const busAlert = (Array.isArray(busFollowUpAlerts) ? busFollowUpAlerts : []).find(a => a.id === followUpAlert.reasonHash);
       if (busAlert) {
         if (status === 'resolved') applyAlert(busAlert.id);
         else if (status === 'snoozed') snoozeAlert(busAlert.id, 24);

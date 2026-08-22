@@ -37,7 +37,7 @@ export const AreasFonoSection: React.FC<AreasFonoSectionProps> = ({
 
       <div className="space-y-3">
         {AFFECTED_AREAS.map(areaDef => {
-          const areaData = areas.find(a => a.area === areaDef.key);
+          const areaData = (Array.isArray(areas) ? areas : []).find(a => a.area === areaDef.key);
           const isAffected = areaData?.affected || false;
 
           return (
