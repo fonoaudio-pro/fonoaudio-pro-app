@@ -123,19 +123,19 @@ export const FichaClinicaPanel: React.FC<FichaClinicaPanelProps> = ({
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-bold text-slate-800">Ficha Clínica</h3>
+        <h3 className="text-lg font-bold text-slate-800 dark:text-white">Ficha Clínica</h3>
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-sm"
         >
           {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-          {saved ? 'Guardado' : 'Guardar Ficha'}
+          {saved ? 'Guardado ✓' : 'Guardar Ficha'}
         </button>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-700 text-sm">
+        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl p-3 flex items-center gap-2 text-red-700 dark:text-red-400 text-sm">
           <AlertCircle size={16} />
           {error}
         </div>
@@ -174,8 +174,8 @@ export const FichaClinicaPanel: React.FC<FichaClinicaPanelProps> = ({
       />
 
       {/* Diagnosis fields */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
           <AlertCircle size={18} className="text-blue-600" />
           Diagnóstico
         </h4>
@@ -187,7 +187,7 @@ export const FichaClinicaPanel: React.FC<FichaClinicaPanelProps> = ({
               value={record.primary_diagnosis_code || ''}
               onChange={e => updateRecord({ primary_diagnosis_code: e.target.value || null })}
               placeholder="Ej: CIE-11 o SNOMED-CT"
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400"
+              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 text-slate-900 dark:text-white"
             />
           </div>
           <div className="space-y-1">
@@ -197,15 +197,15 @@ export const FichaClinicaPanel: React.FC<FichaClinicaPanelProps> = ({
               value={record.primary_diagnosis_name || ''}
               onChange={e => updateRecord({ primary_diagnosis_name: e.target.value || null })}
               placeholder="Ej: Disfagia orofaríngea"
-              className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400"
+              className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 text-slate-900 dark:text-white"
             />
           </div>
         </div>
       </div>
 
       {/* Clinical Observations */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5">
-        <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+        <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
           <AlertCircle size={18} className="text-blue-600" />
           Observaciones Clínicas
         </h4>
@@ -215,7 +215,7 @@ export const FichaClinicaPanel: React.FC<FichaClinicaPanelProps> = ({
             onChange={e => updateRecord({ clinical_observations: e.target.value })}
             placeholder="Observaciones generales del paciente..."
             rows={4}
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400 resize-none"
+            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 resize-none text-slate-900 dark:text-white"
           />
         </div>
       </div>

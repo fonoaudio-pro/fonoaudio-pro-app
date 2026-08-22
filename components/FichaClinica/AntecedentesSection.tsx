@@ -125,21 +125,21 @@ export const AntecedentesSection: React.FC<AntecedentesSectionProps> = ({
   );
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
         <BookOpen size={18} className="text-blue-600" />
         Antecedentes
       </h4>
 
-      <div className="flex gap-1 mb-4 bg-slate-100 rounded-lg p-1">
+      <div className="flex gap-1 mb-4 bg-slate-100 dark:bg-slate-800 rounded-lg p-1">
         {TABS.map(tab => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`flex-1 py-2 px-3 text-xs font-bold rounded-md transition-colors ${
               activeTab === tab.key
-                ? 'bg-white text-blue-600 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
+                ? 'bg-white dark:bg-slate-700 text-blue-600 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
             }`}
           >
             {tab.label}
@@ -172,7 +172,7 @@ const TextAreaField: React.FC<{
       onChange={e => onChange(e.target.value)}
       placeholder={placeholder}
       rows={2}
-      className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400 resize-none"
+      className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 resize-none text-slate-900 dark:text-white"
     />
   </div>
 );

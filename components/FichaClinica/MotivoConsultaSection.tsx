@@ -14,8 +14,8 @@ export const MotivoConsultaSection: React.FC<MotivoConsultaSectionProps> = ({
   onChange,
 }) => {
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
         <MessageSquare size={18} className="text-blue-600" />
         Motivo de Consulta
       </h4>
@@ -35,7 +35,7 @@ export const MotivoConsultaSection: React.FC<MotivoConsultaSectionProps> = ({
             onChange={e => onChange(e.target.value, onset)}
             placeholder="Describir el motivo principal de la derivación..."
             rows={3}
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400 resize-none"
+            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 resize-none text-slate-900 dark:text-white"
           />
         </div>
 
@@ -53,7 +53,7 @@ export const MotivoConsultaSection: React.FC<MotivoConsultaSectionProps> = ({
             onChange={e => onChange(chiefComplaint, e.target.value)}
             placeholder="Desde cuándo se observan las dificultades..."
             rows={2}
-            className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400 resize-none"
+            className="w-full p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 resize-none text-slate-900 dark:text-white"
           />
         </div>
       </div>

@@ -338,12 +338,13 @@ function backoffDelay(attempt, baseMs = 1000) {
     return Math.round(exponential + jitter);
 }
 
-// Check if error is retryable (503, 502, 429, overloaded)
+// Check if error is retryable (503, 502, 429, overloaded, quota)
 function isRetryableError(err) {
     const msg = err?.message || '';
     return msg.includes('503') || msg.includes('502') || msg.includes('429') ||
            msg.includes('overloaded') || msg.includes('high demand') ||
-           msg.includes('Service Unavailable') || msg.includes('RESOURCE_EXHAUSTED');
+           msg.includes('Service Unavailable') || msg.includes('RESOURCE_EXHAUSTED') ||
+           msg.includes('quota') || msg.includes('Too Many Requests');
 }
 
 // Main resilience function: tries model chain with backoff, then Groq fallback
@@ -3121,48 +3122,82 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
             const fallback = await getTextFallbackFromSupabase(message_text, user_id);
             aiResponse = fallback || `No pude generar una respuesta con IA (servicio no disponible).`;
         } else {
-            // Execute with Gemini Function Calling / Tools
-            try {
-                const response = await aiModel.generateContent({
-                    contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
-                    tools: [{ functionDeclarations: clinicalTools }]
-                });
+            // Execute with Gemini Function Calling / Tools — try model chain + Groq
+            let toolCallSucceeded = false;
+            let quotaExhausted = false;
+            const modelsToTry = [...GEMINI_MODEL_CHAIN];
 
-                const candidate = response.response?.candidates?.[0];
-                const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+            for (const model of modelsToTry) {
+                if (toolCallSucceeded || quotaExhausted) break;
+                const maxRetries = model === modelsToTry[0] ? 2 : 1;
 
-                if (functionCalls.length > 0) {
-                    const fc = functionCalls[0].functionCall;
-                    console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
-                    const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    try {
+                        console.log(`[Gemini Tools] Trying ${model} (attempt ${attempt + 1}/${maxRetries + 1})`);
+                        const tempModel = model !== modelsToTry[0] ? aiModel : aiModel;
+                        const response = await aiModel.generateContent({
+                            contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
+                            tools: [{ functionDeclarations: clinicalTools }]
+                        });
 
-                    // Send second turn to Gemini with tool result
-                    const secondResponse = await aiModel.generateContent({
-                        contents: [
-                            { role: 'user', parts: [{ text: clinicalPrompt }] },
-                            { role: 'model', parts: candidate.content.parts },
-                            {
-                                role: 'function',
-                                parts: [{
-                                    functionResponse: {
-                                        name: fc.name,
-                                        response: toolResult
+                        const candidate = response.response?.candidates?.[0];
+                        const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+
+                        if (functionCalls.length > 0) {
+                            const fc = functionCalls[0].functionCall;
+                            console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
+                            const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+
+                            const secondResponse = await aiModel.generateContent({
+                                contents: [
+                                    { role: 'user', parts: [{ text: clinicalPrompt }] },
+                                    { role: 'model', parts: candidate.content.parts },
+                                    {
+                                        role: 'function',
+                                        parts: [{
+                                            functionResponse: {
+                                                name: fc.name,
+                                                response: toolResult
+                                            }
+                                        }]
                                     }
-                                }]
-                            }
-                        ]
-                    });
-                    aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada con éxito. Resultado: ${JSON.stringify(toolResult)}`;
-                } else {
-                    aiResponse = response.response?.text() || 'Sin respuesta de IA.';
+                                ]
+                            });
+                            aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada con éxito. Resultado: ${JSON.stringify(toolResult)}`;
+                            toolCallSucceeded = true;
+                            console.log(`[Gemini Tools] ${model} succeeded on attempt ${attempt + 1}`);
+                            break;
+                        } else {
+                            aiResponse = response.response?.text() || 'Sin respuesta de IA.';
+                            toolCallSucceeded = true;
+                            break;
+                        }
+                    } catch (e) {
+                        const errMsg = e?.message || '';
+                        const isQuota = errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Too Many Requests');
+                        if (isQuota) {
+                            console.warn(`[Gemini Tools] ${model} QUOTA EXHAUSTED — skipping all Gemini models`);
+                            quotaExhausted = true;
+                            break;
+                        }
+                        if (isRetryableError(e) && attempt < maxRetries) {
+                            const delay = backoffDelay(attempt);
+                            console.warn(`[Gemini Tools] ${model} attempt ${attempt + 1} failed (${e.message?.slice(0, 60)}). Retrying in ${delay}ms...`);
+                            await new Promise(r => setTimeout(r, delay));
+                        } else {
+                            console.warn(`[Gemini Tools] ${model} FAILED: ${e.message?.slice(0, 80)}`);
+                            break;
+                        }
+                    }
                 }
-            } catch (toolErr) {
-                console.error('[Gemini Tool Calling Error]:', toolErr);
-                const errorDetail = toolErr?.message || String(toolErr);
-                const geminiResult = await callGeminiResilient([
-                    { text: `El usuario pidió: ${message_text}\n\nSe intentó ejecutar una herramienta pero falló con este error:\n${errorDetail}\n\nExplicale al usuario qué pasó de forma clara y concisa, y sugerile cómo resolverlo.` }
-                ], aiModel, GEMINI_MODEL_CHAIN[0]);
-                aiResponse = geminiResult.ok ? geminiResult.text : `Ocurrió un error al procesar tu pedido: ${errorDetail}. Por favor intentá de nuevo.`;
+            }
+
+            // All Gemini models failed → Groq text-only fallback
+            if (!toolCallSucceeded) {
+                console.warn('[Gemini Tools] All models failed. Trying Groq fallback...');
+                const textPrompt = `Sos FonoAudio, asistente clinico autonomo. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}\n\nRespondé en espanol argentino rioplatense. Si el usuario pide crear, modificar o eliminar algo, explicale que la accion se ejecutara cuando el servicio de IA esté disponible.`;
+                const groqResult = await callGroqFallback(textPrompt);
+                aiResponse = groqResult.ok ? groqResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
             }
         }
 
