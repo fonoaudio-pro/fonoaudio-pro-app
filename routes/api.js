@@ -96,7 +96,11 @@ function shouldSendVoice(chatId, messageText, aiResponse) {
 }
 
 function stripVoiceMarkers(text) {
-    return text.replace(/^\[(AUDIO|VOICE)\]\s*/i, '');
+    let cleaned = text.replace(/^\[(AUDIO|VOICE)\]\s*/i, '');
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    cleaned = cleaned.replace(/<\/?think>/gi, '');
+    return cleaned.trim();
 }
 
 // Admin endpoint: update profile role using service role key (bypasses RLS)
