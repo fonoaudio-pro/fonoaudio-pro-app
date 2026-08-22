@@ -2835,6 +2835,93 @@ async function executeToolCall(functionName, args, user_id) {
     }
 }
 
+// --- DIRECT COMMAND PARSER (fallback when AI is down) ---
+async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
+
+    // CREATE PATIENT: "creá un paciente", "crear paciente", "nuevo paciente"
+    if (lowerMsg.match(/(cre[aá]|nuevo|alta)\s+(un\s+)?paciente/)) {
+        const nameMatch = originalMsg.match(/(?:llamado?|nombre:?|name:?)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/i)
+                       || originalMsg.match(/paciente\s+(?:llamado?|nombre:?)?\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/i);
+        const ageMatch = originalMsg.match(/(\d+)\s*(?:años|año|years?)/i);
+        const reasonMatch = originalMsg.match(/(?:motivo|raz[oó]n|cause|por)\s*:?\s*(.+?)(?:\.|$)/i)
+                         || originalMsg.match(/(?:refiere|refieren|presenta|diagn[oó]stico)\s+(.+?)(?:\.|$)/i);
+        const diagnosisMatch = originalMsg.match(/(?:diagn[oó]stico|dx|diagnostico)\s*:?\s*(.+?)(?:\.|$)/i);
+
+        if (!nameMatch) return null;
+        const name = nameMatch[1].trim();
+        const age = ageMatch ? parseInt(ageMatch[1]) : null;
+        const reason = reasonMatch ? reasonMatch[1].trim() : null;
+        const diagnosis = diagnosisMatch ? diagnosisMatch[1].trim() : null;
+
+        try {
+            const patientId = newId();
+            const newPatient = {
+                id: patientId, name, age, diagnosis, reason,
+                phone: null, email: null, notes: reason || null,
+                history: [], reports: [], evaluations: [], documents: [],
+                treatmentPlan: {}, professional_id: user_id, owner_id: user_id,
+                created_at: new Date().toISOString(),
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
+                method: 'POST', headers, body: JSON.stringify(newPatient),
+            });
+            if (!res.ok) throw new Error(await res.text());
+
+            if (reason || diagnosis) {
+                try {
+                    await fetch(`${supabaseUrl}/rest/v1/clinical_records`, {
+                        method: 'POST', headers, body: JSON.stringify({
+                            patient_id: patientId, chief_complaint: reason || diagnosis || '',
+                            chief_complaint_onset: '', personal_history: {}, family_history: {},
+                            medical_history: {}, developmental_history: {},
+                            clinical_observations: '', affected_areas: {},
+                            primary_diagnosis_name: diagnosis || null, primary_diagnosis_code: null,
+                            secondary_diagnosis_codes: [], created_by: user_id, updated_by: user_id,
+                            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                        }),
+                    });
+                } catch (e) { console.warn('[Direct] clinical_records:', e.message); }
+            }
+            return `✅ Paciente *${name}* creado exitosamente.${age ? ` Edad: ${age} años.` : ''}${reason ? ` Motivo: ${reason}.` : ''}`;
+        } catch (e) {
+            console.error('[Direct] create_patient error:', e.message);
+            return `❌ No pude crear al paciente ${name}: ${e.message}`;
+        }
+    }
+
+    // LIST PATIENTS: "mostrá mis pacientes", "listá pacientes", "qué pacientes tengo"
+    if (lowerMsg.match(/(mostr[aá]|list[aá]|ver|cu[aá]les|qui[eé]nes).*pacientes/) || lowerMsg.match(/pacientes.*(?:tengo|hay|activos)/)) {
+        try {
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name,age,diagnosis,phone&limit=20`, { headers });
+            if (!res.ok) throw new Error(await res.text());
+            const patients = await res.json();
+            if (patients.length === 0) return '📋 No tenés pacientes registrados.';
+            const list = patients.map((p, i) => `${i + 1}. *${p.name}* — ${p.age || '?'} años, ${p.diagnosis || 'sin diagnóstico'}`).join('\n');
+            return `📋 *Tus pacientes (${patients.length})*:\n${list}`;
+        } catch (e) { return `❌ Error al buscar pacientes: ${e.message}`; }
+    }
+
+    // TODAY'S AGENDA: "agenda de hoy", "turnos de hoy", "qué turnos tengo"
+    if (lowerMsg.match(/(agenda|turnos?|cit[ae]s?).*(hoy|actual)/) || lowerMsg.match(/hoy.*(agenda|turnos?|cit[ae]s?)/)) {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&order=time.asc`, { headers });
+            if (!res.ok) throw new Error(await res.text());
+            const apts = await res.json();
+            if (apts.length === 0) return '📅 No tenés turnos para hoy.';
+            const list = apts.map(a => `${a.time} hs — ${a.patient_name} (${a.status || 'pendiente'})`).join('\n');
+            return `📅 *Turnos de hoy*:\n${list}`;
+        } catch (e) { return `❌ Error al buscar agenda: ${e.message}`; }
+    }
+
+    return null;
+}
+
 // --- TELEGRAM TEXT AI PROCESSING INTERNAL ---
 async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
@@ -3202,12 +3289,23 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
                 }
             }
 
-            // All Gemini models failed → Groq text-only fallback
+            // All Gemini models failed → Try to parse command directly, then Groq fallback
             if (!toolCallSucceeded) {
-                console.warn('[Gemini Tools] All models failed. Trying Groq fallback...');
-                const textPrompt = `Sos FonoAudio, asistente clinico autonomo. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}\n\nRespondé en espanol argentino rioplatense. Si el usuario pide crear, modificar o eliminar algo, explicale que la accion se ejecutara cuando el servicio de IA esté disponible.`;
-                const groqResult = await callGroqFallback(textPrompt);
-                aiResponse = groqResult.ok ? groqResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                console.warn('[Gemini Tools] All models failed. Trying direct command parsing...');
+
+                // Direct command parsing for simple CRUD when AI is down
+                const lowerMsg = message_text.toLowerCase();
+                const directResult = await handleDirectCommand(lowerMsg, message_text, user_id);
+
+                if (directResult) {
+                    aiResponse = directResult;
+                    console.log('[Direct Command] Executed successfully');
+                } else {
+                    console.warn('[Direct Command] No direct match. Trying Groq fallback...');
+                    const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
+                    const groqResult = await callGroqFallback(textPrompt);
+                    aiResponse = groqResult.ok ? groqResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                }
             }
         }
 
