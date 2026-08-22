@@ -353,7 +353,7 @@ async function callGroqWithTools(systemPrompt, tools, user_id) {
         }
     }));
 
-    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta. CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTA la accion de inmediato usando delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una busqueda: si te piden borrar, borra de verdad y confirmá cuantos eliminaste.';
+    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta. CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTA la accion de inmediato usando delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una busqueda: si te piden borrar, borra de verdad y confirmá cuantos eliminaste. SI EL USUARIO PREGUNTA POR DATOS FALTANTES, INCOMPLETOS O ALERTAS, llama SIEMPRE a get_missing_data_alerts y comunica EXACTAMENTE lo que devuelve (qué pacientes y qué campos les faltan). NUNCA inventes ni asumas qué datos faltan: basate siempre en el resultado de la tool.';
 
     try {
         const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -2284,6 +2284,11 @@ const clinicalTools = [
         }
     },
     {
+        name: 'get_missing_data_alerts',
+        description: 'Analiza TODOS los pacientes de la clinica y devuelve un reporte de que campos de la ficha clínica faltan en cada uno (diagnostico, areas afectadas, historias, etc.) y qué pacientes no tienen ficha creada. Usar SIEMPRE que el usuario pregunte por "datos faltantes", "faltantes", "alertas de datos", "que le falta a la ficha", "pacientes incompletos", o cualquier pregunta sobre informacion incompleta. Devuelve la lista completa y exacta, no inventes.',
+        parameters: { type: 'OBJECT', properties: {} }
+    },
+    {
         name: 'list_all_patients',
         description: 'Lista todos los pacientes del profesional con sus datos basicos.',
         parameters: { type: 'OBJECT', properties: {} }
@@ -2598,6 +2603,49 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'list_all_patients') {
             const patients = await fetchPatientsForUser(actualUserId);
             return { status: 'ok', count: patients.length, patients: patients.map(p => ({ id: p.id, name: p.name, age: p.age, diagnosis: p.diagnosis })) };
+        }
+
+        if (functionName === 'get_missing_data_alerts') {
+            // Query all patients + clinical_records with service role
+            const patRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name`, { method: 'GET', headers });
+            if (!patRes.ok) throw new Error(`Error pacientes: ${await patRes.text()}`);
+            const allPatients = await patRes.json();
+
+            const recRes = await fetch(`${supabaseUrl}/rest/v1/clinical_records?select=patient_id,chief_complaint,primary_diagnosis_name,affected_areas,personal_history,family_history,medical_history,developmental_history`, { method: 'GET', headers });
+            if (!recRes.ok) throw new Error(`Error fichas: ${await recRes.text()}`);
+            const records = await recRes.json();
+
+            const recById = {};
+            (records || []).forEach(r => { recById[r.patient_id] = r; });
+
+            const report = [];
+            for (const p of (allPatients || [])) {
+                const cr = recById[p.id];
+                const missing = [];
+                if (!cr) {
+                    missing.push('FICHA SIN CREAR');
+                } else {
+                    if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('Motivo de consulta');
+                    if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('Diagnostico principal');
+                    if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('Areas afectadas');
+                    if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('Historia personal');
+                    if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('Historia familiar');
+                    if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) missing.push('Historia medica');
+                    if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) missing.push('Historia del desarrollo');
+                }
+                report.push({ patient: p.name, missingFields: missing, hasRecord: !!cr });
+            }
+
+            const withMissing = report.filter(r => r.missingFields.length > 0);
+            return {
+                status: 'ok',
+                totalPatients: (allPatients || []).length,
+                patientsWithMissingData: withMissing.length,
+                report: withMissing.map(r => ({
+                    patient: r.patient,
+                    missing: r.missingFields,
+                })),
+            };
         }
 
         if (functionName === 'get_patient_info') {
