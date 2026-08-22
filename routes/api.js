@@ -1192,6 +1192,53 @@ router.get('/telegram/env-check', (req, res) => {
     });
 });
 
+// DIAGNOSTIC: report patients with incomplete ficha (missing required clinical fields)
+router.get('/telegram/missing-data', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        if (!supabaseUrl || !supabaseKey) {
+            return res.status(500).json({ status: 'error', message: 'Supabase env not configured' });
+        }
+        const { createClient } = await import('@supabase/supabase-js');
+        const sb = createClient(supabaseUrl, supabaseKey);
+
+        const { data: patients } = await sb.from('patients').select('id, name');
+        const { data: records } = await sb.from('clinical_records').select(
+            'patient_id, chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history'
+        );
+
+        const recById = {};
+        (records || []).forEach(r => { recById[r.patient_id] = r; });
+
+        const incomplete = [];
+        for (const p of (patients || [])) {
+            const cr = recById[p.id];
+            const missing = [];
+            if (!cr) missing.push('SIN_FICHA');
+            else {
+                if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('chief_complaint');
+                if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('diag');
+                if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('areas');
+                if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('personal');
+                if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('family');
+                if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) missing.push('medical');
+                if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) missing.push('developmental');
+            }
+            if (missing.length > 0) incomplete.push({ name: p.name, missing });
+        }
+
+        res.json({
+            status: 'ok',
+            totalPatients: (patients || []).length,
+            incompleteCount: incomplete.length,
+            sample: incomplete.slice(0, 10),
+        });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 router.post('/telegram/send', async (req, res) => {
     const { chatId: reqChatId, message, fileUrl, photo, video, audio, voice, document, caption, parse_mode } = req.body;
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
