@@ -96,7 +96,11 @@ function shouldSendVoice(chatId, messageText, aiResponse) {
 }
 
 function stripVoiceMarkers(text) {
-    return text.replace(/^\[(AUDIO|VOICE)\]\s*/i, '');
+    let cleaned = text.replace(/^\[(AUDIO|VOICE)\]\s*/i, '');
+    cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, '');
+    cleaned = cleaned.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    cleaned = cleaned.replace(/<\/?think>/gi, '');
+    return cleaned.trim();
 }
 
 // Admin endpoint: update profile role using service role key (bypasses RLS)
@@ -292,7 +296,7 @@ async function callGroqFallback(promptText) {
     }
 
     try {
-        console.log('[Groq] Trying llama3-70b-8192 as ultimate fallback...');
+        console.log('[Groq] Trying qwen/qwen3.6-27b as ultimate fallback...');
         const resp = await fetch(GROQ_API_URL, {
             method: 'POST',
             headers: {
@@ -300,8 +304,11 @@ async function callGroqFallback(promptText) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'llama3-70b-8192',
-                messages: [{ role: 'user', content: promptText }],
+                model: 'qwen/qwen3.6-27b',
+                messages: [
+                    { role: 'system', content: 'Sos FonoAudio, asistente clinico de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. NO muestres tu proceso de razonamiento. Respondé directamente con la respuesta final. Sé conciso.' },
+                    { role: 'user', content: promptText }
+                ],
                 max_tokens: 2048,
                 temperature: 0.3,
             }),
@@ -313,14 +320,109 @@ async function callGroqFallback(promptText) {
         }
 
         const data = await resp.json();
-        const text = data.choices?.[0]?.message?.content || '';
+        let text = data.choices?.[0]?.message?.content || '';
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+        text = text.replace(/^Here's a thinking process:.*?\n\n[\s\S]*?(?=\n\n|$)/gi, '').trim();
         if (text) {
-            console.log('[Groq] Success with llama3-70b-8192');
-            return { ok: true, text, model: 'groq/llama3-70b-8192' };
+            console.log('[Groq] Success with qwen/qwen3.6-27b');
+            return { ok: true, text, model: 'groq/qwen3.6-27b' };
         }
         return { ok: false, error: new Error('Empty response from Groq') };
     } catch (e) {
         console.error('[Groq] Failed:', e.message?.slice(0, 100));
+        return { ok: false, error: e };
+    }
+}
+
+// Groq with function calling (OpenAI-compatible)
+async function callGroqWithTools(systemPrompt, tools, user_id) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) return { ok: false, error: new Error('GROQ_API_KEY not set') };
+
+    // Convert clinical tools to OpenAI format
+    const groqTools = tools.map(t => ({
+        type: 'function',
+        function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters || { type: 'object', properties: {} },
+        }
+    }));
+
+    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta.';
+
+    try {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+            body: JSON.stringify({
+                model: 'qwen/qwen3.6-27b',
+                messages: [
+                    { role: 'system', content: systemMsg },
+                    { role: 'user', content: systemPrompt }
+                ],
+                tools: groqTools,
+                tool_choice: 'auto',
+                max_tokens: 4096,
+                temperature: 0.3,
+            }),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            return { ok: false, error: new Error(errData.error?.message || `Groq API error: ${resp.status}`) };
+        }
+
+        const data = await resp.json();
+        const choice = data.choices?.[0];
+        const msg = choice?.message;
+
+        // Check for tool calls
+        if (msg?.tool_calls?.length > 0) {
+            const tc = msg.tool_calls[0];
+            const fnName = tc.function.name;
+            let fnArgs = {};
+            try { fnArgs = JSON.parse(tc.function.arguments); } catch { fnArgs = {}; }
+            console.log(`[Groq Tool Call] Executing ${fnName} with args:`, fnArgs);
+
+            const toolResult = await executeToolCall(fnName, fnArgs, user_id);
+
+            // Send result back to Groq for natural language response
+            const secondResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+                body: JSON.stringify({
+                    model: 'qwen/qwen3.6-27b',
+                    messages: [
+                        { role: 'system', content: systemMsg },
+                        { role: 'user', content: systemPrompt },
+                        { role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: fnName, arguments: tc.function.arguments } }] },
+                        { role: 'tool', content: JSON.stringify(toolResult) }
+                    ],
+                    max_tokens: 4096,
+                    temperature: 0.3,
+                }),
+            });
+
+            if (secondResp.ok) {
+                const secondData = await secondResp.json();
+                let text = secondData.choices?.[0]?.message?.content || `Acción ${fnName} ejecutada correctamente.`;
+                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+                return { ok: true, text, model: 'groq/' + fnName };
+            }
+            return { ok: true, text: `Acción *${fnName}* ejecutada exitosamente.`, model: 'groq/' + fnName };
+        }
+
+        // No tool calls — text response
+        let text = msg?.content || '';
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+        if (text) return { ok: true, text, model: 'groq/qwen3.6-27b-text' };
+        return { ok: false, error: new Error('Empty response from Groq') };
+    } catch (e) {
+        console.error('[Groq Tools] Failed:', e.message?.slice(0, 100));
         return { ok: false, error: e };
     }
 }
@@ -338,12 +440,13 @@ function backoffDelay(attempt, baseMs = 1000) {
     return Math.round(exponential + jitter);
 }
 
-// Check if error is retryable (503, 502, 429, overloaded)
+// Check if error is retryable (503, 502, 429, overloaded, quota)
 function isRetryableError(err) {
     const msg = err?.message || '';
     return msg.includes('503') || msg.includes('502') || msg.includes('429') ||
            msg.includes('overloaded') || msg.includes('high demand') ||
-           msg.includes('Service Unavailable') || msg.includes('RESOURCE_EXHAUSTED');
+           msg.includes('Service Unavailable') || msg.includes('RESOURCE_EXHAUSTED') ||
+           msg.includes('quota') || msg.includes('Too Many Requests');
 }
 
 // Main resilience function: tries model chain with backoff, then Groq fallback
@@ -2102,13 +2205,14 @@ const clinicalTools = [
     },
     {
         name: 'create_patient',
-        description: 'Crea un nuevo paciente en la base de datos.',
+        description: 'Crea un nuevo paciente en la base de datos. Si el usuario indica un motivo de consulta o motivo de derivacion, guardalo en el campo reason.',
         parameters: {
             type: 'OBJECT',
             properties: {
                 name: { type: 'STRING', description: 'Nombre completo del paciente.' },
                 age: { type: 'STRING', description: 'Edad del paciente.' },
-                diagnosis: { type: 'STRING', description: 'Diagnostico principal.' },
+                diagnosis: { type: 'STRING', description: 'Diagnostico principal si se conoce.' },
+                reason: { type: 'STRING', description: 'Motivo de consulta o derivacion. Ej: "Madre refiere tartamudez".' },
                 phone: { type: 'STRING', description: 'Telefono de contacto.' },
                 email: { type: 'STRING', description: 'Email del paciente o responsable.' },
                 notes: { type: 'STRING', description: 'Notas adicionales.' }
@@ -2354,6 +2458,8 @@ const clinicalTools = [
     },
 ];
 
+function newId() { return crypto.randomUUID(); }
+
 async function executeToolCall(functionName, args, user_id) {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -2393,8 +2499,9 @@ async function executeToolCall(functionName, args, user_id) {
                 const num = String(val).match(/\d+/);
                 return num ? parseInt(num[0], 10) : null;
             };
+            const patientId = newId();
             const newPatient = {
-                id: `pat_${Date.now()}`,
+                id: patientId,
                 name: args.name,
                 age: parseAge(args.age),
                 diagnosis: args.diagnosis || null,
@@ -2406,14 +2513,52 @@ async function executeToolCall(functionName, args, user_id) {
                 evaluations: [],
                 documents: [],
                 treatmentPlan: {},
+                professional_id: user_id,
                 owner_id: user_id,
+                consultorio: args.consultorio || null,
                 created_at: new Date().toISOString(),
             };
+            console.log(`[executeToolCall] create_patient: name=${args.name}, age=${newPatient.age}, professional_id=${user_id}`);
             const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
                 method: 'POST', headers, body: JSON.stringify(newPatient),
             });
-            if (!res.ok) throw new Error(await res.text());
-            return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente.`, patient: newPatient };
+            if (!res.ok) {
+                const errBody = await res.text();
+                console.error(`[executeToolCall] create_patient Supabase error (${res.status}):`, errBody);
+                throw new Error(`Error DB al crear paciente (${res.status}): ${errBody}`);
+            }
+            console.log(`[executeToolCall] create_patient SUCCESS: ${args.name} (${patientId})`);
+
+            if (args.reason || args.diagnosis) {
+                try {
+                    const clinicalRecord = {
+                        patient_id: patientId,
+                        chief_complaint: args.reason || args.diagnosis || '',
+                        chief_complaint_onset: '',
+                        personal_history: {},
+                        family_history: {},
+                        medical_history: {},
+                        developmental_history: {},
+                        clinical_observations: args.notes || '',
+                        affected_areas: {},
+                        primary_diagnosis_name: args.diagnosis || null,
+                        primary_diagnosis_code: null,
+                        secondary_diagnosis_codes: [],
+                        created_by: user_id,
+                        updated_by: user_id,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                    await fetch(`${supabaseUrl}/rest/v1/clinical_records`, {
+                        method: 'POST', headers, body: JSON.stringify(clinicalRecord),
+                    });
+                    console.log(`[executeToolCall] clinical_records created for ${args.name}`);
+                } catch (crErr) {
+                    console.warn('[executeToolCall] Could not create clinical_records:', crErr.message);
+                }
+            }
+
+            return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente. ${args.reason ? `Motivo: ${args.reason}.` : ''}`, patient: newPatient };
         }
 
         if (functionName === 'update_patient') {
@@ -2450,7 +2595,7 @@ async function executeToolCall(functionName, args, user_id) {
 
             const now = new Date().toISOString().split('T')[0];
             const newHistoryItem = {
-                id: `evol_${Date.now()}`,
+                id: newId(),
                 patientId: patient.id,
                 date: now,
                 status: 'completed',
@@ -2477,8 +2622,9 @@ async function executeToolCall(functionName, args, user_id) {
             const { patient_id, summary, observations, next_action } = args;
             const now = new Date().toISOString();
             const session = {
-                id: `sess_${Date.now()}`,
+                id: newId(),
                 patient_id,
+                professional_id: user_id,
                 date: now,
                 summary,
                 observations: observations || '',
@@ -2501,7 +2647,7 @@ async function executeToolCall(functionName, args, user_id) {
             const draft = `# INFORME CLINICO - ${patient.name}\nArea: ${focus_area}\nDiagnostico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Analisis\nSe evalua area de ${focus_area} evidenciando desempeno clinico acorde al plan terapeutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente FonoAudio Pro AI.`;
 
             const reportEntry = {
-                id: `rep_${Date.now()}`,
+                id: newId(),
                 date: new Date().toISOString().split('T')[0],
                 title: `Informe (${focus_area}) - ${patient.name}`,
                 content: draft,
@@ -2550,7 +2696,7 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'create_appointment') {
             const { patient_name, date, time, type } = args;
             const appointment = {
-                id: `apt_${Date.now()}`,
+                id: newId(),
                 patient_name,
                 date,
                 time,
@@ -2593,7 +2739,7 @@ async function executeToolCall(functionName, args, user_id) {
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
             const evaluation = {
-                id: `eval_${Date.now()}`,
+                id: newId(),
                 test_name,
                 result,
                 area: area || 'general',
@@ -2674,7 +2820,7 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'add_knowledge') {
             const { title, content, category } = args;
             const entry = {
-                id: `kb_${Date.now()}`,
+                id: newId(),
                 title,
                 content,
                 category: category || 'general',
@@ -2781,8 +2927,95 @@ async function executeToolCall(functionName, args, user_id) {
     }
 }
 
+// --- DIRECT COMMAND PARSER (fallback when AI is down) ---
+async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return null;
+
+    const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
+
+    // CREATE PATIENT: "creá un paciente", "crear paciente", "nuevo paciente"
+    if (lowerMsg.match(/(cre[aá]|nuevo|alta)\s+(un\s+)?paciente/)) {
+        const nameMatch = originalMsg.match(/(?:llamado?|nombre:?|name:?)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/i)
+                       || originalMsg.match(/paciente\s+(?:llamado?|nombre:?)?\s*([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)+)/i);
+        const ageMatch = originalMsg.match(/(\d+)\s*(?:años|año|years?)/i);
+        const reasonMatch = originalMsg.match(/(?:motivo|raz[oó]n|cause|por)\s*:?\s*(.+?)(?:\.|$)/i)
+                         || originalMsg.match(/(?:refiere|refieren|presenta|diagn[oó]stico)\s+(.+?)(?:\.|$)/i);
+        const diagnosisMatch = originalMsg.match(/(?:diagn[oó]stico|dx|diagnostico)\s*:?\s*(.+?)(?:\.|$)/i);
+
+        if (!nameMatch) return null;
+        const name = nameMatch[1].trim();
+        const age = ageMatch ? parseInt(ageMatch[1]) : null;
+        const reason = reasonMatch ? reasonMatch[1].trim() : null;
+        const diagnosis = diagnosisMatch ? diagnosisMatch[1].trim() : null;
+
+        try {
+            const patientId = newId();
+            const newPatient = {
+                id: patientId, name, age, diagnosis, reason,
+                phone: null, email: null, notes: reason || null,
+                history: [], reports: [], evaluations: [], documents: [],
+                treatmentPlan: {}, professional_id: user_id, owner_id: user_id,
+                created_at: new Date().toISOString(),
+            };
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
+                method: 'POST', headers, body: JSON.stringify(newPatient),
+            });
+            if (!res.ok) throw new Error(await res.text());
+
+            if (reason || diagnosis) {
+                try {
+                    await fetch(`${supabaseUrl}/rest/v1/clinical_records`, {
+                        method: 'POST', headers, body: JSON.stringify({
+                            patient_id: patientId, chief_complaint: reason || diagnosis || '',
+                            chief_complaint_onset: '', personal_history: {}, family_history: {},
+                            medical_history: {}, developmental_history: {},
+                            clinical_observations: '', affected_areas: {},
+                            primary_diagnosis_name: diagnosis || null, primary_diagnosis_code: null,
+                            secondary_diagnosis_codes: [], created_by: user_id, updated_by: user_id,
+                            created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+                        }),
+                    });
+                } catch (e) { console.warn('[Direct] clinical_records:', e.message); }
+            }
+            return `✅ Paciente *${name}* creado exitosamente.${age ? ` Edad: ${age} años.` : ''}${reason ? ` Motivo: ${reason}.` : ''}`;
+        } catch (e) {
+            console.error('[Direct] create_patient error:', e.message);
+            return `❌ No pude crear al paciente ${name}: ${e.message}`;
+        }
+    }
+
+    // LIST PATIENTS: "mostrá mis pacientes", "listá pacientes", "qué pacientes tengo"
+    if (lowerMsg.match(/(mostr[aá]|list[aá]|ver|cu[aá]les|qui[eé]nes).*pacientes/) || lowerMsg.match(/pacientes.*(?:tengo|hay|activos)/)) {
+        try {
+            const res = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name,age,diagnosis,phone&limit=20`, { headers });
+            if (!res.ok) throw new Error(await res.text());
+            const patients = await res.json();
+            if (patients.length === 0) return '📋 No tenés pacientes registrados.';
+            const list = patients.map((p, i) => `${i + 1}. *${p.name}* — ${p.age || '?'} años, ${p.diagnosis || 'sin diagnóstico'}`).join('\n');
+            return `📋 *Tus pacientes (${patients.length})*:\n${list}`;
+        } catch (e) { return `❌ Error al buscar pacientes: ${e.message}`; }
+    }
+
+    // TODAY'S AGENDA: "agenda de hoy", "turnos de hoy", "qué turnos tengo"
+    if (lowerMsg.match(/(agenda|turnos?|cit[ae]s?).*(hoy|actual)/) || lowerMsg.match(/hoy.*(agenda|turnos?|cit[ae]s?)/)) {
+        try {
+            const today = new Date().toISOString().split('T')[0];
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&order=time.asc`, { headers });
+            if (!res.ok) throw new Error(await res.text());
+            const apts = await res.json();
+            if (apts.length === 0) return '📅 No tenés turnos para hoy.';
+            const list = apts.map(a => `${a.time} hs — ${a.patient_name} (${a.status || 'pendiente'})`).join('\n');
+            return `📅 *Turnos de hoy*:\n${list}`;
+        } catch (e) { return `❌ Error al buscar agenda: ${e.message}`; }
+    }
+
+    return null;
+}
+
 // --- TELEGRAM TEXT AI PROCESSING INTERNAL ---
-async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
+async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app', aiModelFallback = null) {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
     // ─── STEP 0: Check voice mode commands ───
@@ -3050,7 +3283,8 @@ REGLA DE ORO PARA MODIFICACIONES:
 
 ═══ REGLAS ═══
 - SOS UN AGENTE AUTONOMO. Cuando el usuario te pide algo, LO HACES usando las tools. No preguntes de mas, ejecuta.
-- "Crea un paciente" -> crealo. "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
+- "Crea un paciente" -> crealo. Extraé el motivo de consulta si lo hay (guardalo en el campo "reason"). "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
+- Si el usuario da datos del paciente (edad, diagnostico, motivo, telefono), TODOS van como argumentos al tool create_patient. NO pierdas información.
 - SOS PROFESIONAL y calido. Respondes en espanol argentino rioplatense.
 - SOS CONCISO pero completo. Max 6 oraciones salvo que pida mas detalle.
 - Ante ambiguedades, usa tu juicio clinico con el contexto disponible.
@@ -3077,45 +3311,130 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
             const fallback = await getTextFallbackFromSupabase(message_text, user_id);
             aiResponse = fallback || `No pude generar una respuesta con IA (servicio no disponible).`;
         } else {
-            // Execute with Gemini Function Calling / Tools
-            try {
-                const response = await aiModel.generateContent({
-                    contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
-                    tools: [{ functionDeclarations: clinicalTools }]
-                });
+            // Execute with Gemini Function Calling / Tools — try model chain + Groq
+            let toolCallSucceeded = false;
+            let quotaExhausted = false;
+            const modelsToTry = [...GEMINI_MODEL_CHAIN];
 
-                const candidate = response.response?.candidates?.[0];
-                const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+            for (const model of modelsToTry) {
+                if (toolCallSucceeded || quotaExhausted) break;
+                const maxRetries = model === modelsToTry[0] ? 2 : 1;
 
-                if (functionCalls.length > 0) {
-                    const fc = functionCalls[0].functionCall;
-                    console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
-                    const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+                for (let attempt = 0; attempt <= maxRetries; attempt++) {
+                    try {
+                        console.log(`[Gemini Tools] Trying ${model} (attempt ${attempt + 1}/${maxRetries + 1})`);
+                        const tempModel = model !== modelsToTry[0] ? aiModel : aiModel;
+                        const response = await aiModel.generateContent({
+                            contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
+                            tools: [{ functionDeclarations: clinicalTools }]
+                        });
 
-                    // Send second turn to Gemini with tool result
-                    const secondResponse = await aiModel.generateContent({
-                        contents: [
-                            { role: 'user', parts: [{ text: clinicalPrompt }] },
-                            { role: 'model', parts: candidate.content.parts },
-                            {
-                                role: 'function',
-                                parts: [{
-                                    functionResponse: {
-                                        name: fc.name,
-                                        response: toolResult
+                        const candidate = response.response?.candidates?.[0];
+                        const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+
+                        if (functionCalls.length > 0) {
+                            const fc = functionCalls[0].functionCall;
+                            console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
+                            const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+
+                            const secondResponse = await aiModel.generateContent({
+                                contents: [
+                                    { role: 'user', parts: [{ text: clinicalPrompt }] },
+                                    { role: 'model', parts: candidate.content.parts },
+                                    {
+                                        role: 'function',
+                                        parts: [{
+                                            functionResponse: {
+                                                name: fc.name,
+                                                response: toolResult
+                                            }
+                                        }]
                                     }
-                                }]
-                            }
-                        ]
-                    });
-                    aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada con éxito. Resultado: ${JSON.stringify(toolResult)}`;
-                } else {
-                    aiResponse = response.response?.text() || 'Sin respuesta de IA.';
+                                ]
+                            });
+                            aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada con éxito. Resultado: ${JSON.stringify(toolResult)}`;
+                            toolCallSucceeded = true;
+                            console.log(`[Gemini Tools] ${model} succeeded on attempt ${attempt + 1}`);
+                            break;
+                        } else {
+                            aiResponse = response.response?.text() || 'Sin respuesta de IA.';
+                            toolCallSucceeded = true;
+                            break;
+                        }
+                    } catch (e) {
+                        const errMsg = e?.message || '';
+                        const isQuota = errMsg.includes('quota') || errMsg.includes('RESOURCE_EXHAUSTED') || errMsg.includes('Too Many Requests');
+                        if (isQuota) {
+                            console.warn(`[Gemini Tools] ${model} QUOTA EXHAUSTED — skipping all Gemini models`);
+                            quotaExhausted = true;
+                            break;
+                        }
+                        if (isRetryableError(e) && attempt < maxRetries) {
+                            const delay = backoffDelay(attempt);
+                            console.warn(`[Gemini Tools] ${model} attempt ${attempt + 1} failed (${e.message?.slice(0, 60)}). Retrying in ${delay}ms...`);
+                            await new Promise(r => setTimeout(r, delay));
+                        } else {
+                            console.warn(`[Gemini Tools] ${model} FAILED: ${e.message?.slice(0, 80)}`);
+                            break;
+                        }
+                    }
                 }
-            } catch (toolErr) {
-                console.error('[Gemini Tool Calling Error]:', toolErr);
-                const geminiResult = await callGeminiResilient([{ text: clinicalPrompt }], aiModel, GEMINI_MODEL_CHAIN[0]);
-                aiResponse = geminiResult.ok ? geminiResult.text : 'Error procesando la consulta con el agente.';
+            }
+
+            // All Gemini primary models failed → Try fallback model (second API key)
+            if (!toolCallSucceeded && aiModelFallback) {
+                console.warn('[Gemini Tools] Primary key exhausted. Trying fallback model (key #2)...');
+                try {
+                    const response = await aiModelFallback.generateContent({
+                        contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
+                        tools: [{ functionDeclarations: clinicalTools }]
+                    });
+                    const candidate = response.response?.candidates?.[0];
+                    const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+
+                    if (functionCalls.length > 0) {
+                        const fc = functionCalls[0].functionCall;
+                        console.log(`[Gemini Fallback] Executing ${fc.name} with args:`, fc.args);
+                        const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+                        const secondResponse = await aiModelFallback.generateContent({
+                            contents: [
+                                { role: 'user', parts: [{ text: clinicalPrompt }] },
+                                { role: 'model', parts: candidate.content.parts },
+                                { role: 'function', parts: [{ functionResponse: { name: fc.name, response: toolResult } }] }
+                            ]
+                        });
+                        aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada. Resultado: ${JSON.stringify(toolResult)}`;
+                        toolCallSucceeded = true;
+                    } else {
+                        aiResponse = response.response?.text() || '';
+                        if (aiResponse) toolCallSucceeded = true;
+                    }
+                } catch (fbErr) {
+                    console.warn('[Gemini Fallback] Also failed:', fbErr.message?.slice(0, 80));
+                }
+            }
+
+            // All Gemini models failed → Groq with function calling
+            if (!toolCallSucceeded) {
+                console.warn('[Gemini Tools] All models failed. Trying Groq with function calling...');
+                const groqResult = await callGroqWithTools(clinicalPrompt, clinicalTools, user_id);
+                if (groqResult.ok) {
+                    aiResponse = groqResult.text;
+                    toolCallSucceeded = true;
+                } else {
+                    // Final fallback: direct command parsing + Groq text
+                    console.warn('[Groq Tools] Failed. Trying direct command parsing...');
+                    const lowerMsg = message_text.toLowerCase();
+                    const directResult = await handleDirectCommand(lowerMsg, message_text, user_id);
+
+                    if (directResult) {
+                        aiResponse = directResult;
+                    } else {
+                        const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
+                        const groqTextResult = await callGroqFallback(textPrompt);
+                        aiResponse = groqTextResult.ok ? groqTextResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                    }
+                }
             }
         }
 
@@ -3152,11 +3471,12 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
 router.post('/telegram/process-text', async (req, res) => {
     const { message_text, chat_id, user_id } = req.body;
     const aiModel = req.app.locals.aiModel;
+    const aiModelFallback = req.app.locals.aiModelFallback;
     const protocol = req.protocol || 'https';
     const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
 
     try {
-        const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host);
+        const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host, aiModelFallback);
         res.json(result);
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
@@ -3188,6 +3508,7 @@ router.get('/telegram/pending-queue', async (req, res) => {
 router.post('/telegram/process-pending', async (req, res) => {
     const { item_id, user_id } = req.body;
     const aiModel = req.app.locals.aiModel;
+    const aiModelFallback = req.app.locals.aiModelFallback;
 
     // Find item from memory or Supabase
     let item = pendingQueueMemory.find(i => i.id === item_id);
@@ -3481,15 +3802,26 @@ async function autoSetupWebhook(req) {
 async function findProfessionalId() {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey) return null;
+    if (!supabaseUrl || !supabaseKey) {
+        console.warn('[findProfessionalId] Supabase not configured');
+        return null;
+    }
     try {
         const res = await fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
             headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
         });
-        if (!res.ok) return null;
+        if (!res.ok) {
+            console.error(`[findProfessionalId] Supabase error: ${res.status} ${await res.text()}`);
+            return null;
+        }
         const rows = await res.json();
-        return rows?.[0]?.id || null;
-    } catch {
+        if (!rows || rows.length === 0) {
+            console.warn('[findProfessionalId] No profiles found in DB');
+            return null;
+        }
+        return rows[0].id;
+    } catch (e) {
+        console.error('[findProfessionalId] Exception:', e.message);
         return null;
     }
 }
@@ -3507,12 +3839,17 @@ router.post('/telegram/webhook', async (req, res) => {
         if (!chat_id) return res.json({ ok: true });
 
         const aiModel = req.app.locals.aiModel;
+        const aiModelFallback = req.app.locals.aiModelFallback;
         const user_id = await findProfessionalId();
 
         const message_text = msg.text || msg.caption || '';
         const hasMedia = !!(msg.photo || msg.audio || msg.video || msg.document || msg.voice);
 
         console.log(`[Telegram Webhook] Update received. chatId: ${chat_id}, textLen: ${message_text.length}, hasMedia: ${hasMedia}, aiModel: ${aiModel ? 'SET' : 'NULL'}, user_id: ${user_id || 'none'}`);
+
+        if (!user_id) {
+            console.error('[Telegram Webhook] No professional ID found. Bot may not work correctly.');
+        }
 
         if (hasMedia) {
             let file_id = '';
@@ -3573,7 +3910,7 @@ router.post('/telegram/webhook', async (req, res) => {
             }
         } else if (message_text) {
             logDebug('Telegram Webhook', `Text message received, routing to processTextInternal`);
-            await processTextInternal(message_text, chat_id, user_id, aiModel);
+            await processTextInternal(message_text, chat_id, user_id, aiModel, undefined, undefined, aiModelFallback);
         }
 
         res.json({ ok: true });

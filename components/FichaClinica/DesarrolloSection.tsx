@@ -17,8 +17,8 @@ export const DesarrolloSection: React.FC<DesarrolloSectionProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
         <Activity size={18} className="text-blue-600" />
         Desarrollo e Hitos
       </h4>

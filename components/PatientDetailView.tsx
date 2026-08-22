@@ -211,7 +211,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                         onClick={() => onScheduleAppointment?.(patient)} 
                         className="bg-emerald-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
-                        <Calendar size={16} /> <span className="hidden xs:inline">Agendar</span> Cita
+                        <Calendar size={16} /> <span className="hidden sm:inline">Agendar</span> Cita
                     </button>
                     <button 
                         onClick={() => handleWizardOpen(patient.id)} 
@@ -281,10 +281,10 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </div>
 
             {/* Tab Navigation */}
-            <div className="flex gap-1 bg-white dark:bg-slate-900 rounded-xl p-1 mb-6 shadow-sm border border-slate-200 dark:border-slate-700 overflow-x-auto">
+            <div className="flex gap-1 bg-white dark:bg-slate-900 rounded-xl p-1 mb-6 shadow-sm border border-slate-200 dark:border-slate-700">
                 <button
                     onClick={() => setActiveTab('resumen')}
-                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'resumen'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -295,7 +295,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </button>
                 <button
                     onClick={() => setActiveTab('ficha')}
-                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'ficha'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -306,7 +306,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </button>
                 <button
                     onClick={() => setActiveTab('tests')}
-                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'tests'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -317,7 +317,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </button>
                 <button
                     onClick={() => setActiveTab('analisis')}
-                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'analisis'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
@@ -328,7 +328,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 </button>
                 <button
                     onClick={() => setActiveTab('historia')}
-                    className={`flex items-center gap-2 flex-shrink-0 py-2.5 px-3 sm:px-4 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-2 rounded-lg text-xs sm:text-sm font-bold transition-colors ${
                         activeTab === 'historia'
                             ? 'bg-blue-600 text-white shadow-sm'
                             : 'text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'

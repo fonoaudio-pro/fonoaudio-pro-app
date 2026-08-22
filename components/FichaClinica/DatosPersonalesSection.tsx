@@ -16,8 +16,8 @@ export const DatosPersonalesSection: React.FC<DatosPersonalesSectionProps> = ({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-5">
-      <h4 className="flex items-center gap-2 font-bold text-slate-700 mb-4">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
+      <h4 className="flex items-center gap-2 font-bold text-slate-700 dark:text-white mb-4">
         <User size={18} className="text-blue-600" />
         Datos Personales
       </h4>
@@ -63,7 +63,7 @@ const Field: React.FC<{
         <select
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400"
+          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 text-slate-900 dark:text-white"
         >
           <option value="">Seleccionar...</option>
           {options.map((opt, idx) => (
@@ -75,7 +75,7 @@ const Field: React.FC<{
           type={type}
           value={value}
           onChange={e => onChange(e.target.value)}
-          className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-blue-400"
+          className="w-full p-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-xl text-sm outline-none focus:border-blue-400 text-slate-900 dark:text-white"
         />
       )}
     </div>
