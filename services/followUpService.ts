@@ -365,7 +365,10 @@ export class FollowUpService {
         const { data: records, error: recErr } = await supabase
             .from('clinical_records')
             .select('patient_id, chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history');
-        if (recErr) throw recErr;
+        if (recErr) {
+            console.error('[FollowUpService] getPatientsWithMissingData clinical_records query failed:', recErr);
+            return [];
+        }
 
         const recordByPatient: Record<string, any> = {};
         (records || []).forEach((r: any) => { recordByPatient[r.patient_id] = r; });

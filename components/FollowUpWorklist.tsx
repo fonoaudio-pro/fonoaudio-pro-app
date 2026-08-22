@@ -49,10 +49,26 @@ const FollowUpWorklist: React.FC<FollowUpWorklistProps> = ({ onPatientSelect }) 
     setIsLoading(true);
     setError(null);
     try {
-      const [alertData, missingData] = await Promise.all([
+      // Load both sources independently so one failing doesn't break the other
+      let alertData: Awaited<ReturnType<typeof followUpService.getPatientsWithAlerts>> = [];
+      let missingData: Awaited<ReturnType<typeof followUpService.getPatientsWithMissingData>> = [];
+
+      const [alertRes, missingRes] = await Promise.allSettled([
         followUpService.getPatientsWithAlerts(),
         followUpService.getPatientsWithMissingData(),
       ]);
+
+      if (alertRes.status === 'fulfilled') alertData = alertRes.value;
+      else console.error('[FollowUpWorklist] getPatientsWithAlerts failed:', alertRes.reason);
+
+      if (missingRes.status === 'fulfilled') missingData = missingRes.value;
+      else console.error('[FollowUpWorklist] getPatientsWithMissingData failed:', missingRes.reason);
+
+      // If BOTH failed, show error
+      if (alertRes.status === 'rejected' && missingRes.status === 'rejected') {
+        const msg = (missingRes.reason?.message || alertRes.reason?.message || 'Error desconocido');
+        throw new Error(msg);
+      }
 
       // Merge by patient: combine alerts from both sources, dedupe by reasonHash
       const byPatient: Record<string, WorklistItem> = {};
@@ -63,7 +79,7 @@ const FollowUpWorklist: React.FC<FollowUpWorklistProps> = ({ onPatientSelect }) 
           const seen = new Set(existing.alerts.map(a => a.reasonHash));
           entry.alerts.forEach(a => { if (!seen.has(a.reasonHash)) { existing.alerts.push(a); seen.add(a.reasonHash); } });
           if (entry.clinicalSignals) {
-            const seenC = new Set(existing.clinicalSignals.map(a => a.reasonHash));
+            const seenC = new Set((existing.clinicalSignals || []).map(a => a.reasonHash));
             entry.clinicalSignals.forEach(a => { if (!seenC.has(a.reasonHash)) existing.clinicalSignals!.push(a); });
           }
         } else {
@@ -77,7 +93,7 @@ const FollowUpWorklist: React.FC<FollowUpWorklistProps> = ({ onPatientSelect }) 
       setItems(Object.values(byPatient));
     } catch (err: any) {
       console.error('Error loading follow-up worklist:', err);
-      setError('No se pudieron cargar las alertas de seguimiento.');
+      setError(`No se pudieron cargar las alertas de seguimiento. Detalle: ${err?.message || err}`);
     } finally {
       setIsLoading(false);
     }
