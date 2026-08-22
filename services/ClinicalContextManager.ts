@@ -67,7 +67,9 @@ class ClinicalContextManager {
                     .maybeSingle();
 
                 if (crData) {
-                    const affected = crData.affected_areas?.filter((a: any) => a.affected).map((a: any) => a.name) || [];
+                    const affected = (Array.isArray(crData.affected_areas) ? crData.affected_areas : [])
+                        .filter((a: any) => a && a.affected)
+                        .map((a: any) => a.name || a.area) || [];
                     this.context.activePatientSummary = {
                         ...this.context.activePatientSummary,
                         chiefComplaint: crData.chief_complaint || undefined,

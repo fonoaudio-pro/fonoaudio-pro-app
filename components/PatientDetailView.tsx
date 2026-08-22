@@ -117,9 +117,9 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                 const record = await ClinicalRecordService.getByPatientId(patient.id);
                 if (record) {
                     setClinicalRecord(record);
-                    if (record.affected_areas) {
+                    if (record.affected_areas && Array.isArray(record.affected_areas)) {
                         const areas = record.affected_areas
-                            .filter(a => a.affected)
+                            .filter(a => a && a.affected)
                             .map(a => a.area as AffectedAreaKey);
                         setAffectedAreas(areas);
                     }
@@ -402,11 +402,11 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                                                         <p className="text-sm text-slate-700 dark:text-slate-200">{clinicalRecord.primary_diagnosis_name}</p>
                                                     </div>
                                                 )}
-                                                {clinicalRecord.affected_areas?.filter((a: any) => a.affected).length > 0 && (
+                                                {Array.isArray(clinicalRecord.affected_areas) && clinicalRecord.affected_areas.filter((a: any) => a && a.affected).length > 0 && (
                                                     <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-3">
                                                         <p className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Áreas Afectadas</p>
                                                         <div className="flex flex-wrap gap-1 mt-1">
-                                                            {clinicalRecord.affected_areas.filter((a: any) => a.affected).map((a: any, i: number) => (
+                                                            {clinicalRecord.affected_areas.filter((a: any) => a && a.affected).map((a: any, i: number) => (
                                                                 <span key={i} className="text-[10px] font-bold px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-full">{a.area}</span>
                                                             ))}
                                                         </div>
