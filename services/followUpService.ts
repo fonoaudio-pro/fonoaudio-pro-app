@@ -343,39 +343,80 @@ export class FollowUpService {
         return cooldown.toISOString();
     }
 
-    async getPatientsWithAlerts(): Promise<{ patientId: string; patientName: string; alerts: FollowUpAlert[]; clinicalSignals?: FollowUpAlert[] }[]> {
+    /**
+     * Detects patients whose clinical record (ficha) is missing required fields.
+     * Returns a worklist entry per patient with one FOLLOW_UP_NEEDED alert per missing field,
+     * so the "Seguimiento" section surfaces incomplete fichas like a real secretary would.
+     */
+    async getPatientsWithMissingData(): Promise<{ patientId: string; patientName: string; alerts: FollowUpAlert[] }[]> {
         const supabase = await this._getSupabase();
-        
-        // 1. Get all patients
-        const { data: patients, error } = await supabase.from('patients').select('id, name');
-        if (error) throw error;
-        if (!patients) return [];
 
-        const results: { patientId: string; patientName: string; alerts: FollowUpAlert[]; clinicalSignals?: FollowUpAlert[] }[] = [];
-        
-        // 2. Check health for each patient in parallel (with a limit to avoid overwhelming)
-        const batchSize = 10;
-        for (let i = 0; i < patients.length; i += batchSize) {
-            const batch = patients.slice(i, i + batchSize);
-            const batchResults = await Promise.all(batch.map(async (p) => {
-                try {
-                    const health = await this.getFollowUpHealth(p.id);
-                    const hasAnyAlerts = (health.alerts && health.alerts.length > 0) || (health.clinicalSignals && health.clinicalSignals.length > 0);
-                    if (hasAnyAlerts) {
-                        return { 
-                            patientId: p.id, 
-                            patientName: p.name, 
-                            alerts: health.alerts || [],
-                            clinicalSignals: health.clinicalSignals 
-                        };
-                    }
-                } catch (e) {
-                    console.error(`Error fetching health for patient ${p.id}:`, e);
+        // 1. Fetch all patients (id + name)
+        const { data: patients, error: patErr } = await supabase
+            .from('patients')
+            .select('id, name');
+        if (patErr) throw patErr;
+        if (!patients || patients.length === 0) return [];
+
+        const patientNameById: Record<string, string> = {};
+        patients.forEach((p: any) => { patientNameById[p.id] = p.name; });
+
+        // 2. Fetch all clinical_records in one shot (efficient bulk query)
+        const { data: records, error: recErr } = await supabase
+            .from('clinical_records')
+            .select('patient_id, chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history');
+        if (recErr) throw recErr;
+
+        const recordByPatient: Record<string, any> = {};
+        (records || []).forEach((r: any) => { recordByPatient[r.patient_id] = r; });
+
+        const results: { patientId: string; patientName: string; alerts: FollowUpAlert[] }[] = [];
+
+        for (const p of patients) {
+            const cr = recordByPatient[p.id];
+            const missing: string[] = [];
+
+            if (!cr) {
+                // No ficha at all — highest priority gap
+                missing.push('Ficha clínica sin crear');
+            } else {
+                if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') {
+                    missing.push('Motivo de consulta (chief_complaint)');
                 }
-                return null;
-            }));
+                if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') {
+                    missing.push('Diagnóstico principal');
+                }
+                if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter((a: any) => a && a.affected).length === 0) {
+                    missing.push('Áreas afectadas');
+                }
+                if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) {
+                    missing.push('Historia personal');
+                }
+                if (!cr.family_history || Object.keys(cr.family_history).length === 0) {
+                    missing.push('Historia familiar');
+                }
+                if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) {
+                    missing.push('Historia médica');
+                }
+                if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) {
+                    missing.push('Historia del desarrollo');
+                }
+            }
 
-            results.push(...batchResults.filter((r): r is { patientId: string; patientName: string; alerts: FollowUpAlert[]; clinicalSignals?: FollowUpAlert[] } => r !== null));
+            if (missing.length > 0) {
+                const alerts: FollowUpAlert[] = missing.map((field) => {
+                    const identifier = `dato_faltante_${field.replace(/ /g, '_')}`;
+                    return {
+                        type: 'FOLLOW_UP_NEEDED' as FollowUpType,
+                        severity: 'medium' as FollowUpSeverity,
+                        reason: `Ficha incompleta — falta: ${field}`,
+                        suggestedAction: 'Completar el campo en la Ficha Clínica antes de aprobar la historia.',
+                        reasonHash: this._generateReasonHash('FOLLOW_UP_NEEDED', identifier),
+                        detectedAt: new Date().toISOString(),
+                    };
+                });
+                results.push({ patientId: p.id, patientName: p.name, alerts });
+            }
         }
 
         return results;

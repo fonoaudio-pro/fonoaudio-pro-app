@@ -49,8 +49,32 @@ const FollowUpWorklist: React.FC<FollowUpWorklistProps> = ({ onPatientSelect }) 
     setIsLoading(true);
     setError(null);
     try {
-      const data = await followUpService.getPatientsWithAlerts();
-      setItems(data);
+      const [alertData, missingData] = await Promise.all([
+        followUpService.getPatientsWithAlerts(),
+        followUpService.getPatientsWithMissingData(),
+      ]);
+
+      // Merge by patient: combine alerts from both sources, dedupe by reasonHash
+      const byPatient: Record<string, WorklistItem> = {};
+
+      const mergeInto = (entry: WorklistItem) => {
+        const existing = byPatient[entry.patientId];
+        if (existing) {
+          const seen = new Set(existing.alerts.map(a => a.reasonHash));
+          entry.alerts.forEach(a => { if (!seen.has(a.reasonHash)) { existing.alerts.push(a); seen.add(a.reasonHash); } });
+          if (entry.clinicalSignals) {
+            const seenC = new Set(existing.clinicalSignals.map(a => a.reasonHash));
+            entry.clinicalSignals.forEach(a => { if (!seenC.has(a.reasonHash)) existing.clinicalSignals!.push(a); });
+          }
+        } else {
+          byPatient[entry.patientId] = { ...entry, clinicalSignals: entry.clinicalSignals || [] };
+        }
+      };
+
+      alertData.forEach(mergeInto);
+      missingData.forEach(mergeInto);
+
+      setItems(Object.values(byPatient));
     } catch (err: any) {
       console.error('Error loading follow-up worklist:', err);
       setError('No se pudieron cargar las alertas de seguimiento.');
