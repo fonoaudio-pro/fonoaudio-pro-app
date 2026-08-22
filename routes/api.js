@@ -2354,6 +2354,8 @@ const clinicalTools = [
     },
 ];
 
+function newId() { return crypto.randomUUID(); }
+
 async function executeToolCall(functionName, args, user_id) {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -2393,7 +2395,7 @@ async function executeToolCall(functionName, args, user_id) {
                 const num = String(val).match(/\d+/);
                 return num ? parseInt(num[0], 10) : null;
             };
-            const patientId = `pat_${Date.now()}`;
+            const patientId = newId();
             const newPatient = {
                 id: patientId,
                 name: args.name,
@@ -2458,7 +2460,7 @@ async function executeToolCall(functionName, args, user_id) {
 
             const now = new Date().toISOString().split('T')[0];
             const newHistoryItem = {
-                id: `evol_${Date.now()}`,
+                id: newId(),
                 patientId: patient.id,
                 date: now,
                 status: 'completed',
@@ -2485,7 +2487,7 @@ async function executeToolCall(functionName, args, user_id) {
             const { patient_id, summary, observations, next_action } = args;
             const now = new Date().toISOString();
             const session = {
-                id: `sess_${Date.now()}`,
+                id: newId(),
                 patient_id,
                 professional_id: user_id,
                 date: now,
@@ -2510,7 +2512,7 @@ async function executeToolCall(functionName, args, user_id) {
             const draft = `# INFORME CLINICO - ${patient.name}\nArea: ${focus_area}\nDiagnostico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Analisis\nSe evalua area de ${focus_area} evidenciando desempeno clinico acorde al plan terapeutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente FonoAudio Pro AI.`;
 
             const reportEntry = {
-                id: `rep_${Date.now()}`,
+                id: newId(),
                 date: new Date().toISOString().split('T')[0],
                 title: `Informe (${focus_area}) - ${patient.name}`,
                 content: draft,
@@ -2559,7 +2561,7 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'create_appointment') {
             const { patient_name, date, time, type } = args;
             const appointment = {
-                id: `apt_${Date.now()}`,
+                id: newId(),
                 patient_name,
                 date,
                 time,
@@ -2602,7 +2604,7 @@ async function executeToolCall(functionName, args, user_id) {
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
             const evaluation = {
-                id: `eval_${Date.now()}`,
+                id: newId(),
                 test_name,
                 result,
                 area: area || 'general',
@@ -2683,7 +2685,7 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'add_knowledge') {
             const { title, content, category } = args;
             const entry = {
-                id: `kb_${Date.now()}`,
+                id: newId(),
                 title,
                 content,
                 category: category || 'general',
