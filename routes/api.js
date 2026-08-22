@@ -305,7 +305,10 @@ async function callGroqFallback(promptText) {
             },
             body: JSON.stringify({
                 model: 'qwen/qwen3.6-27b',
-                messages: [{ role: 'user', content: promptText }],
+                messages: [
+                    { role: 'system', content: 'Sos FonoAudio, asistente clinico de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. NO muestres tu proceso de razonamiento. Respondé directamente con la respuesta final. Sé conciso.' },
+                    { role: 'user', content: promptText }
+                ],
                 max_tokens: 2048,
                 temperature: 0.3,
             }),
@@ -317,7 +320,10 @@ async function callGroqFallback(promptText) {
         }
 
         const data = await resp.json();
-        const text = data.choices?.[0]?.message?.content || '';
+        let text = data.choices?.[0]?.message?.content || '';
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+        text = text.replace(/^Here's a thinking process:.*?\n\n[\s\S]*?(?=\n\n|$)/gi, '').trim();
         if (text) {
             console.log('[Groq] Success with qwen/qwen3.6-27b');
             return { ok: true, text, model: 'groq/qwen3.6-27b' };
