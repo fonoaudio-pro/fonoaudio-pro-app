@@ -234,10 +234,13 @@ async function hasPendingFile(chat_id) {
 async function fetchPatientsForUser(userId) {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey || !userId) return [];
+    if (!supabaseUrl || !supabaseKey) return [];
+    
     try {
-        const res = await fetch(`${supabaseUrl}/rest/v1/patients?professional_id=eq.${userId}&select=id,name,diagnosis,age,phone,documents&limit=50`, {
-            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+        // If userId is provided, filter by professional_id
+        const filter = userId ? `?professional_id=eq.${userId}` : '?limit=50';
+        const res = await fetch(`${supabaseUrl}/rest/v1/patients${filter}&select=id,name,diagnosis,age,phone,documents&limit=50`, {
+            headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
         });
         if (!res.ok) return [];
         return await res.json();
@@ -2465,29 +2468,36 @@ async function executeToolCall(functionName, args, user_id) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) return { status: 'error', message: 'Supabase not configured' };
 
+    // Resolve user_id if not provided
+    let resolvedUserId = user_id;
+    if (!resolvedUserId) {
+        resolvedUserId = await findProfessionalId();
+    }
+
     const headers = {
-        apikey: supabaseKey,
+        apikey: process.env.VITE_SUPABASE_ANON_KEY,
         Authorization: `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json',
         Prefer: 'return=representation',
     };
 
+    const actualUserId = resolvedUserId || null;
     try {
         // ─── PATIENT TOOLS ───
         if (functionName === 'search_patient') {
             const queryName = args.name.toLowerCase();
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const matches = patients.filter(p => p.name.toLowerCase().includes(queryName) || (p.diagnosis && p.diagnosis.toLowerCase().includes(queryName)));
             return { status: 'ok', count: matches.length, patients: matches.map(p => ({ id: p.id, name: p.name, age: p.age, diagnosis: p.diagnosis, phone: p.phone })) };
         }
 
         if (functionName === 'list_all_patients') {
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             return { status: 'ok', count: patients.length, patients: patients.map(p => ({ id: p.id, name: p.name, age: p.age, diagnosis: p.diagnosis })) };
         }
 
         if (functionName === 'get_patient_info') {
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === args.patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
             return { status: 'ok', patient };
@@ -2513,12 +2523,12 @@ async function executeToolCall(functionName, args, user_id) {
                 evaluations: [],
                 documents: [],
                 treatmentPlan: {},
-                professional_id: user_id,
-                owner_id: user_id,
+                professional_id: actualUserId,
+                owner_id: actualUserId,
                 consultorio: args.consultorio || null,
                 created_at: new Date().toISOString(),
             };
-            console.log(`[executeToolCall] create_patient: name=${args.name}, age=${newPatient.age}, professional_id=${user_id}`);
+            console.log(`[executeToolCall] create_patient: name=${args.name}, age=${newPatient.age}, professional_id=${actualUserId}`);
             const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
                 method: 'POST', headers, body: JSON.stringify(newPatient),
             });
@@ -2544,8 +2554,8 @@ async function executeToolCall(functionName, args, user_id) {
                         primary_diagnosis_name: args.diagnosis || null,
                         primary_diagnosis_code: null,
                         secondary_diagnosis_codes: [],
-                        created_by: user_id,
-                        updated_by: user_id,
+                        created_by: actualUserId,
+                        updated_by: actualUserId,
                         created_at: new Date().toISOString(),
                         updated_at: new Date().toISOString(),
                     };
@@ -2589,7 +2599,7 @@ async function executeToolCall(functionName, args, user_id) {
         // ─── CLINICAL NOTES ───
         if (functionName === 'add_clinical_evolution') {
             const { patient_id, clinical_text } = args;
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
@@ -2624,7 +2634,7 @@ async function executeToolCall(functionName, args, user_id) {
             const session = {
                 id: newId(),
                 patient_id,
-                professional_id: user_id,
+                professional_id: actualUserId,
                 date: now,
                 summary,
                 observations: observations || '',
@@ -2640,7 +2650,7 @@ async function executeToolCall(functionName, args, user_id) {
         // ─── REPORTS ───
         if (functionName === 'generate_report_draft') {
             const { patient_id, focus_area } = args;
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
@@ -2664,7 +2674,7 @@ async function executeToolCall(functionName, args, user_id) {
         }
 
         if (functionName === 'list_reports') {
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === args.patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
             return { status: 'ok', count: (patient.reports || []).length, reports: patient.reports || [] };
@@ -2702,7 +2712,7 @@ async function executeToolCall(functionName, args, user_id) {
                 time,
                 type: type || 'consulta',
                 status: 'programado',
-                professional_id: user_id,
+                professional_id: actualUserId,
             };
             const res = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
                 method: 'POST', headers, body: JSON.stringify(appointment),
@@ -2734,7 +2744,7 @@ async function executeToolCall(functionName, args, user_id) {
         // ─── EVALUATIONS ───
         if (functionName === 'add_evaluation') {
             const { patient_id, test_name, result, area } = args;
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
@@ -2758,7 +2768,7 @@ async function executeToolCall(functionName, args, user_id) {
         // ─── TREATMENT PLAN ───
         if (functionName === 'update_treatment_plan') {
             const { patient_id, plan_text, action, section } = args;
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
@@ -2854,7 +2864,7 @@ async function executeToolCall(functionName, args, user_id) {
 
         // ─── STATISTICS ───
         if (functionName === 'get_statistics') {
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const today = new Date().toISOString().split('T')[0];
             const aptRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}`, { method: 'GET', headers });
             const todayApts = aptRes.ok ? await aptRes.json() : [];
@@ -2874,7 +2884,7 @@ async function executeToolCall(functionName, args, user_id) {
         }
 
         if (functionName === 'check_missing_data') {
-            const patients = await fetchPatientsForUser(user_id);
+            const patients = await fetchPatientsForUser(actualUserId);
             const missing = patients.filter(p => !p.phone || !p.diagnosis || !p.age || !p.email);
             return {
                 status: 'ok',
@@ -2933,7 +2943,14 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
     if (!supabaseUrl || !supabaseKey) return null;
 
-    const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
+    // Resolve user_id if not provided
+    let resolvedUserId = user_id;
+    if (!resolvedUserId) {
+        resolvedUserId = await findProfessionalId();
+    }
+    const resolvedUserIdFinal = resolvedUserId || null;
+
+    const headers = { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' };
 
     // CREATE PATIENT: "creá un paciente", "crear paciente", "nuevo paciente"
     if (lowerMsg.match(/(cre[aá]|nuevo|alta)\s+(un\s+)?paciente/)) {
@@ -2956,7 +2973,7 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
                 id: patientId, name, age, diagnosis, reason,
                 phone: null, email: null, notes: reason || null,
                 history: [], reports: [], evaluations: [], documents: [],
-                treatmentPlan: {}, professional_id: user_id, owner_id: user_id,
+                treatmentPlan: {}, professional_id: resolvedUserIdFinal, owner_id: resolvedUserIdFinal,
                 created_at: new Date().toISOString(),
             };
             const res = await fetch(`${supabaseUrl}/rest/v1/patients`, {
@@ -2973,7 +2990,7 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
                             medical_history: {}, developmental_history: {},
                             clinical_observations: '', affected_areas: {},
                             primary_diagnosis_name: diagnosis || null, primary_diagnosis_code: null,
-                            secondary_diagnosis_codes: [], created_by: user_id, updated_by: user_id,
+                            secondary_diagnosis_codes: [], created_by: resolvedUserIdFinal, updated_by: resolvedUserIdFinal,
                             created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
                         }),
                     });
@@ -3799,6 +3816,7 @@ async function autoSetupWebhook(req) {
 }
 
 // Find professional/clinician ID from Supabase
+// Fallback chain: (1) profiles table, (2) auth.users table, (3) environment override, (4) patients table owner_id
 async function findProfessionalId() {
     const supabaseUrl = process.env.VITE_SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
@@ -3807,19 +3825,63 @@ async function findProfessionalId() {
         return null;
     }
     try {
+        // (1) Try profiles table first
         const res = await fetch(`${supabaseUrl}/rest/v1/profiles?select=id&limit=1`, {
-            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+            headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
         });
-        if (!res.ok) {
-            console.error(`[findProfessionalId] Supabase error: ${res.status} ${await res.text()}`);
-            return null;
+        if (res.ok) {
+            const rows = await res.json();
+            if (rows && rows.length > 0) {
+                return rows[0].id;
+            }
         }
-        const rows = await res.json();
-        if (!rows || rows.length === 0) {
-            console.warn('[findProfessionalId] No profiles found in DB');
-            return null;
+        
+        // (2) Fallback: try auth.users via /auth/v1/admin/users
+        try {
+            const authRes = await fetch(`${supabaseUrl}/auth/v1/admin/users?per_page=1`, {
+                headers: {
+                    apikey: process.env.VITE_SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${supabaseKey}`
+                }
+            });
+            if (authRes.ok) {
+                const authData = await authRes.json();
+                const users = Array.isArray(authData) ? authData : authData.users || [];
+                if (users.length > 0) {
+                    return users[0].id;
+                }
+            }
+        } catch (authErr) {
+            console.warn('[findProfessionalId] Auth fallback failed:', authErr.message);
         }
-        return rows[0].id;
+        
+        // (3) Fallback: environment variable override (for Telegram bot scenarios)
+        if (process.env.DEFAULT_PROFESSIONAL_ID) {
+            console.log('[findProfessionalId] Using DEFAULT_PROFESSIONAL_ID env var');
+            return process.env.DEFAULT_PROFESSIONAL_ID;
+        }
+        
+        // (4) Last resort: find any patient's owner_id
+        try {
+            const patientRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=owner_id&limit=1`, {
+                headers: {
+                    apikey: process.env.VITE_SUPABASE_ANON_KEY,
+                    Authorization: `Bearer ${supabaseKey}`
+                }
+            });
+            if (patientRes.ok) {
+                const patients = await patientRes.json();
+                if (patients && patients.length > 0 && patients[0].owner_id) {
+                    console.log('[findProfessionalId] Using owner_id from patients table as fallback');
+                    return patients[0].owner_id;
+                }
+            }
+        } catch (pErr) {
+            console.warn('[findProfessionalId] Patient fallback failed:', pErr.message);
+        }
+        
+        console.warn('[findProfessionalId] No professional ID found after all fallbacks');
+        return null;
     } catch (e) {
         console.error('[findProfessionalId] Exception:', e.message);
         return null;
