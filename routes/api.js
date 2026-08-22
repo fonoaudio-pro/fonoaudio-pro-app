@@ -292,7 +292,7 @@ async function callGroqFallback(promptText) {
     }
 
     try {
-        console.log('[Groq] Trying llama3-70b-8192 as ultimate fallback...');
+        console.log('[Groq] Trying qwen/qwen3.6-27b as ultimate fallback...');
         const resp = await fetch(GROQ_API_URL, {
             method: 'POST',
             headers: {
@@ -300,7 +300,7 @@ async function callGroqFallback(promptText) {
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: 'llama3-70b-8192',
+                model: 'qwen/qwen3.6-27b',
                 messages: [{ role: 'user', content: promptText }],
                 max_tokens: 2048,
                 temperature: 0.3,
@@ -315,8 +315,8 @@ async function callGroqFallback(promptText) {
         const data = await resp.json();
         const text = data.choices?.[0]?.message?.content || '';
         if (text) {
-            console.log('[Groq] Success with llama3-70b-8192');
-            return { ok: true, text, model: 'groq/llama3-70b-8192' };
+            console.log('[Groq] Success with qwen/qwen3.6-27b');
+            return { ok: true, text, model: 'groq/qwen3.6-27b' };
         }
         return { ok: false, error: new Error('Empty response from Groq') };
     } catch (e) {
