@@ -48,7 +48,7 @@ export const PublicBookingPortal: React.FC = () => {
 
     const [confirmation, setConfirmation] = useState<BookingConfirmation | null>(null);
 
-    const selectedTypeInfo = CONSULTATION_TYPES.find(t => t.id === selectedType);
+    const selectedTypeInfo = (Array.isArray(CONSULTATION_TYPES) ? CONSULTATION_TYPES : []).find(t => t.id === selectedType);
 
     useEffect(() => {
         if (selectedDate && selectedType) {
