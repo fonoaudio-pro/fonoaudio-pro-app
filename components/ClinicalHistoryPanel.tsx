@@ -345,12 +345,12 @@ export default function ClinicalHistoryPanel({
           <select
             value={selectedTemplate?.id || ''}
             onChange={e => {
-              const t = templates.find(t => t.id === e.target.value);
+              const t = (Array.isArray(templates) ? templates : []).find(t => t.id === e.target.value);
               if (t) setSelectedTemplate(t);
             }}
             className="text-xs border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 bg-white dark:bg-slate-900"
           >
-            {templates.map(t => (
+            {(Array.isArray(templates) ? templates : []).map(t => (
               <option key={t.id} value={t.id}>{t.name} (v{t.version})</option>
             ))}
           </select>

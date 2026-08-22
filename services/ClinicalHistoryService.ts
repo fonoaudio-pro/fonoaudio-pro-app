@@ -15,7 +15,7 @@ export const ClinicalHistoryService = {
       .order('name');
 
     if (error) throw error;
-    return data || [];
+    return Array.isArray(data) ? data : [];
   },
 
   async getTemplateById(id: string): Promise<ClinicalHistoryTemplate | null> {
