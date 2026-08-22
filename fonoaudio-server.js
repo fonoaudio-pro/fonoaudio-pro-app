@@ -44,21 +44,30 @@ app.use(cors());
 
 // Initialize Gemini (safe — won't crash server if API key is missing)
 let aiModel = null;
+let aiModelFallback = null;
 try {
     const apiKey = process.env.GOOGLE_API_KEY;
     if (apiKey) {
         const genAI = new GoogleGenerativeAI(apiKey);
         aiModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        console.log('[Gemini] Model initialized successfully');
+        console.log('[Gemini] Model initialized successfully (key: ...' + apiKey.slice(-4) + ')');
     } else {
         console.warn('[Gemini] GOOGLE_API_KEY not set — AI features will use fallbacks');
+    }
+    // Fallback model with second API key
+    const fallbackKey = process.env.GOOGLE_API_KEY_2 || process.env.GOOGLE_API_KEY_FALLBACK;
+    if (fallbackKey && fallbackKey !== apiKey) {
+        const genAIFallback = new GoogleGenerativeAI(fallbackKey);
+        aiModelFallback = genAIFallback.getGenerativeModel({ model: "gemini-2.5-flash" });
+        console.log('[Gemini] Fallback model initialized (key: ...' + fallbackKey.slice(-4) + ')');
     }
 } catch (e) {
     console.error('[Gemini] Failed to initialize:', e.message);
 }
 
 const PORT = process.env.PORT || 3001;
-app.locals.aiModel = aiModel; // Share model with routes (may be null)
+app.locals.aiModel = aiModel;
+app.locals.aiModelFallback = aiModelFallback;
 
 // ─── Pexels Image Search Proxy ───
 const PEXELS_API_KEY = process.env.PEXELS_API_KEY || '';

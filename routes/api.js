@@ -335,6 +335,98 @@ async function callGroqFallback(promptText) {
     }
 }
 
+// Groq with function calling (OpenAI-compatible)
+async function callGroqWithTools(systemPrompt, tools, user_id) {
+    const GROQ_API_KEY = process.env.GROQ_API_KEY;
+    if (!GROQ_API_KEY) return { ok: false, error: new Error('GROQ_API_KEY not set') };
+
+    // Convert clinical tools to OpenAI format
+    const groqTools = tools.map(t => ({
+        type: 'function',
+        function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters || { type: 'object', properties: {} },
+        }
+    }));
+
+    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta.';
+
+    try {
+        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+            body: JSON.stringify({
+                model: 'qwen/qwen3.6-27b',
+                messages: [
+                    { role: 'system', content: systemMsg },
+                    { role: 'user', content: systemPrompt }
+                ],
+                tools: groqTools,
+                tool_choice: 'auto',
+                max_tokens: 4096,
+                temperature: 0.3,
+            }),
+        });
+
+        if (!resp.ok) {
+            const errData = await resp.json().catch(() => ({}));
+            return { ok: false, error: new Error(errData.error?.message || `Groq API error: ${resp.status}`) };
+        }
+
+        const data = await resp.json();
+        const choice = data.choices?.[0];
+        const msg = choice?.message;
+
+        // Check for tool calls
+        if (msg?.tool_calls?.length > 0) {
+            const tc = msg.tool_calls[0];
+            const fnName = tc.function.name;
+            let fnArgs = {};
+            try { fnArgs = JSON.parse(tc.function.arguments); } catch { fnArgs = {}; }
+            console.log(`[Groq Tool Call] Executing ${fnName} with args:`, fnArgs);
+
+            const toolResult = await executeToolCall(fnName, fnArgs, user_id);
+
+            // Send result back to Groq for natural language response
+            const secondResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
+                body: JSON.stringify({
+                    model: 'qwen/qwen3.6-27b',
+                    messages: [
+                        { role: 'system', content: systemMsg },
+                        { role: 'user', content: systemPrompt },
+                        { role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: fnName, arguments: tc.function.arguments } }] },
+                        { role: 'tool', content: JSON.stringify(toolResult) }
+                    ],
+                    max_tokens: 4096,
+                    temperature: 0.3,
+                }),
+            });
+
+            if (secondResp.ok) {
+                const secondData = await secondResp.json();
+                let text = secondData.choices?.[0]?.message?.content || `Acción ${fnName} ejecutada correctamente.`;
+                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+                text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+                return { ok: true, text, model: 'groq/' + fnName };
+            }
+            return { ok: true, text: `Acción *${fnName}* ejecutada exitosamente.`, model: 'groq/' + fnName };
+        }
+
+        // No tool calls — text response
+        let text = msg?.content || '';
+        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+        if (text) return { ok: true, text, model: 'groq/qwen3.6-27b-text' };
+        return { ok: false, error: new Error('Empty response from Groq') };
+    } catch (e) {
+        console.error('[Groq Tools] Failed:', e.message?.slice(0, 100));
+        return { ok: false, error: e };
+    }
+}
+
 // Extract text content from multimodal parts for Groq (text-only fallback)
 function extractTextFromParts(parts) {
     const textPart = parts.find(p => p.text);
@@ -2923,7 +3015,7 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
 }
 
 // --- TELEGRAM TEXT AI PROCESSING INTERNAL ---
-async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app') {
+async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app', aiModelFallback = null) {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
     // ─── STEP 0: Check voice mode commands ───
@@ -3289,22 +3381,59 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
                 }
             }
 
-            // All Gemini models failed → Try to parse command directly, then Groq fallback
+            // All Gemini primary models failed → Try fallback model (second API key)
+            if (!toolCallSucceeded && aiModelFallback) {
+                console.warn('[Gemini Tools] Primary key exhausted. Trying fallback model (key #2)...');
+                try {
+                    const response = await aiModelFallback.generateContent({
+                        contents: [{ role: 'user', parts: [{ text: clinicalPrompt }] }],
+                        tools: [{ functionDeclarations: clinicalTools }]
+                    });
+                    const candidate = response.response?.candidates?.[0];
+                    const functionCalls = candidate?.content?.parts?.filter(p => p.functionCall) || [];
+
+                    if (functionCalls.length > 0) {
+                        const fc = functionCalls[0].functionCall;
+                        console.log(`[Gemini Fallback] Executing ${fc.name} with args:`, fc.args);
+                        const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+                        const secondResponse = await aiModelFallback.generateContent({
+                            contents: [
+                                { role: 'user', parts: [{ text: clinicalPrompt }] },
+                                { role: 'model', parts: candidate.content.parts },
+                                { role: 'function', parts: [{ functionResponse: { name: fc.name, response: toolResult } }] }
+                            ]
+                        });
+                        aiResponse = secondResponse.response?.text() || `Acción ${fc.name} ejecutada. Resultado: ${JSON.stringify(toolResult)}`;
+                        toolCallSucceeded = true;
+                    } else {
+                        aiResponse = response.response?.text() || '';
+                        if (aiResponse) toolCallSucceeded = true;
+                    }
+                } catch (fbErr) {
+                    console.warn('[Gemini Fallback] Also failed:', fbErr.message?.slice(0, 80));
+                }
+            }
+
+            // All Gemini models failed → Groq with function calling
             if (!toolCallSucceeded) {
-                console.warn('[Gemini Tools] All models failed. Trying direct command parsing...');
-
-                // Direct command parsing for simple CRUD when AI is down
-                const lowerMsg = message_text.toLowerCase();
-                const directResult = await handleDirectCommand(lowerMsg, message_text, user_id);
-
-                if (directResult) {
-                    aiResponse = directResult;
-                    console.log('[Direct Command] Executed successfully');
+                console.warn('[Gemini Tools] All models failed. Trying Groq with function calling...');
+                const groqResult = await callGroqWithTools(clinicalPrompt, clinicalTools, user_id);
+                if (groqResult.ok) {
+                    aiResponse = groqResult.text;
+                    toolCallSucceeded = true;
                 } else {
-                    console.warn('[Direct Command] No direct match. Trying Groq fallback...');
-                    const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
-                    const groqResult = await callGroqFallback(textPrompt);
-                    aiResponse = groqResult.ok ? groqResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                    // Final fallback: direct command parsing + Groq text
+                    console.warn('[Groq Tools] Failed. Trying direct command parsing...');
+                    const lowerMsg = message_text.toLowerCase();
+                    const directResult = await handleDirectCommand(lowerMsg, message_text, user_id);
+
+                    if (directResult) {
+                        aiResponse = directResult;
+                    } else {
+                        const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
+                        const groqTextResult = await callGroqFallback(textPrompt);
+                        aiResponse = groqTextResult.ok ? groqTextResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                    }
                 }
             }
         }
@@ -3342,11 +3471,12 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
 router.post('/telegram/process-text', async (req, res) => {
     const { message_text, chat_id, user_id } = req.body;
     const aiModel = req.app.locals.aiModel;
+    const aiModelFallback = req.app.locals.aiModelFallback;
     const protocol = req.protocol || 'https';
     const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
 
     try {
-        const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host);
+        const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host, aiModelFallback);
         res.json(result);
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
@@ -3378,6 +3508,7 @@ router.get('/telegram/pending-queue', async (req, res) => {
 router.post('/telegram/process-pending', async (req, res) => {
     const { item_id, user_id } = req.body;
     const aiModel = req.app.locals.aiModel;
+    const aiModelFallback = req.app.locals.aiModelFallback;
 
     // Find item from memory or Supabase
     let item = pendingQueueMemory.find(i => i.id === item_id);
@@ -3708,6 +3839,7 @@ router.post('/telegram/webhook', async (req, res) => {
         if (!chat_id) return res.json({ ok: true });
 
         const aiModel = req.app.locals.aiModel;
+        const aiModelFallback = req.app.locals.aiModelFallback;
         const user_id = await findProfessionalId();
 
         const message_text = msg.text || msg.caption || '';
@@ -3778,7 +3910,7 @@ router.post('/telegram/webhook', async (req, res) => {
             }
         } else if (message_text) {
             logDebug('Telegram Webhook', `Text message received, routing to processTextInternal`);
-            await processTextInternal(message_text, chat_id, user_id, aiModel);
+            await processTextInternal(message_text, chat_id, user_id, aiModel, undefined, undefined, aiModelFallback);
         }
 
         res.json({ ok: true });
