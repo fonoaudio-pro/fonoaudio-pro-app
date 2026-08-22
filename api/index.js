@@ -26,6 +26,7 @@ if (typeof globalThis.DOMRect === 'undefined') {
 let cachedApp;
 
 export default async function handler(req, res) {
+  try {
   if (!cachedApp) {
     const module = await import('../fonoaudio-server.js');
     cachedApp = module.app;
@@ -53,4 +54,8 @@ export default async function handler(req, res) {
 
   // Dispatch to Express
   cachedApp(req, res);
+  } catch (err) {
+    console.error('[Vercel Handler] Unhandled error:', err.stack || err.message);
+    res.status(200).json({ ok: false, status: 'error', error: err.message, stack: err.stack?.split('\n').slice(0,5).join('\n'), method: req.method, url: req.url });
+  }
 }
