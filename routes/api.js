@@ -3437,6 +3437,44 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                         clinicalContext += `\n\nPRÓXIMOS 7 DÍAS:\n`;
                         clinicalContext += upcoming.map(a => `- ${a.date} ${a.time} hs: ${a.patient_name}`).join('\n');
                     }
+
+                    // ─── DATOS FALTANTES: precargar reporte si el usuario pregunta por faltantes/incompletos/alertas ───
+                    const lowerMsgForMissing = message_text.toLowerCase();
+                    const isMissingQuery = ['faltante', 'faltan', 'falta', 'incomplet', 'incompleta', 'incompleto', 'alertas de datos', 'datos faltan', 'que le falta', 'que falta', 'pendientes de cargar', 'sin cargar'].some(kw => lowerMsgForMissing.includes(kw));
+                    if (isMissingQuery) {
+                        try {
+                            const allPatRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+                            const allPatients = await allPatRes.json();
+                            const recRes = await fetch(`${supabaseUrl}/rest/v1/clinical_records?select=patient_id,chief_complaint,primary_diagnosis_name,affected_areas,personal_history,family_history,medical_history,developmental_history`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` } });
+                            const records = await recRes.json();
+                            const recById = {};
+                            (records || []).forEach(r => { recById[r.patient_id] = r; });
+
+                            const missingLines = [];
+                            for (const p of (allPatients || [])) {
+                                const cr = recById[p.id];
+                                const missing = [];
+                                if (!cr) missing.push('FICHA SIN CREAR');
+                                else {
+                                    if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('Motivo de consulta');
+                                    if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('Diagnostico principal');
+                                    if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('Areas afectadas');
+                                    if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('Historia personal');
+                                    if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('Historia familiar');
+                                    if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) missing.push('Historia medica');
+                                    if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) missing.push('Historia del desarrollo');
+                                }
+                                if (missing.length > 0) missingLines.push(`- ${p.name}: FALTAN [${missing.join(', ')}]`);
+                            }
+                            if (missingLines.length > 0) {
+                                clinicalContext += `\n\n═══ REPORTE DE DATOS FALTANTES (REAL, DESDE LA BASE) ═══\n${missingLines.join('\n')}\n(Mencioná TODOS estos pacientes y sus campos faltantes en tu respuesta. No inventes ni omitas ninguno.)`;
+                            } else {
+                                clinicalContext += `\n\n═══ REPORTE DE DATOS FALTANTES ═══\nNo hay pacientes con datos faltantes. Todas las fichas están completas.`;
+                            }
+                        } catch (missErr) {
+                            console.warn('[Telegram] Missing-data preload failed:', missErr.message);
+                        }
+                    }
                 }
             } catch (ctxErr) {
                 console.warn('[Telegram Process-Text] Could not fetch clinical context:', ctxErr.message);
