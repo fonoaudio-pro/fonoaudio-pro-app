@@ -55,7 +55,7 @@ class ClinicalContextManager {
                     this.context.proactiveClinicalSuggestions = health.clinicalSignals;
                 }
                 // Check for missing data alerts
-                this.checkMissingDataAlerts(patientId, health);
+                await this.checkMissingDataAlerts(patientId, health);
             } catch (error) {
                 console.error('[ClinicalContextManager] Error fetching follow-up health:', error);
             }
@@ -63,7 +63,7 @@ class ClinicalContextManager {
     }
 
     /** Check for missing required clinical data fields and generate follow-up alerts */
-    private checkMissingDataAlerts(patientId: string, health: FollowUpHealth): void {
+    private async checkMissingDataAlerts(patientId: string, health: FollowUpHealth): Promise<void> {
         try {
             const { data: crData } = await supabase
                 .from('clinical_records')
@@ -103,10 +103,6 @@ class ClinicalContextManager {
                 for (const field of missing) {
                     const identifier = `dato_faltante_${field.replace(/ /g, '_')}`;
                     const reasonHash = this._generateReasonHash('FOLLOW_UP_NEEDED', identifier);
-
-                    // Check if already dismissed/resolved in current health
-                    const existingDecision = health.decisions?.find((d: any) => d.reason_hash === reasonHash);
-                    if (existingDecision) continue; // Already handled
 
                     // Check if there's already an alert for this
                     const existingAlert = health.alerts?.find((a: any) => a.reason === `Falta de dato: ${field}`);
