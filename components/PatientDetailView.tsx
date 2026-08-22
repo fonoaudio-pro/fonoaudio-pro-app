@@ -211,7 +211,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                         onClick={() => onScheduleAppointment?.(patient)} 
                         className="bg-emerald-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-emerald-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
-                        <Calendar size={16} /> <span className="hidden xs:inline">Agendar</span> Cita
+                        <Calendar size={16} /> <span className="hidden sm:inline">Agendar</span> Cita
                     </button>
                     <button 
                         onClick={() => handleWizardOpen(patient.id)} 

@@ -2102,13 +2102,14 @@ const clinicalTools = [
     },
     {
         name: 'create_patient',
-        description: 'Crea un nuevo paciente en la base de datos.',
+        description: 'Crea un nuevo paciente en la base de datos. Si el usuario indica un motivo de consulta o motivo de derivacion, guardalo en el campo reason.',
         parameters: {
             type: 'OBJECT',
             properties: {
                 name: { type: 'STRING', description: 'Nombre completo del paciente.' },
                 age: { type: 'STRING', description: 'Edad del paciente.' },
-                diagnosis: { type: 'STRING', description: 'Diagnostico principal.' },
+                diagnosis: { type: 'STRING', description: 'Diagnostico principal si se conoce.' },
+                reason: { type: 'STRING', description: 'Motivo de consulta o derivacion. Ej: "Madre refiere tartamudez".' },
                 phone: { type: 'STRING', description: 'Telefono de contacto.' },
                 email: { type: 'STRING', description: 'Email del paciente o responsable.' },
                 notes: { type: 'STRING', description: 'Notas adicionales.' }
@@ -2423,7 +2424,38 @@ async function executeToolCall(functionName, args, user_id) {
                 console.error(`[executeToolCall] create_patient Supabase error (${res.status}):`, errBody);
                 throw new Error(`Error DB al crear paciente (${res.status}): ${errBody}`);
             }
-            return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente.`, patient: newPatient };
+            console.log(`[executeToolCall] create_patient SUCCESS: ${args.name} (${patientId})`);
+
+            if (args.reason || args.diagnosis) {
+                try {
+                    const clinicalRecord = {
+                        patient_id: patientId,
+                        chief_complaint: args.reason || args.diagnosis || '',
+                        chief_complaint_onset: '',
+                        personal_history: {},
+                        family_history: {},
+                        medical_history: {},
+                        developmental_history: {},
+                        clinical_observations: args.notes || '',
+                        affected_areas: {},
+                        primary_diagnosis_name: args.diagnosis || null,
+                        primary_diagnosis_code: null,
+                        secondary_diagnosis_codes: [],
+                        created_by: user_id,
+                        updated_by: user_id,
+                        created_at: new Date().toISOString(),
+                        updated_at: new Date().toISOString(),
+                    };
+                    await fetch(`${supabaseUrl}/rest/v1/clinical_records`, {
+                        method: 'POST', headers, body: JSON.stringify(clinicalRecord),
+                    });
+                    console.log(`[executeToolCall] clinical_records created for ${args.name}`);
+                } catch (crErr) {
+                    console.warn('[executeToolCall] Could not create clinical_records:', crErr.message);
+                }
+            }
+
+            return { status: 'ok', message: `Paciente "${args.name}" creado exitosamente. ${args.reason ? `Motivo: ${args.reason}.` : ''}`, patient: newPatient };
         }
 
         if (functionName === 'update_patient') {
@@ -3061,7 +3093,8 @@ REGLA DE ORO PARA MODIFICACIONES:
 
 ═══ REGLAS ═══
 - SOS UN AGENTE AUTONOMO. Cuando el usuario te pide algo, LO HACES usando las tools. No preguntes de mas, ejecuta.
-- "Crea un paciente" -> crealo. "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
+- "Crea un paciente" -> crealo. Extraé el motivo de consulta si lo hay (guardalo en el campo "reason"). "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
+- Si el usuario da datos del paciente (edad, diagnostico, motivo, telefono), TODOS van como argumentos al tool create_patient. NO pierdas información.
 - SOS PROFESIONAL y calido. Respondes en espanol argentino rioplatense.
 - SOS CONCISO pero completo. Max 6 oraciones salvo que pida mas detalle.
 - Ante ambiguedades, usa tu juicio clinico con el contexto disponible.
