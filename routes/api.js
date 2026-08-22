@@ -353,7 +353,7 @@ async function callGroqWithTools(systemPrompt, tools, user_id) {
         }
     }));
 
-    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta.';
+    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta. CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTA la accion de inmediato usando delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una busqueda: si te piden borrar, borra de verdad y confirmá cuantos eliminaste.';
 
     try {
         const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -2331,13 +2331,24 @@ const clinicalTools = [
     },
     {
         name: 'delete_patient',
-        description: 'Elimina un paciente de la base de datos.',
+        description: 'Elimina UN paciente específico de la base de datos usando su ID. Usá este tool SOLO cuando ya tengas el ID del paciente. Si el usuario pide eliminar "todos los que se llaman X" o eliminar por nombre, usá delete_patients_by_name en su lugar.',
         parameters: {
             type: 'OBJECT',
             properties: {
                 patient_id: { type: 'STRING', description: 'ID del paciente a eliminar.' }
             },
             required: ['patient_id']
+        }
+    },
+    {
+        name: 'delete_patients_by_name',
+        description: 'Busca y ELIMINA TODOS los pacientes cuyo nombre coincida (case-insensitive, coincide parcial) con el texto indicado. Usar cuando el usuario pida "elimina todos los pacientes que se llamen X", "borra los pacientes pruebita", o cualquier eliminación por nombre en lugar de por ID. Es una operación destructiva: se eliminan paciente, su ficha clínica (clinical_records) y registros relacionados en cascada.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                name: { type: 'STRING', description: 'Texto o nombre a buscar y eliminar. Ej: "pruebita 123".' }
+            },
+            required: ['name']
         }
     },
     // ─── CLINICAL NOTES & EVOLUTION ───
@@ -2687,6 +2698,44 @@ async function executeToolCall(functionName, args, user_id) {
             });
             if (!res.ok) throw new Error(await res.text());
             return { status: 'ok', message: 'Paciente eliminado correctamente.' };
+        }
+
+        if (functionName === 'delete_patients_by_name') {
+            const searchTerm = (args.name || '').trim();
+            if (!searchTerm) return { status: 'error', message: 'No se indicó un nombre para buscar.' };
+
+            // 1. Find all matching patients (case-insensitive, partial match) via service-role fetch
+            const findRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name&name=ilike.*${encodeURIComponent(searchTerm)}*`, {
+                method: 'GET', headers,
+            });
+            if (!findRes.ok) throw new Error(`Error buscando pacientes: ${await findRes.text()}`);
+            const matches = await findRes.json();
+
+            if (!matches || matches.length === 0) {
+                return { status: 'ok', message: `No se encontraron pacientes cuyo nombre contenga "${searchTerm}".`, deletedCount: 0 };
+            }
+
+            // 2. Delete each (cascade removes clinical_records via FK ON DELETE CASCADE)
+            let deleted = 0;
+            const errors = [];
+            for (const p of matches) {
+                const delRes = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${p.id}`, {
+                    method: 'DELETE', headers: { ...headers, Prefer: 'return=minimal' },
+                });
+                if (delRes.ok) deleted++;
+                else errors.push(`${p.name}: ${await delRes.text()}`);
+            }
+
+            if (errors.length > 0 && deleted === 0) {
+                throw new Error(`No se pudo eliminar ninguno. ${errors.join(' | ')}`);
+            }
+            const names = matches.map(m => m.name).join(', ');
+            return {
+                status: 'ok',
+                deletedCount: deleted,
+                totalFound: matches.length,
+                message: `Se eliminaron ${deleted} paciente(s) que coinciden con "${searchTerm}" (${names}).${errors.length ? ` Errores: ${errors.join(' | ')}` : ''}`,
+            };
         }
 
         // ─── CLINICAL NOTES ───
