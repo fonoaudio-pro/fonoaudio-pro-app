@@ -3035,6 +3035,12 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
 async function processTextInternal(message_text, chat_id, user_id, aiModel, protocol = 'https', host = 'fonoaudio-pro-ai.vercel.app', aiModelFallback = null) {
     const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 
+    // Resolve user_id if not provided (Telegram context doesn't have auth)
+    let resolvedUserId = user_id;
+    if (!resolvedUserId) {
+        resolvedUserId = await findProfessionalId();
+    }
+
     // ─── STEP 0: Check voice mode commands ───
     if (wantsStopVoice(message_text)) {
         setVoiceMode(chat_id, false);
@@ -3184,31 +3190,31 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
     }
 
     try {
-        // Fetch clinical context from Supabase if user_id provided
+        // Fetch clinical context from Supabase if user_id is available
         let clinicalContext = '';
-        if (user_id) {
+        if (resolvedUserId) {
             try {
                 const supabaseUrl = process.env.VITE_SUPABASE_URL;
                 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
                 if (supabaseUrl && supabaseKey) {
                     // Get patients with more detail
-                    const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?professional_id=eq.${user_id}&select=id,name,diagnosis,age,notes,phone&limit=20`, {
-                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                    const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?professional_id=eq.${resolvedUserId}&select=id,name,diagnosis,age,notes,phone&limit=20`, {
+                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const patients = await patientsRes.json();
 
                     // Get today's appointments with timing info
                     const today = now.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }); // YYYY-MM-DD
-                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${user_id}&date=eq.${today}&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
-                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${resolvedUserId}&date=eq.${today}&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
+                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const appointments = await appsRes.json();
 
                     // Get upcoming appointments (next 7 days)
                     const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                     const weekFromNowStr = weekFromNow.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${user_id}&date=gt=${today}&date=lte=${weekFromNowStr}&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
-                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${resolvedUserId}&date=gt=${today}&date=lte=${weekFromNowStr}&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
+                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const upcoming = await upcomingRes.json();
 
@@ -3325,7 +3331,7 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
 
         if (!aiModel) {
             console.warn('[Process-Text] AI model not available, using Supabase fallback...');
-            const fallback = await getTextFallbackFromSupabase(message_text, user_id);
+            const fallback = await getTextFallbackFromSupabase(message_text, resolvedUserId);
             aiResponse = fallback || `No pude generar una respuesta con IA (servicio no disponible).`;
         } else {
             // Execute with Gemini Function Calling / Tools — try model chain + Groq
@@ -3352,8 +3358,7 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
                         if (functionCalls.length > 0) {
                             const fc = functionCalls[0].functionCall;
                             console.log(`[Gemini Tool Call] Executing ${fc.name} with args:`, fc.args);
-                            const toolResult = await executeToolCall(fc.name, fc.args, user_id);
-
+                            const toolResult = await executeToolCall(fc.name, fc.args, resolvedUserId);
                             const secondResponse = await aiModel.generateContent({
                                 contents: [
                                     { role: 'user', parts: [{ text: clinicalPrompt }] },
@@ -3412,7 +3417,7 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
                     if (functionCalls.length > 0) {
                         const fc = functionCalls[0].functionCall;
                         console.log(`[Gemini Fallback] Executing ${fc.name} with args:`, fc.args);
-                        const toolResult = await executeToolCall(fc.name, fc.args, user_id);
+                        const toolResult = await executeToolCall(fc.name, fc.args, resolvedUserId);
                         const secondResponse = await aiModelFallback.generateContent({
                             contents: [
                                 { role: 'user', parts: [{ text: clinicalPrompt }] },
@@ -3434,24 +3439,24 @@ PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, busca
             // All Gemini models failed → Groq with function calling
             if (!toolCallSucceeded) {
                 console.warn('[Gemini Tools] All models failed. Trying Groq with function calling...');
-                const groqResult = await callGroqWithTools(clinicalPrompt, clinicalTools, user_id);
-                if (groqResult.ok) {
-                    aiResponse = groqResult.text;
-                    toolCallSucceeded = true;
-                } else {
-                    // Final fallback: direct command parsing + Groq text
-                    console.warn('[Groq Tools] Failed. Trying direct command parsing...');
-                    const lowerMsg = message_text.toLowerCase();
-                    const directResult = await handleDirectCommand(lowerMsg, message_text, user_id);
-
-                    if (directResult) {
-                        aiResponse = directResult;
+                const groqResult = await callGroqWithTools(clinicalPrompt, clinicalTools, resolvedUserId);
+                    if (groqResult.ok) {
+                        aiResponse = groqResult.text;
+                        toolCallSucceeded = true;
                     } else {
-                        const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
-                        const groqTextResult = await callGroqFallback(textPrompt);
-                        aiResponse = groqTextResult.ok ? groqTextResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                        // Final fallback: direct command parsing + Groq text
+                        console.warn('[Groq Tools] Failed. Trying direct command parsing...');
+                        const lowerMsg = message_text.toLowerCase();
+                        const directResult = await handleDirectCommand(lowerMsg, message_text, resolvedUserId);
+
+                        if (directResult) {
+                            aiResponse = directResult;
+                        } else {
+                            const textPrompt = `Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. Respondé en espanol argentino rioplatense. Sé conciso y profesional. El usuario pidió: ${message_text}\n\n${clinicalContext ? 'Contexto clinico:\n' + clinicalContext : ''}`;
+                            const groqTextResult = await callGroqFallback(textPrompt);
+                            aiResponse = groqTextResult.ok ? groqTextResult.text : `Ocurrió un error temporal con el servicio de IA. Por favor intentá de nuevo en unos segundos.`;
+                        }
                     }
-                }
             }
         }
 
