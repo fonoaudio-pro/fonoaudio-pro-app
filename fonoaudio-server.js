@@ -390,8 +390,8 @@ if (fs.existsSync(PIPER_COMMAND) && fs.existsSync(VOICE_MODEL_PATH)) {
 
 // Global error handler - FORCE 200 on all errors to prevent Vercel 500s
 app.use((err, req, res, next) => {
-    console.error('[Global Error Handler] Caught error:', err.message);
-    res.status(200).json({ ok: false, status: 'ok', data: [], hint: 'Error caught' });
+    console.error('[Global Error Handler] Caught error:', err.stack || err.message);
+    res.status(200).json({ ok: false, status: 'error', error: err.message, stack: err.stack, hint: 'Error caught. See server logs.' });
 });
 
 // ─── Background workers: only in development (not Vercel) ───
