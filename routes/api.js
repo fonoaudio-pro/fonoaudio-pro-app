@@ -3494,8 +3494,8 @@ router.post('/telegram/process-text', async (req, res) => {
     const { message_text, chat_id, user_id } = req.body;
     const aiModel = req.app.locals.aiModel;
     const aiModelFallback = req.app.locals.aiModelFallback;
-    const protocol = req.protocol || 'https';
-    const host = req.get('host') || 'fonoaudio-pro-ai.vercel.app';
+    const protocol = (req.headers && (req.headers['x-forwarded-proto'] || req.headers['x-original-protocol'])) || 'https';
+    const host = (req.headers && req.headers['x-forwarded-host']) || req.get('host') || 'fonoaudio-pro-app.vercel.app';
 
     try {
         const result = await processTextInternal(message_text, chat_id, user_id, aiModel, protocol, host, aiModelFallback);
