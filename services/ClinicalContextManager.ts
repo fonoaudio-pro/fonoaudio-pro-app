@@ -1,4 +1,4 @@
-import { ClinicalContext, ClinicalTask, ConversationMessage, FollowUpHealth } from "../types";
+import { ClinicalContext, ClinicalTask, ConversationMessage, FollowUpHealth, FollowUpType, FollowUpSeverity } from "../types";
 import followUpService from './followUpService';
 import { supabase } from '../utils/supabaseClient';
 
@@ -54,34 +54,90 @@ class ClinicalContextManager {
                 if (health.clinicalSignals) {
                     this.context.proactiveClinicalSuggestions = health.clinicalSignals;
                 }
+                // Check for missing data alerts
+                this.checkMissingDataAlerts(patientId, health);
             } catch (error) {
                 console.error('[ClinicalContextManager] Error fetching follow-up health:', error);
             }
-
-            // Fetch clinical record for enriched context
-            try {
-                const { data: crData } = await supabase
-                    .from('clinical_records')
-                    .select('chief_complaint, primary_diagnosis_name, affected_areas')
-                    .eq('patient_id', patientId)
-                    .maybeSingle();
-
-                if (crData) {
-                    const affected = (Array.isArray(crData.affected_areas) ? crData.affected_areas : [])
-                        .filter((a: any) => a && a.affected)
-                        .map((a: any) => a.name || a.area) || [];
-                    this.context.activePatientSummary = {
-                        ...this.context.activePatientSummary,
-                        chiefComplaint: crData.chief_complaint || undefined,
-                        affectedAreas: affected.length > 0 ? affected : undefined,
-                        primaryDiagnosis: crData.primary_diagnosis_name || undefined,
-                    } as any;
-                    this.notify();
-                }
-            } catch {
-                // clinical_records table may not exist yet
-            }
         }
+    }
+
+    /** Check for missing required clinical data fields and generate follow-up alerts */
+    private checkMissingDataAlerts(patientId: string, health: FollowUpHealth): void {
+        try {
+            const { data: crData } = await supabase
+                .from('clinical_records')
+                .select('chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history')
+                .eq('patient_id', patientId)
+                .maybeSingle();
+
+            if (!crData) return;
+
+            const missing: string[] = [];
+
+            // Check required fields
+            if (!crData.chief_complaint || crData.chief_complaint.trim() === '') {
+                missing.push('Motivo de consulta (chief_complaint)');
+            }
+            if (!crData.primary_diagnosis_name || crData.primary_diagnosis_name.trim() === '') {
+                missing.push('Diagnóstico principal');
+            }
+            if (!crData.affected_areas || !Array.isArray(crData.affected_areas) || crData.affected_areas.filter((a: any) => a && a.affected).length === 0) {
+                missing.push('Áreas afectadas');
+            }
+            if (!crData.personal_history || Object.keys(crData.personal_history).length === 0) {
+                missing.push('Historia personal');
+            }
+            if (!crData.family_history || Object.keys(crData.family_history).length === 0) {
+                missing.push('Historia familiar');
+            }
+            if (!crData.medical_history || Object.keys(crData.medical_history).length === 0) {
+                missing.push('Historia médica');
+            }
+            if (!crData.developmental_history || Object.keys(crData.developmental_history).length === 0) {
+                missing.push('Historia del desarrollo');
+            }
+
+            // Add alerts if there are missing required fields
+            if (missing.length > 0) {
+                for (const field of missing) {
+                    const identifier = `dato_faltante_${field.replace(/ /g, '_')}`;
+                    const reasonHash = this._generateReasonHash('FOLLOW_UP_NEEDED', identifier);
+
+                    // Check if already dismissed/resolved in current health
+                    const existingDecision = health.decisions?.find((d: any) => d.reason_hash === reasonHash);
+                    if (existingDecision) continue; // Already handled
+
+                    // Check if there's already an alert for this
+                    const existingAlert = health.alerts?.find((a: any) => a.reason === `Falta de dato: ${field}`);
+                    if (existingAlert) continue; // Already has alert
+
+                    // Add the alert to health
+                    health.alerts = health.alerts || [];
+                    // Avoid duplicates
+                    const alreadyExists = health.alerts.some((a: any) => a.reason === `Falta de dato: ${field}`);
+                    if (!alreadyExists) {
+                        health.alerts.push({
+                            type: 'FOLLOW_UP_NEEDED' as FollowUpType,
+                            severity: 'medium' as FollowUpSeverity,
+                            reason: `Falta de dato clínico requerido: ${field}`,
+                            suggestedAction: 'Completar el campo antes de aprobar la historia clínica',
+                            reasonHash,
+                            detectedAt: new Date().toISOString(),
+                        });
+                    }
+                }
+                // Notify listeners about the update
+                this.notify();
+            }
+        } catch (e) {
+            console.error('[ClinicalContextManager] Error checking missing data:', e);
+        }
+    }
+
+    private _generateReasonHash(type: FollowUpType, identifier: string): string {
+        const base = `${type}|${identifier}`;
+        return btoa(base).replace(/=/g, '');
     }
 
     public setPatientSummary(summary: ClinicalContext['activePatientSummary']): void {
@@ -157,10 +213,10 @@ class ClinicalContextManager {
             if (activePatientSummary.affectedAreas && activePatientSummary.affectedAreas.length > 0) {
                 packet += `- Áreas Afectadas: ${activePatientSummary.affectedAreas.join(', ')}\n`;
             }
-            if (activePatientSummary.alerts.length > 0) {
+            if (activePatientSummary.alerts && activePatientSummary.alerts.length > 0) {
                 packet += `- Alertas: ${activePatientSummary.alerts.join(', ')}\n`;
             }
-            if (activePatientSummary.interests.length > 0) {
+            if (activePatientSummary.interests && activePatientSummary.interests.length > 0) {
                 packet += `- Intereses: ${activePatientSummary.interests.join(', ')}\n`;
             }
         }
@@ -174,21 +230,18 @@ class ClinicalContextManager {
         if (recentMaterials.length > 0) {
             packet += `- Materiales Recientes: ${recentMaterials.join(', ')}\n`;
         }
-
-        if (followUpHealth && followUpHealth.alerts.length > 0) {
+        if (followUpHealth && followUpHealth.alerts && followUpHealth.alerts.length > 0) {
             packet += `\n[ALERTAS DE SEGUIMIENTO]\n`;
             followUpHealth.alerts.forEach(alert => {
                 packet += `- ${alert.type} (${alert.severity}): ${alert.reason}. Acción sugerida: ${alert.suggestedAction}\n`;
             });
         }
-
         if (proactiveClinicalSuggestions && proactiveClinicalSuggestions.length > 0) {
             packet += `\n[SUGERENCIAS CLÍNICAS PROACTIVAS]\n`;
             proactiveClinicalSuggestions.forEach(suggestion => {
                 packet += `- ${suggestion.signal} (${suggestion.severity}): ${suggestion.reason}. Acción sugerida: ${suggestion.suggestedAction}\n`;
             });
         }
-
         return packet;
     }
 
@@ -201,7 +254,7 @@ class ClinicalContextManager {
             recentMaterials: [],
             currentTask: 'idle',
             conversationHistory: [],
-            proactiveClinicalSuggestions: []
+            proactiveClinicalSuggestions: [],
         };
         this.notify();
     }
