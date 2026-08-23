@@ -3118,13 +3118,12 @@ async function executeToolCall(functionName, args, user_id) {
 
             // 1) Try to create the event in Google Calendar (the user's real agenda)
             try {
-                const userId = resolvedUserId || (await findProfessionalId());
-                if (userId) {
-                    const { data: gauth } = await fetch(`${supabaseUrl}/rest/v1/google_auth?user_id=eq.${userId}&select=access_token,refresh_token,expires_at`, {
-                        method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
-                    }).then(r => r.json()).then(d => ({ data: Array.isArray(d) ? d[0] : d })).catch(() => ({ data: null }));
-
-                    if (gauth?.access_token) {
+                // Single-tenant: read the Google token from the first google_auth row
+                const { data: gauthRows } = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=user_id,access_token,refresh_token,expires_at&limit=1`, {
+                    method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                }).then(r => r.json()).then(d => ({ data: Array.isArray(d) ? d : [] })).catch(() => ({ data: [] }));
+                const gauth = gauthRows[0];
+                if (gauth && gauth.access_token) {
                         let accessToken = gauth.access_token;
                         // refresh if expired
                         const expiresAt = gauth.expires_at ? new Date(gauth.expires_at).getTime() : 0;
@@ -3155,9 +3154,8 @@ async function executeToolCall(functionName, args, user_id) {
                         });
                         if (calRes.ok) createdInCalendar = true;
                         else calendarError = `Google Calendar HTTP ${calRes.status}`;
-                    } else {
-                        calendarError = 'No Google token found';
-                    }
+                } else {
+                    calendarError = 'No Google token found';
                 }
             } catch (ce) {
                 calendarError = ce?.message || String(ce);
