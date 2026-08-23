@@ -1300,6 +1300,31 @@ router.get('/followup/missing-data', async (req, res) => {
     }
 });
 
+// TEMP: create reminders table (run once, then remove)
+router.get('/admin/create-reminders-table', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        const sql = `CREATE TABLE IF NOT EXISTS public.reminders (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            message text,
+            send_at timestamptz,
+            status text DEFAULT 'pending',
+            chat_id text,
+            created_at timestamptz DEFAULT now()
+        );`;
+        const r = await fetch(`${supabaseUrl}/sql`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+            body: JSON.stringify({ query: sql })
+        });
+        const txt = await r.text();
+        res.json({ status: r.ok ? 'ok' : 'error', httpStatus: r.status, response: txt.slice(0, 500) });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
