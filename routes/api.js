@@ -3839,6 +3839,39 @@ SOS un asistente AUTONOMO que ENVIA mensajes por Telegram al profesional en cual
             }
         }
 
+        // ─── AUTONOMOUS REMINDER FALLBACK ───
+        // If the user asked to be reminded/alerted and the model did NOT execute set_reminder
+        // (or denied capability), we still DO IT: parse the request and schedule it ourselves.
+        const reminderKeywords = ['avisa', 'recorda', 'recuerda', 'no se me olvide', 'decime', 'decime mañana', 'avisame', 'acordate', 'alert'];
+        const wantsReminder = reminderKeywords.some(k => message_text.toLowerCase().includes(k));
+        const modelDenied = /no (tengo|puedo|tiene).*(capacidad|enviar|recordator|alerta)|soy solo un asistente|no puedo enviar/i.test(aiResponse);
+        const alreadySet = /recordatorio programado|te lo voy a avisar|te aviso/i.test(aiResponse);
+        if (wantsReminder && !alreadySet) {
+            try {
+                // Extract date: "mañana" -> tomorrow, else look for YYYY-MM-DD
+                const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000);
+                const tomorrowStr = tomorrow.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+                let rDate = tomorrowStr;
+                const dateMatch = message_text.match(/(\d{4}-\d{2}-\d{2})/);
+                if (dateMatch) rDate = dateMatch[1];
+                // Extract time: HH:MM or "a las 8" -> 08:00
+                let rTime = '09:00';
+                const timeMatch = message_text.match(/(\d{1,2}):(\d{2})/);
+                if (timeMatch) rTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+                else {
+                    const hMatch = message_text.match(/a las (\d{1,2})/i);
+                    if (hMatch) rTime = `${hMatch[1].padStart(2, '0')}:00`;
+                }
+                const reminderMsg = `Recordatorio: ${message_text.replace(/^.*?\b(avisa|recorda|recuerda|decime|acordate)\w*\s*/i, '').trim() || 'Tiene una alerta de FonoAudio-Pro.'}`;
+                const setRes = await executeToolCall('set_reminder', { message: reminderMsg, date: rDate, time: rTime }, resolvedUserId);
+                if (setRes?.status === 'ok') {
+                    aiResponse = `¡Hecho! Te aviso el ${rDate} a las ${rTime} por Telegram. Anotado en tu recordatorio automático. ¿Necesitás que vincule esto a algún paciente o turno?`;
+                }
+            } catch (remErr) {
+                console.warn('[Autonomous Reminder] Failed:', remErr.message);
+            }
+        }
+
         // Send response back via Telegram — text
         const cleanResponse = stripVoiceMarkers(aiResponse);
         sentToTelegram = await sendTelegramMessage(chat_id, cleanResponse);
