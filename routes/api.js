@@ -1291,13 +1291,22 @@ router.get('/followup/missing-data', async (req, res) => {
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
-        const chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
-        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param o env TELEGRAM_CHAT_ID)' });
-
         const supabaseUrl = process.env.VITE_SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
         const { createClient } = await import('@supabase/supabase-js');
         const sb = createClient(supabaseUrl, supabaseKey);
+
+        // Resolve chat_id: query param > env > last known interaction in telegram_pending_queue
+        let chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
+        if (!chatId) {
+            const { data: lastQueue } = await sb
+                .from('telegram_pending_queue')
+                .select('chat_id')
+                .order('created_at', { ascending: false })
+                .limit(1);
+            if (lastQueue && lastQueue.length > 0) chatId = lastQueue[0].chat_id;
+        }
+        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param, env TELEGRAM_CHAT_ID o interacción previa en telegram_pending_queue)' });
 
         const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
 
