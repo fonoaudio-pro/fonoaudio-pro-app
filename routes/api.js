@@ -237,12 +237,9 @@ async function fetchPatientsForUser(userId) {
     if (!supabaseUrl || !supabaseKey) return [];
     
     try {
-        // Include the professional's patients AND any unassigned (professional_id IS NULL) patients,
-        // since in a single-professional deployment all clinic patients belong to the same owner.
-        const filter = userId
-            ? `?or=(professional_id.eq.${userId},professional_id.is.null)&`
-            : '?limit=50&';
-        const res = await fetch(`${supabaseUrl}/rest/v1/patients${filter}select=id,name,diagnosis,age,phone,documents&limit=50`, {
+        // The assistant is the clinic's autonomous agent: it must see ALL patients,
+        // not just those matching a professional_id filter. We fetch the full clinic roster.
+        const res = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name,diagnosis,age,phone,documents&limit=200`, {
             headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
         });
         if (!res.ok) return [];
@@ -595,7 +592,7 @@ async function getTextFallbackFromSupabase(messageText, userId) {
     try {
         // Check if user is asking about patients
         if (lower.includes('paciente') || lower.includes('pacientes') || lower.includes('tengo')) {
-            const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?professional_id=eq.${userId}&select=id,name,diagnosis,age&limit=20`, {
+            const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name,diagnosis,age&limit=200`, {
                 headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
             });
             const patients = await patientsRes.json();
@@ -608,7 +605,7 @@ async function getTextFallbackFromSupabase(messageText, userId) {
         // Check if user is asking about agenda/today
         if (lower.includes('cita') || lower.includes('agenda') || lower.includes('hoy') || lower.includes('turno')) {
             const today = now.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-            const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${userId}&date=eq.${today}&select=id,patient_name,time,status&order=time`, {
+            const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&select=id,patient_name,time,status&order=time`, {
                 headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
             });
             const apps = await appsRes.json();
@@ -3487,24 +3484,24 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                 const supabaseUrl = process.env.VITE_SUPABASE_URL;
                 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
                 if (supabaseUrl && supabaseKey) {
-                    // Get patients with more detail
-                    const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?professional_id=eq.${resolvedUserId}&select=id,name,diagnosis,age,notes,phone&limit=20`, {
-                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
+                    // Get patients with more detail (full clinic roster - assistant sees all patients)
+                    const patientsRes = await fetch(`${supabaseUrl}/rest/v1/patients?select=id,name,diagnosis,age,notes,phone&limit=200`, {
+                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const patients = await patientsRes.json();
 
                     // Get today's appointments with timing info
                     const today = now.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }); // YYYY-MM-DD
-                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${resolvedUserId}&date=eq.${today}&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
-                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
+                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
+                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const appointments = await appsRes.json();
 
                     // Get upcoming appointments (next 7 days)
                     const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                     const weekFromNowStr = weekFromNow.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?professional_id=eq.${resolvedUserId}&date=gt=${today}&date=lte=${weekFromNowStr}&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
-                        headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
+                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=gt=${today}&date=lte=${weekFromNowStr}&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
+                        headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const upcoming = await upcomingRes.json();
 
