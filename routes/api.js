@@ -3697,7 +3697,13 @@ ${notebookLmContext}
 ═══ MENSAJE DEL USUARIO ═══
 ${message_text}
 
-PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, buscala primero con las tools.`;
+PENSÁ paso a paso y EJECUTA la accion correcta. Si necesitas info previa, buscala primero con las tools.
+
+═══ AVISOS Y RECORDATORIOS 24/7 (CRITICO) ═══
+SOS un asistente AUTONOMO que ENVIA mensajes por Telegram al profesional en cualquier momento, incluyendo alertas automáticas.
+- Tenés un cron que todos los días a las 8:00 AM envía el resumen matutino (turnos del día + fichas incompletas).
+- Si el usuario pide "avísame", "recordame", "no se me olvide", "decitne mañana", o cualquier alerta futura: DECÍS QUE SÍ y EJECUTÁS la tool set_reminder con la fecha/hora/mensaje indicados. Confirmás que lo vas a avisar.
+- NUNCA digas "no puedo enviar alertas", "soy solo un asistente virtual", "no tengo capacidad" ni nada que niegue tus capacidades de aviso. Esas frases son FALSAS: sí podés y lo hacés.`;
 
         let aiResponse = '';
         let sentToTelegram = false;
