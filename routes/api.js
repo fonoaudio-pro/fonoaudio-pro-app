@@ -1300,91 +1300,6 @@ router.get('/followup/missing-data', async (req, res) => {
     }
 });
 
-// TEMP: create reminders table (run once, then remove)
-router.get('/admin/create-reminders-table', async (req, res) => {
-    try {
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-        const sql = `CREATE TABLE IF NOT EXISTS public.reminders (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            message text,
-            send_at timestamptz,
-            status text DEFAULT 'pending',
-            chat_id text,
-            created_at timestamptz DEFAULT now()
-        );`;
-        const r = await fetch(`${supabaseUrl}/sql`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
-            body: JSON.stringify({ query: sql })
-        });
-        const txt = await r.text();
-        res.json({ status: r.ok ? 'ok' : 'error', httpStatus: r.status, response: txt.slice(0, 500) });
-    } catch (e) {
-        res.status(500).json({ status: 'error', message: e?.message || String(e) });
-    }
-});
-
-// TEMP: clean up spurious 'recordatorio' appointments (run once, then remove)
-router.get('/admin/clean-reminder-appointments', async (req, res) => {
-    try {
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-        const del = await fetch(`${supabaseUrl}/rest/v1/appointments?type=eq.recordatorio`, {
-            method: 'DELETE',
-            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'return=minimal' }
-        });
-        res.json({ status: del.ok ? 'ok' : 'error', httpStatus: del.status });
-    } catch (e) {
-        res.status(500).json({ status: 'error', message: e?.message || String(e) });
-    }
-});
-
-// TEMP: diagnostic - check google_auth token presence (run once, then remove)
-router.get('/admin/diag-google', async (req, res) => {
-    try {
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-        const r = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=user_id,expires_at`, {
-            method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
-        });
-        const rows = await r.json();
-        const hasToken = Array.isArray(rows) && rows.length > 0;
-        res.json({ status: 'ok', count: hasToken ? rows.length : 0, sample: hasToken ? rows.slice(0, 2) : [] });
-    } catch (e) {
-        res.status(500).json({ status: 'error', message: e?.message || String(e) });
-    }
-});
-
-// TEMP: diagnostic - list today's Google Calendar events to confirm reminder sync
-router.get('/admin/diag-cal', async (req, res) => {
-    try {
-        const supabaseUrl = process.env.VITE_SUPABASE_URL;
-        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-        const g = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=access_token,refresh_token,expires_at&limit=1`, {
-            method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
-        }).then(r => r.json()).then(d => Array.isArray(d) ? d[0] : null).catch(() => null);
-        if (!g?.access_token) return res.json({ status: 'no-token' });
-        let token = g.access_token;
-        const exp = g.expires_at ? new Date(g.expires_at).getTime() : 0;
-        if (Date.now() >= exp - 5*60*1000 && g.refresh_token) {
-            const rf = await fetch(`${process.env.BACKEND_URL || ''}/api/google/refresh-token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: g.refresh_token }) });
-            if (rf.ok) { const rd = await rf.json(); token = rd.access_token || token; }
-        }
-        const now = new Date();
-        const tmin = new Date(now.getTime() - 24*60*60*1000).toISOString();
-        const tmax = new Date(now.getTime() + 48*60*60*1000).toISOString();
-        const cal = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${tmin}&timeMax=${tmax}&singleEvents=true&orderBy=startTime`, {
-            headers: { Authorization: `Bearer ${token}` }
-        });
-        const calData = await cal.json();
-        const items = (calData.items || []).filter(i => (i.summary || '').includes('Recordatorio') || (i.summary||'').includes('FonoAudio'));
-        res.json({ status: cal.ok ? 'ok' : 'error', httpStatus: cal.status, totalEvents: (calData.items||[]).length, reminderEvents: items.map(i => ({ summary: i.summary, start: i.start })) });
-    } catch (e) {
-        res.status(500).json({ status: 'error', message: e?.message || String(e) });
-    }
-});
-
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
@@ -3158,7 +3073,7 @@ async function executeToolCall(functionName, args, user_id) {
                         const expiresAt = gauth.expires_at ? new Date(gauth.expires_at).getTime() : 0;
                         if (Date.now() >= expiresAt - 5 * 60 * 1000 && gauth.refresh_token) {
                             try {
-                                const rf = await fetch(`${process.env.BACKEND_URL || ''}/api/google/refresh-token`, {
+                                const rf = await fetch(`${process.env.BACKEND_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')}/api/google/refresh-token`, {
                                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                                     body: JSON.stringify({ refresh_token: gauth.refresh_token })
                                 });
