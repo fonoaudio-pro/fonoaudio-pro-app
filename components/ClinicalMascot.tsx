@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Sparkles, X, Send, MessageCircle, Volume2, VolumeX } from "lucide-react";
+import { Sparkles, X, Send, Volume2, VolumeX, Mic, MicOff } from "lucide-react";
 
 /**
  * ClinicalMascot — la mascota virtual de FonoAudio-Pro.
