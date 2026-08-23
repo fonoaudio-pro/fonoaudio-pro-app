@@ -1325,6 +1325,21 @@ router.get('/admin/create-reminders-table', async (req, res) => {
     }
 });
 
+// TEMP: clean up spurious 'recordatorio' appointments (run once, then remove)
+router.get('/admin/clean-reminder-appointments', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        const del = await fetch(`${supabaseUrl}/rest/v1/appointments?type=eq.recordatorio`, {
+            method: 'DELETE',
+            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, Prefer: 'return=minimal' }
+        });
+        res.json({ status: del.ok ? 'ok' : 'error', httpStatus: del.status });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
@@ -3078,29 +3093,83 @@ async function executeToolCall(functionName, args, user_id) {
             return { status: 'ok', message: 'Turno cancelado.' };
         }
 
-        // ─── REMINDERS (autonomous Telegram alerts) ───
+        // ─── REMINDERS (autonomous Telegram + Google Calendar sync) ───
         if (functionName === 'set_reminder') {
             const { message, date, time } = args;
-            // Store as an appointment of type 'recordatorio' so the reminder worker can dispatch it.
-            // We use the patient_name field to carry the reminder message.
-            const insertRes = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
-                method: 'POST',
-                headers: { ...headers, Prefer: 'return=representation' },
-                body: JSON.stringify({
-                    patient_name: message || 'Recordatorio FonoAudio-Pro',
-                    date: date,
-                    time: time || '09:00',
-                    type: 'recordatorio',
-                    status: 'pending',
-                    notes: 'Recordatorio autónomo solicitado por el profesional vía asistente.',
-                    created_at: new Date().toISOString(),
-                }),
-            });
-            if (!insertRes.ok) {
-                const errTxt = await insertRes.text();
-                return { status: 'error', message: `No se pudo guardar el recordatorio: ${errTxt}` };
+            const reminderTime = time || '09:00';
+            let createdInCalendar = false;
+            let calendarError = null;
+
+            // 1) Try to create the event in Google Calendar (the user's real agenda)
+            try {
+                const userId = resolvedUserId || (await findProfessionalId());
+                if (userId) {
+                    const { data: gauth } = await fetch(`${supabaseUrl}/rest/v1/google_auth?user_id=eq.${userId}&select=access_token,refresh_token,expires_at`, {
+                        method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                    }).then(r => r.json()).then(d => ({ data: Array.isArray(d) ? d[0] : d })).catch(() => ({ data: null }));
+
+                    if (gauth?.access_token) {
+                        let accessToken = gauth.access_token;
+                        // refresh if expired
+                        const expiresAt = gauth.expires_at ? new Date(gauth.expires_at).getTime() : 0;
+                        if (Date.now() >= expiresAt - 5 * 60 * 1000 && gauth.refresh_token) {
+                            try {
+                                const rf = await fetch(`${process.env.BACKEND_URL || ''}/api/google/refresh-token`, {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ refresh_token: gauth.refresh_token })
+                                });
+                                if (rf.ok) {
+                                    const rd = await rf.json();
+                                    accessToken = rd.access_token || accessToken;
+                                }
+                            } catch { /* keep old token */ }
+                        }
+                        const startISO = `${date}T${reminderTime}:00`;
+                        const endISO = `${date}T${(() => { const [h, m] = reminderTime.split(':').map(Number); const e = new Date(0,0,0,h,m + 15); return `${String(e.getHours()).padStart(2,'0')}:${String(e.getMinutes()).padStart(2,'0')}`; })()}:00`;
+                        const calRes = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+                            method: 'POST',
+                            headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                summary: `🔔 Recordatorio FonoAudio-Pro: ${message}`,
+                                description: 'Recordatorio autónomo creado por el asistente FonoAudio-Pro.',
+                                start: { dateTime: startISO, timeZone: 'America/Argentina/Buenos_Aires' },
+                                end: { dateTime: endISO, timeZone: 'America/Argentina/Buenos_Aires' },
+                                reminders: { useDefault: true }
+                            })
+                        });
+                        if (calRes.ok) createdInCalendar = true;
+                        else calendarError = `Google Calendar HTTP ${calRes.status}`;
+                    } else {
+                        calendarError = 'No Google token found';
+                    }
+                }
+            } catch (ce) {
+                calendarError = ce?.message || String(ce);
             }
-            return { status: 'ok', message: `Recordatorio programado para el ${date} a las ${time}. Te lo voy a avisar por Telegram.` };
+
+            // 2) Always persist a backup in appointments (type 'recordatorio') so the Telegram worker still alerts at the time
+            try {
+                await fetch(`${supabaseUrl}/rest/v1/appointments`, {
+                    method: 'POST',
+                    headers: { ...headers, Prefer: 'return=minimal' },
+                    body: JSON.stringify({
+                        patient_name: `🔔 ${message || 'Recordatorio FonoAudio-Pro'}`,
+                        date: date,
+                        time: reminderTime,
+                        type: 'recordatorio',
+                        status: 'pending',
+                        notes: 'Recordatorio autónomo solicitado por el profesional vía asistente.',
+                        created_at: new Date().toISOString(),
+                    }),
+                });
+            } catch { /* non-fatal */ }
+
+            const parts = [];
+            if (createdInCalendar) parts.push('quedó anotado en tu Google Calendar');
+            else if (calendarError) parts.push(`(no pude sincronizar con Google Calendar: ${calendarError}; podés conectar la cuenta en Ajustes)`);
+            parts.push('y te lo voy a avisar por Telegram a la hora indicada');
+            const where = createdInCalendar ? 'En tu Google Calendar y' : 'Y';
+            return { status: 'ok', message: `Listo. ${where} te aviso el ${date} a las ${reminderTime} por Telegram.${createdInCalendar ? '' : ' El recordatorio quedó guardado en el sistema aunque no se pudo enlazar a Google Calendar.'}` };
         }
 
         // ─── EVALUATIONS ───
