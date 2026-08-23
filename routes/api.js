@@ -1296,17 +1296,9 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const { createClient } = await import('@supabase/supabase-js');
         const sb = createClient(supabaseUrl, supabaseKey);
 
-        // Resolve chat_id: query param > env > last known interaction in telegram_pending_queue
-        let chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
-        if (!chatId) {
-            const { data: lastQueue } = await sb
-                .from('telegram_pending_queue')
-                .select('chat_id')
-                .order('created_at', { ascending: false })
-                .limit(1);
-            if (lastQueue && lastQueue.length > 0) chatId = lastQueue[0].chat_id;
-        }
-        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param, env TELEGRAM_CHAT_ID o interacción previa en telegram_pending_queue)' });
+        // Resolve chat_id: query param > env TELEGRAM_CHAT_ID (NO fallback to queue: it may hold the bot's own id)
+        const chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
+        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param o env TELEGRAM_CHAT_ID)' });
 
         const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
 
@@ -1365,21 +1357,7 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const message = parts.join('\n');
 
         const sent = await sendTelegramMessage(chatId, message, 'HTML');
-        // Capture telegram API error for debugging
-        let tgError = null;
-        if (!sent) {
-            try {
-                const TOK = process.env.TELEGRAM_BOT_TOKEN;
-                const test = await fetch(`https://api.telegram.org/bot${TOK}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: chatId, text: '🔧 Test de conexión FonoAudio-Pro', parse_mode: 'HTML' }),
-                });
-                const td = await test.json();
-                tgError = td.ok ? 'sent_ok_but_helper_returned_false' : (td.description || 'unknown');
-            } catch (e2) { tgError = String(e2?.message || e2); }
-        }
-        res.json({ status: 'ok', sent, chatId: String(chatId), appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, tgError, message });
+        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, message });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
