@@ -1365,7 +1365,21 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const message = parts.join('\n');
 
         const sent = await sendTelegramMessage(chatId, message, 'HTML');
-        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, message });
+        // Capture telegram API error for debugging
+        let tgError = null;
+        if (!sent) {
+            try {
+                const TOK = process.env.TELEGRAM_BOT_TOKEN;
+                const test = await fetch(`https://api.telegram.org/bot${TOK}/sendMessage`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId, text: '🔧 Test de conexión FonoAudio-Pro', parse_mode: 'HTML' }),
+                });
+                const td = await test.json();
+                tgError = td.ok ? 'sent_ok_but_helper_returned_false' : (td.description || 'unknown');
+            } catch (e2) { tgError = String(e2?.message || e2); }
+        }
+        res.json({ status: 'ok', sent, chatId: String(chatId), appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, tgError, message });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
