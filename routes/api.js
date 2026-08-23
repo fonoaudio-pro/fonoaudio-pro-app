@@ -1356,6 +1356,35 @@ router.get('/admin/diag-google', async (req, res) => {
     }
 });
 
+// TEMP: diagnostic - list today's Google Calendar events to confirm reminder sync
+router.get('/admin/diag-cal', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        const g = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=access_token,refresh_token,expires_at&limit=1`, {
+            method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+        }).then(r => r.json()).then(d => Array.isArray(d) ? d[0] : null).catch(() => null);
+        if (!g?.access_token) return res.json({ status: 'no-token' });
+        let token = g.access_token;
+        const exp = g.expires_at ? new Date(g.expires_at).getTime() : 0;
+        if (Date.now() >= exp - 5*60*1000 && g.refresh_token) {
+            const rf = await fetch(`${process.env.BACKEND_URL || ''}/api/google/refresh-token`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: g.refresh_token }) });
+            if (rf.ok) { const rd = await rf.json(); token = rd.access_token || token; }
+        }
+        const now = new Date();
+        const tmin = new Date(now.getTime() - 24*60*60*1000).toISOString();
+        const tmax = new Date(now.getTime() + 48*60*60*1000).toISOString();
+        const cal = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${tmin}&timeMax=${tmax}&singleEvents=true&orderBy=startTime`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const calData = await cal.json();
+        const items = (calData.items || []).filter(i => (i.summary || '').includes('Recordatorio') || (i.summary||'').includes('FonoAudio'));
+        res.json({ status: cal.ok ? 'ok' : 'error', httpStatus: cal.status, totalEvents: (calData.items||[]).length, reminderEvents: items.map(i => ({ summary: i.summary, start: i.start })) });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
