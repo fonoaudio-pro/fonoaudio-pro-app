@@ -237,10 +237,13 @@ async function fetchPatientsForUser(userId) {
     if (!supabaseUrl || !supabaseKey) return [];
     
     try {
-        // If userId is provided, filter by professional_id
-        const filter = userId ? `?professional_id=eq.${userId}` : '?limit=50';
-        const res = await fetch(`${supabaseUrl}/rest/v1/patients${filter}&select=id,name,diagnosis,age,phone,documents&limit=50`, {
-            headers: { apikey: process.env.VITE_SUPABASE_ANON_KEY, Authorization: `Bearer ${supabaseKey}` }
+        // Include the professional's patients AND any unassigned (professional_id IS NULL) patients,
+        // since in a single-professional deployment all clinic patients belong to the same owner.
+        const filter = userId
+            ? `?or=(professional_id.eq.${userId},professional_id.is.null)&`
+            : '?limit=50&';
+        const res = await fetch(`${supabaseUrl}/rest/v1/patients${filter}select=id,name,diagnosis,age,phone,documents&limit=50`, {
+            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
         });
         if (!res.ok) return [];
         return await res.json();
