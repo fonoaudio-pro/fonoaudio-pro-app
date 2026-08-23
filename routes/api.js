@@ -617,7 +617,7 @@ async function getTextFallbackFromSupabase(messageText, userId) {
         // Check if user is asking about agenda/today
         if (lower.includes('cita') || lower.includes('agenda') || lower.includes('hoy') || lower.includes('turno')) {
             const today = now.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-            const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&select=id,patient_name,time,status&order=time`, {
+            const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&type=neq.recordatorio&select=id,patient_name,time,status&order=time`, {
                 headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
             });
             const apps = await appsRes.json();
@@ -3021,7 +3021,7 @@ async function executeToolCall(functionName, args, user_id) {
         if (functionName === 'get_agenda') {
             const today = new Date().toISOString().split('T')[0];
             const dateFilter = args.date || today;
-            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${dateFilter}&order=time.asc`, {
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${dateFilter}&type=neq.recordatorio&order=time.asc`, {
                 method: 'GET', headers,
             });
             if (!res.ok) throw new Error(await res.text());
@@ -3381,7 +3381,7 @@ async function handleDirectCommand(lowerMsg, originalMsg, user_id) {
     if (lowerMsg.match(/(agenda|turnos?|cit[ae]s?).*(hoy|actual)/) || lowerMsg.match(/hoy.*(agenda|turnos?|cit[ae]s?)/)) {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&order=time.asc`, { headers });
+            const res = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&type=neq.recordatorio&order=time.asc`, { headers });
             if (!res.ok) throw new Error(await res.text());
             const apts = await res.json();
             if (apts.length === 0) return '📅 No tenés turnos para hoy.';
@@ -3567,7 +3567,7 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
 
                     // Get today's appointments with timing info
                     const today = now.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' }); // YYYY-MM-DD
-                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
+                    const appsRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=eq.${today}&type=neq.recordatorio&select=id,patient_name,date,time,status,type,duration,notes&order=time`, {
                         headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const appointments = await appsRes.json();
@@ -3575,7 +3575,7 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                     // Get upcoming appointments (next 7 days)
                     const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                     const weekFromNowStr = weekFromNow.toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
-                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=gt=${today}&date=lte=${weekFromNowStr}&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
+                    const upcomingRes = await fetch(`${supabaseUrl}/rest/v1/appointments?date=gt=${today}&date=lte=${weekFromNowStr}&type=neq.recordatorio&select=id,patient_name,date,time,status,type&order=date&limit=10`, {
                         headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
                     });
                     const upcoming = await upcomingRes.json();
