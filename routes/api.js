@@ -1296,9 +1296,18 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const { createClient } = await import('@supabase/supabase-js');
         const sb = createClient(supabaseUrl, supabaseKey);
 
-        // Resolve chat_id: query param > env TELEGRAM_CHAT_ID (NO fallback to queue: it may hold the bot's own id)
-        const chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
-        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param o env TELEGRAM_CHAT_ID)' });
+        // Resolve chat_id: query param > env > last real user chat from telegram_chat_ids (direction=incoming)
+        let chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
+        if (!chatId) {
+            const { data: chatRows } = await sb
+                .from('telegram_pending_queue')
+                .select('chat_id')
+                .eq('direction', 'incoming')
+                .order('updated_at', { ascending: false })
+                .limit(1);
+            if (chatRows && chatRows.length > 0) chatId = chatRows[0].chat_id;
+        }
+        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param, env TELEGRAM_CHAT_ID o interacción previa del usuario)' });
 
         const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
 
@@ -1357,19 +1366,7 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const message = parts.join('\n');
 
         const sent = await sendTelegramMessage(chatId, message, 'HTML');
-        let tgError = null;
-        if (!sent) {
-            try {
-                const TOK = process.env.TELEGRAM_BOT_TOKEN;
-                const test = await fetch(`https://api.telegram.org/bot${TOK}/sendMessage`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: chatId, text: '🔧 Test FonoAudio-Pro', parse_mode: 'HTML' }),
-                });
-                const td = await test.json();
-                tgError = td.ok ? 'helper_false_but_api_ok' : (td.description || 'unknown');
-            } catch (e2) { tgError = String(e2?.message || e2); }
-        }
-        res.json({ status: 'ok', sent, chatId: String(chatId), appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, tgError });
+        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, message });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
@@ -4232,6 +4229,21 @@ router.post('/telegram/webhook', async (req, res) => {
         const msg = update.message || update.edited_message;
         const chat_id = msg.chat?.id;
         if (!chat_id) return res.json({ ok: true });
+
+        // Persist the real user chat_id so proactive messages (briefing, reminders) reach the user, not the bot
+        try {
+            const supabaseUrl = process.env.VITE_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseKey) {
+                await fetch(`${supabaseUrl}/rest/v1/telegram_pending_queue?chat_id=eq.${chat_id}`, {
+                    method: 'DELETE', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+                });
+                await fetch(`${supabaseUrl}/rest/v1/telegram_pending_queue`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json', apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+                    body: JSON.stringify({ chat_id: String(chat_id), direction: 'incoming', status: 'chat_registered', updated_at: new Date().toISOString() })
+                });
+            }
+        } catch (e) { console.warn('[Webhook] Could not persist chat_id:', e?.message); }
 
         const aiModel = req.app.locals.aiModel;
         const aiModelFallback = req.app.locals.aiModelFallback;
