@@ -50,6 +50,27 @@ export default function ClinicalMascot({
   const inputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  // 🗣️ Detecta cuando la voz (speechSynthesis) está hablando → anima la boca
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [mouthOpen, setMouthOpen] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    let ticker: ReturnType<typeof setInterval> | null = null;
+    const poll = () => {
+      const speaking = !!window.speechSynthesis.speaking;
+      setIsSpeaking(speaking);
+      // Alterna la boca abierta/cerrada mientras habla (simula habla)
+      if (speaking) {
+        if (!ticker) ticker = setInterval(() => setMouthOpen((m) => !m), 150);
+      } else {
+        if (ticker) { clearInterval(ticker); ticker = null; }
+        setMouthOpen(false);
+      }
+    };
+    const id = setInterval(poll, 120);
+    return () => { clearInterval(id); if (ticker) clearInterval(ticker); };
+  }, []);
+
   const speak = useCallback((text: string) => {
     if (muted || !("speechSynthesis" in window) || !text) return;
     try {
@@ -250,7 +271,14 @@ export default function ClinicalMascot({
             <circle cx="41.5" cy="26.5" r="1.6" fill="#fff" />
             {mood === "alert" ? (
               <path d="M22 44 Q32 36 42 44" stroke="#0f172a" strokeWidth="3" fill="none" strokeLinecap="round" />
+            ) : isSpeaking && mouthOpen ? (
+              // Boca abierta (habla) — sincronizada al TTS
+              <path d="M20 40 Q32 58 44 40" stroke="#0f172a" strokeWidth="2.5" fill="#f472b6" fillOpacity="0.75" strokeLinecap="round" />
+            ) : isSpeaking ? (
+              // Boca semi-cerrada (alterna)
+              <path d="M21 41 Q32 54 43 41" stroke="#0f172a" strokeWidth="2.5" fill="#f472b6" fillOpacity="0.5" strokeLinecap="round" />
             ) : (
+              // Boca neutral (cerrada)
               <path d="M22 40 Q32 50 42 40" stroke="#0f172a" strokeWidth="3" fill="none" strokeLinecap="round" />
             )}
             <circle cx="16" cy="38" r="4" fill="#f472b6" opacity="0.85" />
