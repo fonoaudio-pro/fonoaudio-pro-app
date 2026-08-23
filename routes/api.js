@@ -1340,6 +1340,22 @@ router.get('/admin/clean-reminder-appointments', async (req, res) => {
     }
 });
 
+// TEMP: diagnostic - check google_auth token presence (run once, then remove)
+router.get('/admin/diag-google', async (req, res) => {
+    try {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        const r = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=user_id,expires_at`, {
+            method: 'GET', headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` }
+        });
+        const rows = await r.json();
+        const hasToken = Array.isArray(rows) && rows.length > 0;
+        res.json({ status: 'ok', count: hasToken ? rows.length : 0, sample: hasToken ? rows.slice(0, 2) : [] });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 // ─── MORNING BRIEFING (proactive assistant) ───
 router.get('/telegram/morning-briefing', async (req, res) => {
     try {
