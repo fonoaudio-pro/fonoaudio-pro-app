@@ -1357,15 +1357,7 @@ router.get('/telegram/morning-briefing', async (req, res) => {
         const message = parts.join('\n');
 
         const sent = await sendTelegramMessage(chatId, message, 'HTML');
-        let tgError = null;
-        if (!sent) {
-            try {
-                const TOK = process.env.TELEGRAM_BOT_TOKEN;
-                const me = await fetch(`https://api.telegram.org/bot${TOK}/getMe`).then(r => r.json());
-                tgError = me.ok ? `token_ok_bot_@${me.result?.username}; chat ${chatId} rejected` : `token_invalid: ${me.description}`;
-            } catch (e2) { tgError = String(e2?.message || e2); }
-        }
-        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, tgError });
+        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, message });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
