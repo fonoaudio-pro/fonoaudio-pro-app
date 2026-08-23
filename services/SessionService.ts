@@ -199,6 +199,45 @@ export class SessionService {
             console.warn('Failed to extract clinical facts after session completion:', err);
         }
 
+        // 3b. Sync session objectives/next-action into the patient's Treatment Plan
+        try {
+            const { data: tpPatient } = await supabase
+                .from('patients')
+                .select('treatmentPlan, name')
+                .eq('id', patientId)
+                .single();
+            const existingPlan = (tpPatient?.treatmentPlan || {}) as any;
+            const sessionDate = session.date || new Date().toISOString().split('T')[0];
+            const objectivesLine = session.objectives?.trim()
+                ? `• Objetivos trabajados (${sessionDate}): ${session.objectives.trim()}`
+                : '';
+            const nextLine = session.nextAction?.trim()
+                ? `• Próximo paso (${sessionDate}): ${session.nextAction.trim()}`
+                : '';
+            const entry = [objectivesLine, nextLine].filter(Boolean).join('\n');
+            if (entry) {
+                const prevSummary = existingPlan.summary || '';
+                const newSummary = prevSummary
+                    ? `${prevSummary}\n\n══ SESIÓN ${sessionDate} ══\n${entry}`
+                    : `══ SESIÓN ${sessionDate} ══\n${entry}`;
+                const updatedPlan = {
+                    ...existingPlan,
+                    lastUpdate: new Date().toISOString(),
+                    summary: newSummary,
+                    history: [
+                        ...(existingPlan.history || []),
+                        { date: sessionDate, text: entry, action: 'session_sync' },
+                    ],
+                };
+                await supabase
+                    .from('patients')
+                    .update({ treatmentPlan: updatedPlan })
+                    .eq('id', patientId);
+            }
+        } catch (err) {
+            console.warn('Failed to sync session into treatment plan:', err);
+        }
+
         // 4. Fetch patient to get context for HomeGuide
         const { data: patient, error: fetchError } = await supabase
             .from('patients')

@@ -818,7 +818,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
             if (isTeleconsulta) {
               googleEvent = await GoogleCalendarService.createEventWithMeet(tokens.accessToken, {
                 summary: `${appointmentData.patient_name || 'Cita'} - ${appointmentData.type || 'Consulta'}`,
-                description: `Teleconsulta desde FonoAudio Pro AI\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
+                description: `Teleconsulta - Sesión de Fonoaudiología\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
                 start: startDate.toISOString(),
                 end: endDate.toISOString(),
                 colorId: appointmentData.color_id,
@@ -826,7 +826,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
             } else {
               googleEvent = await GoogleCalendarService.createEvent(tokens.accessToken, {
                 summary: `${appointmentData.patient_name || 'Cita'} - ${appointmentData.type || 'Consulta'}`,
-                description: `Cita creada desde FonoAudio Pro AI\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
+                description: `Cita de Fonoaudiología\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
                 start: startDate.toISOString(),
                 end: endDate.toISOString(),
                 colorId: appointmentData.color_id,
@@ -854,7 +854,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
               const endDate = new Date(startDate.getTime() + (appointmentData.duration || 60) * 60000);
               await GoogleCalendarService.updateEvent(tokens.accessToken, savedAppointment.google_event_id, {
                 summary: `${appointmentData.patient_name || 'Cita'} - ${appointmentData.type || 'Consulta'}`,
-                description: `Cita actualizada desde FonoAudio Pro AI\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
+                description: `Cita de Fonoaudiología (actualizada)\nPaciente: ${appointmentData.patient_name || 'Sin nombre'}${appointmentData.notes ? `\nNotas: ${appointmentData.notes}` : ''}`,
                 start: startDate.toISOString(),
                 end: endDate.toISOString(),
                 colorId: appointmentData.color_id,
@@ -1022,7 +1022,7 @@ export const AgendaSincronizada: React.FC<AgendaSincronizadaProps> = ({ patients
                 const endDate = new Date(startDate.getTime() + (appointment.duration || 60) * 60000);
                 await GoogleCalendarService.updateEvent(tokens.accessToken, appointment.google_event_id, {
                   summary: `${appointment.patient_name || 'Cita'} - ${appointment.type || 'Consulta'}`,
-                  description: `Cita reprogramada desde FonoAudio Pro AI\nPaciente: ${appointment.patient_name || 'Sin nombre'}`,
+                  description: `Cita de Fonoaudiología (reprogramada)\nPaciente: ${appointment.patient_name || 'Sin nombre'}`,
                   start: startDate.toISOString(),
                   end: endDate.toISOString(),
                 });

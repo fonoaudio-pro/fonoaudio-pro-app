@@ -55,7 +55,7 @@ export async function exportReportToPdf(options: PdfExportOptions): Promise<void
     pdf.text(`Paciente: ${patientName}${patientAge ? ` | Edad: ${patientAge} años` : ''}${patientDiagnosis ? ` | Diagnóstico: ${patientDiagnosis}` : ''}`, margin, 19);
 
     pdf.setFontSize(8);
-    pdf.text(`Fecha: ${new Date().toLocaleDateString('es-AR')} | FonoAudio Pro AI`, margin, 25);
+    pdf.text(`Fecha: ${new Date().toLocaleDateString('es-AR')}${professionalName ? ` | ${professionalName}` : ''}`, margin, 25);
 
     // Create a temporary div with the HTML content
     const tempDiv = document.createElement('div');
@@ -149,7 +149,7 @@ export async function exportReportToPdf(options: PdfExportOptions): Promise<void
         pdf.setFontSize(7);
         pdf.setTextColor(148, 163, 184);
         pdf.text(
-            footer || `Generado por FonoAudio Pro AI | ${new Date().toLocaleDateString('es-AR')}`,
+            footer || `${professionalName ? `${professionalName} | ` : ''}${new Date().toLocaleDateString('es-AR')}`,
             margin, footerY
         );
 

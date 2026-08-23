@@ -125,7 +125,7 @@ export async function printMaterial(input: ShareMaterialInput): Promise<void> {
       </div>
       ${input.description ? `<div style="font-size:10pt;color:#475569;margin-bottom:8mm;text-align:center;max-width:80%">${input.description}</div>` : ''}
       <div class="footer">
-        <span>FonoAudio Pro — Material Terapéutico</span>
+        <span>Material Terapéutico</span>
         <span>${new Date().toLocaleDateString('es-AR')} ${new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
       </div>
     </body>
@@ -218,7 +218,7 @@ export async function downloadPdf(input: ShareMaterialInput): Promise<void> {
   pdf.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
   pdf.setTextColor(148, 163, 184);
   pdf.setFontSize(8);
-  pdf.text('FonoAudio Pro — Material Terapéutico', margin, footerY);
+  pdf.text('Material Terapéutico', margin, footerY);
   pdf.text(new Date().toLocaleDateString('es-AR'), pageWidth - margin, footerY, { align: 'right' });
 
   const fileName = `${input.title.replace(/[^a-zA-Z0-9áéíóúñ]/g, '_')}_${Date.now()}.pdf`;
@@ -232,7 +232,7 @@ export function shareWhatsApp(input: ShareMaterialInput): void {
   const text = encodeURIComponent(
     `Material terapéutico: *${input.title}*` +
     (input.clinicalArea ? `\nÁrea: ${input.clinicalArea}` : '') +
-    `\n\nGenerado desde FonoAudio Pro`
+    ``
   );
   window.open(`https://wa.me/?text=${text}`, '_blank');
 }
@@ -246,7 +246,7 @@ export function shareEmail(input: ShareMaterialInput): void {
     `Te comparto el material terapéutico: ${input.title}` +
     (input.clinicalArea ? `\nÁrea: ${input.clinicalArea}` : '') +
     (input.tags?.length ? `\nEtiquetas: ${input.tags.join(', ')}` : '') +
-    `\n\nGenerado desde FonoAudio Pro`
+    ``
   );
   window.open(`mailto:?subject=${subject}&body=${body}`, '_blank');
 }

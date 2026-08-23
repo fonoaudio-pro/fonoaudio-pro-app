@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       });
     }
 
-    summaryText += `\n_FonoAudio Pro AI - Asistente Clínico Autónomo_`;
+    summaryText += `\n_Resumen diario generado para tu práctica fonoaudiológica_`;
 
     const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
       method: 'POST',

@@ -14,6 +14,7 @@ import { GmailService } from '../services/gmailService';
 import { arasaacService, ArasaacPictogram } from '../services/ArasaacService';
 import { useToast } from '../context/ToastContext';
 import { useAppStore } from '../store/appStore';
+import { useSettings } from '../context/SettingsContext';
 import { voiceService } from '../utils/voiceService';
 import { supabase } from '../utils/supabaseClient';
 
@@ -29,6 +30,9 @@ interface HomeGuideEditorProps {
 
 const HomeGuideEditor: React.FC<HomeGuideEditorProps> = ({ guide, patient, onSave, onCancel, onPreview, materials, materialsError }) => {
     const { addToast } = useToast();
+    const { settings } = useSettings();
+    const professionalName = settings?.profile?.professionalName?.trim();
+    const signature = professionalName ? professionalName : 'Fonoaudiólogo';
     const userId = useAppStore(s => s.selectedPatientId); // Not used, we need the session user
     const sessionUserId = useAppStore.getState ? undefined : undefined; // Will get from context
     const [draft, setDraft] = useState<HomeGuide>(() => ({ ...guide, materialIds: guide.materialIds || [] }));
@@ -133,7 +137,7 @@ const HomeGuideEditor: React.FC<HomeGuideEditorProps> = ({ guide, patient, onSav
 
         setIsSending(true);
         try {
-            const body = `${draft.title}\n\n${draft.content}\n\n---\n_Enviado desde FonoAudio Pro_`;
+            const body = `${draft.title}\n\n${draft.content}\n\n---\n${signature}`;
             await GmailService.sendMessage(uid, patient.email, draft.title, body);
             addToast({ message: `Email enviado a ${patient.email}`, type: 'success' });
         } catch (err: any) {
@@ -163,7 +167,7 @@ const HomeGuideEditor: React.FC<HomeGuideEditorProps> = ({ guide, patient, onSav
     const handleSendWhatsApp = () => {
         const phone = patient.phone?.replace(/\D/g, '');
         if (!phone) { addToast({ message: 'El paciente no tiene teléfono', type: 'error' }); return; }
-        const text = encodeURIComponent(`*${draft.title}*\n\n${(draft.content || '').replace(/\n/g, '%0A')}\n\n_Enviado desde FonoAudio Pro_`);
+        const text = encodeURIComponent(`*${draft.title}*\n\n${(draft.content || '').replace(/\n/g, '%0A')}\n\n${signature}`);
         window.open(`https://wa.me/${phone}?text=${text}`, '_blank');
         setShowSendMenu(false);
     };
@@ -254,7 +258,7 @@ const HomeGuideEditor: React.FC<HomeGuideEditorProps> = ({ guide, patient, onSav
             .replace(/^(\d+)\. (.*$)/gm, '<li>$2</li>')
             .replace(/\!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1" style="max-width:120px;border-radius:8px;margin:4px 0" />')
             .replace(/\n/g, '<br/>');
-        printWindow.document.write(`<html><head><title>${draft.title}</title><style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.6}</style></head><body><h1>${draft.title}</h1>${htmlContent}<hr/><p style="color:#999;font-size:12px">Enviado desde FonoAudio Pro</p></body></html>`);
+        printWindow.document.write(`<html><head><title>${draft.title}</title><style>body{font-family:sans-serif;max-width:700px;margin:40px auto;padding:0 20px;line-height:1.6}</style></head><body><h1>${draft.title}</h1>${htmlContent}<hr/><p style="color:#999;font-size:12px">${signature}</p></body></html>`);
         printWindow.document.close();
         printWindow.print();
     };

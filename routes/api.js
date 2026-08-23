@@ -1288,6 +1288,80 @@ router.get('/followup/missing-data', async (req, res) => {
     }
 });
 
+// ─── MORNING BRIEFING (proactive assistant) ───
+router.get('/telegram/morning-briefing', async (req, res) => {
+    try {
+        const chatId = req.query.chatId || process.env.TELEGRAM_CHAT_ID;
+        if (!chatId) return res.status(400).json({ status: 'error', message: 'chatId requerido (query param o env TELEGRAM_CHAT_ID)' });
+
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+        const { createClient } = await import('@supabase/supabase-js');
+        const sb = createClient(supabaseUrl, supabaseKey);
+
+        const today = new Date().toLocaleDateString('sv-SE', { timeZone: 'America/Argentina/Buenos_Aires' });
+
+        // 1. Turnos de hoy
+        const { data: apps, error: appErr } = await sb
+            .from('appointments')
+            .select('patient_name, time, status, type')
+            .eq('date', today)
+            .order('time', { ascending: true });
+        if (appErr) throw appErr;
+
+        // 2. Datos faltantes
+        const { data: patients } = await sb.from('patients').select('id, name');
+        const { data: records } = await sb.from('clinical_records').select(
+            'patient_id, chief_complaint, primary_diagnosis_name, affected_areas, personal_history, family_history, medical_history, developmental_history'
+        );
+        const recById = {};
+        (records || []).forEach(r => { recById[r.patient_id] = r; });
+        const incomplete = [];
+        for (const p of (patients || [])) {
+            const cr = recById[p.id];
+            const missing = [];
+            if (!cr) missing.push('Ficha sin crear');
+            else {
+                if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('Motivo de consulta');
+                if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('Diagnóstico');
+                if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('Áreas afectadas');
+                if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('Historia personal');
+                if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('Historia familiar');
+                if (!cr.medical_history || Object.keys(cr.medical_history).length === 0) missing.push('Historia médica');
+                if (!cr.developmental_history || Object.keys(cr.developmental_history).length === 0) missing.push('Historia desarrollo');
+            }
+            if (missing.length > 0) incomplete.push({ name: p.name, missing });
+        }
+
+        // 3. Armar mensaje
+        const parts = [];
+        parts.push('🌅 <b>Briefing matutino</b>');
+        parts.push(`<b>${today}</b>`);
+        if ((apps || []).length > 0) {
+            parts.push('\n📅 <b>Sesiones de hoy:</b>');
+            parts.push((apps || []).map(a => `• ${a.time || '??:??'} hs — ${a.patient_name}${a.type ? ` (${a.type})` : ''}`).join('\n'));
+        } else {
+            parts.push('\n📅 Sin sesiones programadas para hoy.');
+        }
+        const pending = incomplete.filter(i => (apps || []).some(a => a.patient_name === i.name));
+        if (pending.length > 0) {
+            parts.push('\n⚠️ <b>Pacientes de hoy con ficha incompleta:</b>');
+            parts.push(pending.map(i => `• ${i.name}: falta [${i.missing.join(', ')}]`).join('\n'));
+        }
+        if (incomplete.length > 0) {
+            parts.push(`\n📋 Total fichas incompletas en la clínica: ${incomplete.length}.`);
+        } else {
+            parts.push('\n✅ Todas las fichas están completas.');
+        }
+        const message = parts.join('\n');
+
+        const sent = await sendTelegramMessage(chatId, message, 'HTML');
+        res.json({ status: 'ok', sent, appointmentsToday: (apps || []).length, incompleteCount: incomplete.length, message });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 router.post('/telegram/send', async (req, res) => {
     console.log(`[Telegram] chatId: ${chatId}, media: ${photo ? 'photo' : video ? 'video' : audio ? 'audio' : voice ? 'voice' : document ? 'document' : 'text'}, msgLen: ${message?.length || 0}`);
 
@@ -2618,6 +2692,17 @@ async function executeToolCall(functionName, args, user_id) {
             const recById = {};
             (records || []).forEach(r => { recById[r.patient_id] = r; });
 
+            // Clinical-quality validators: a field can be "present" but clinically poor
+            const GENERIC_TERMS = ['por evaluar', 'a confirmar', 'a determinar', 'sin especificar', 'por definir', 'pendiente', 'evaluar', 'definir', 'desconocido', 'nc', 'na', 'seguir'];
+            const isClinicallyPoor = (val, minWords = 2) => {
+                const s = String(val || '').trim().toLowerCase();
+                if (!s) return { poor: true, reason: 'vacío' };
+                const words = s.split(/\s+/).filter(Boolean);
+                if (words.length < minWords) return { poor: true, reason: 'muy breve' };
+                if (GENERIC_TERMS.some(t => s.includes(t))) return { poor: true, reason: 'término genérico' };
+                return { poor: false };
+            };
+
             const report = [];
             for (const p of (allPatients || [])) {
                 const cr = recById[p.id];
@@ -2626,7 +2711,9 @@ async function executeToolCall(functionName, args, user_id) {
                     missing.push('FICHA SIN CREAR');
                 } else {
                     if (!cr.chief_complaint || String(cr.chief_complaint).trim() === '') missing.push('Motivo de consulta');
+                    else { const q = isClinicallyPoor(cr.chief_complaint, 3); if (q.poor) missing.push(`Motivo de consulta (${q.reason})`); }
                     if (!cr.primary_diagnosis_name || String(cr.primary_diagnosis_name).trim() === '') missing.push('Diagnostico principal');
+                    else { const q = isClinicallyPoor(cr.primary_diagnosis_name, 2); if (q.poor) missing.push(`Diagnostico principal (${q.reason})`); }
                     if (!cr.affected_areas || !Array.isArray(cr.affected_areas) || cr.affected_areas.filter(a => a && a.affected).length === 0) missing.push('Areas afectadas');
                     if (!cr.personal_history || Object.keys(cr.personal_history).length === 0) missing.push('Historia personal');
                     if (!cr.family_history || Object.keys(cr.family_history).length === 0) missing.push('Historia familiar');

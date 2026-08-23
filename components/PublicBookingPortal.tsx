@@ -171,7 +171,7 @@ export const PublicBookingPortal: React.FC = () => {
                         <Calendar size={28} className="text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-800">Agendar Turno</h1>
-                    <p className="text-sm text-slate-500 mt-1">FonoAudio Pro AI</p>
+                    <p className="text-sm text-slate-500 mt-1">Reserva tu consulta de fonoaudiología</p>
                 </div>
 
                 {/* Progress */}

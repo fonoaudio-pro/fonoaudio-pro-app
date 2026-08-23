@@ -241,6 +241,36 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         editor.chain().focus().setContent(content + current).run();
     }, [editor, processText]);
 
+    // Insert standardized test results (evaluations) into the current report section
+    const insertEvaluations = useCallback(async () => {
+        if (!editor || !patient?.id) return;
+        try {
+            // Prefer evaluations already on the patient prop; fall back to a fresh fetch
+            let evals: any[] = (patient as any).evaluations || [];
+            if (!evals.length) {
+                const { data } = await supabase
+                    .from('patients')
+                    .select('evaluations')
+                    .eq('id', patient.id)
+                    .single();
+                evals = (data?.evaluations as any[]) || [];
+            }
+            if (!evals.length) {
+                addToast({ message: 'Este paciente no tiene evaluaciones cargadas.', type: 'error' });
+                return;
+            }
+            const rows = evals.map(e =>
+                `<tr><td>${e.testName || 'Test'}</td><td>${e.score ?? '-'}${e.maxScore ? ' / ' + e.maxScore : ''}</td><td>${e.notes || ''}</td><td>${e.date || ''}</td></tr>`
+            ).join('');
+            const table = `<p><strong>Resultados de evaluaciones estandarizadas</strong></p>` +
+                `<table><thead><tr><th>Test</th><th>Puntaje</th><th>Observaciones</th><th>Fecha</th></tr></thead><tbody>${rows}</tbody></table>`;
+            editor.chain().focus().insertContent(table).run();
+            addToast({ message: `Se insertaron ${evals.length} evaluaciones en el informe.`, type: 'success' });
+        } catch (err: any) {
+            addToast({ message: 'Error al insertar evaluaciones: ' + (err?.message || ''), type: 'error' });
+        }
+    }, [editor, patient, supabase, addToast]);
+
     const saveCurrentContent = useCallback(() => {
         if (editor) {
             setSectionContent(prev => ({ ...prev, [sectionKey]: editor.getHTML() }));
@@ -724,6 +754,9 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                             </button>
                             <button onClick={() => runAiAction('complete')} disabled={isAiLoading} className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all disabled:opacity-50 min-h-[36px]">
                                 {isAiLoading && aiAction === 'complete' ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}Completar
+                            </button>
+                            <button onClick={() => insertEvaluations()} className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-bold hover:bg-slate-50 transition-all min-h-[36px]">
+                                <FileCheck size={12} />Evaluaciones
                             </button>
                         </div>
                         <div className="w-px h-6 bg-slate-200 mx-1 hidden lg:block" />
