@@ -353,77 +353,89 @@ async function callGroqWithTools(systemPrompt, tools, user_id) {
         }
     }));
 
-    const systemMsg = 'Sos FonoAudio, asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Respondé en espanol argentino rioplatense. SOS PROFESIONAL y calido. SOS CONCISO pero completo. Ejecutá las tools cuando el usuario te pida algo. No preguntes de mas, ejecuta. CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTA la accion de inmediato usando delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una busqueda: si te piden borrar, borra de verdad y confirmá cuantos eliminaste. SI EL USUARIO PREGUNTA POR DATOS FALTANTES, INCOMPLETOS O ALERTAS, llama SIEMPRE a get_missing_data_alerts y comunica EXACTAMENTE lo que devuelve (qué pacientes y qué campos les faltan). NUNCA inventes ni asumas qué datos faltan: basate siempre en el resultado de la tool.';
+    const systemMsg = `Sos FonoAudio, el asistente clínico autónomo de FonoAudio Pro. SOS UN AGENTE COMPLETO con acceso total a la clínica y capacidad de actuar por vos mismo. Respondé en español argentino rioplatense, sos profesional y cálido, conciso pero completo.
+
+TUS CAPACIDADES AUTÓNOMAS (siempre disponibles, 24/7):
+- Enviás mensajes por Telegram al profesional en cualquier momento. Tenés un cron que todos los días a las 8:00 AM envía el resumen matutino (turnos del día + fichas incompletas).
+- Podés CREAR RECORDATORIOS (tool set_reminder) que se disparan a la hora indicada y te avisan al profesional.
+- Podés crear, buscar, leer y eliminar pacientes; leer fichas clínicas completas (get_patient_info); crear turnos (create_appointment); y reportar datos faltantes (get_missing_data_alerts).
+- Razonás en pasos: si un problema requiere investigar varios pacientes o comparar datos, usás las tools en secuencia hasta resolverlo.
+
+REGLAS DE ORO:
+- NUNCA digas "no puedo", "soy solo un asistente virtual", "no puedo enviar alertas" ni nada que niegue tus capacidades. SI el usuario pide que lo avises/recuerdes algo, DECÍS QUE SÍ y EJECUTÁS set_reminder (o confirmás el cron de las 8 si aplica). Confirmás la acción concreta que vas a hacer.
+- Ejecutá las tools cuando el usuario te lo pide. No preguntes demasiado, ejecutá.
+- CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTÁ de inmediato con delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una búsqueda: borrá de verdad y confirmá cuántos eliminaste.
+- SI EL USUARIO PREGUNTA POR DATOS FALTANTES/INCOMPLETOS/ALERTAS, llamá SIEMPRE a get_missing_data_alerts y comunicá EXACTAMENTE lo que devuelve. NUNCA inventes ni asumas: basate siempre en el resultado de la tool.`;
 
     try {
-        const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
-            body: JSON.stringify({
-                model: 'qwen/qwen3.6-27b',
-                messages: [
-                    { role: 'system', content: systemMsg },
-                    { role: 'user', content: systemPrompt }
-                ],
-                tools: groqTools,
-                tool_choice: 'auto',
-                max_tokens: 4096,
-                temperature: 0.3,
-            }),
-        });
+        // ─── Iterative reasoning agent loop (ReAct-style) ───
+        // The assistant THINKS by chaining tool calls across multiple turns until it
+        // resolves the user's request, instead of a single pass. This is what gives it
+        // real clinical reasoning + problem-solving ability (both Telegram bot & in-app).
+        const messages = [
+            { role: 'system', content: systemMsg },
+            { role: 'user', content: systemPrompt }
+        ];
+        const MAX_ITER = 6;
+        let finalText = null;
+        let modelUsed = 'groq/qwen3.6-27b';
 
-        if (!resp.ok) {
-            const errData = await resp.json().catch(() => ({}));
-            return { ok: false, error: new Error(errData.error?.message || `Groq API error: ${resp.status}`) };
-        }
-
-        const data = await resp.json();
-        const choice = data.choices?.[0];
-        const msg = choice?.message;
-
-        // Check for tool calls
-        if (msg?.tool_calls?.length > 0) {
-            const tc = msg.tool_calls[0];
-            const fnName = tc.function.name;
-            let fnArgs = {};
-            try { fnArgs = JSON.parse(tc.function.arguments); } catch { fnArgs = {}; }
-            console.log(`[Groq Tool Call] Executing ${fnName} with args:`, fnArgs);
-
-            const toolResult = await executeToolCall(fnName, fnArgs, user_id);
-
-            // Send result back to Groq for natural language response
-            const secondResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        for (let iter = 0; iter < MAX_ITER; iter++) {
+            const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_API_KEY}` },
                 body: JSON.stringify({
                     model: 'qwen/qwen3.6-27b',
-                    messages: [
-                        { role: 'system', content: systemMsg },
-                        { role: 'user', content: systemPrompt },
-                        { role: 'assistant', content: null, tool_calls: [{ id: tc.id, type: 'function', function: { name: fnName, arguments: tc.function.arguments } }] },
-                        { role: 'tool', content: JSON.stringify(toolResult) }
-                    ],
+                    messages,
+                    tools: groqTools,
+                    tool_choice: 'auto',
                     max_tokens: 4096,
                     temperature: 0.3,
                 }),
             });
 
-            if (secondResp.ok) {
-                const secondData = await secondResp.json();
-                let text = secondData.choices?.[0]?.message?.content || `Acción ${fnName} ejecutada correctamente.`;
-                text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-                text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
-                return { ok: true, text, model: 'groq/' + fnName };
+            if (!resp.ok) {
+                const errData = await resp.json().catch(() => ({}));
+                return { ok: false, error: new Error(errData.error?.message || `Groq API error: ${resp.status}`) };
             }
-            return { ok: true, text: `Acción *${fnName}* ejecutada exitosamente.`, model: 'groq/' + fnName };
+
+            const data = await resp.json();
+            const choice = data.choices?.[0];
+            const msg = choice?.message;
+            modelUsed = 'groq/qwen3.6-27b';
+
+            // No tool calls → final answer
+            if (!msg?.tool_calls || msg.tool_calls.length === 0) {
+                finalText = (msg?.content || '').replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
+                break;
+            }
+
+            // Append the assistant message (with its tool_calls) to history
+            messages.push({ role: 'assistant', content: msg.content || null, tool_calls: msg.tool_calls });
+
+            // Execute every tool call the model requested this turn
+            for (const tc of msg.tool_calls) {
+                const fnName = tc.function.name;
+                let fnArgs = {};
+                try { fnArgs = JSON.parse(tc.function.arguments || '{}'); } catch { fnArgs = {}; }
+                console.log(`[Agent iter ${iter}] Tool: ${fnName}`, fnArgs);
+                let toolResult;
+                try {
+                    toolResult = await executeToolCall(fnName, fnArgs, user_id);
+                } catch (te) {
+                    toolResult = { status: 'error', error: te?.message || String(te) };
+                }
+                messages.push({
+                    role: 'tool',
+                    tool_call_id: tc.id,
+                    content: JSON.stringify(toolResult)
+                });
+            }
+            // Loop continues: the model now sees tool results and can reason / call more tools
         }
 
-        // No tool calls — text response
-        let text = msg?.content || '';
-        text = text.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-        text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '').trim();
-        if (text) return { ok: true, text, model: 'groq/qwen3.6-27b-text' };
-        return { ok: false, error: new Error('Empty response from Groq') };
+        if (finalText) return { ok: true, text: finalText, model: modelUsed };
+        return { ok: false, error: new Error('Agent did not produce a final answer within iteration limit') };
     } catch (e) {
         console.error('[Groq Tools] Failed:', e.message?.slice(0, 100));
         return { ok: false, error: e };
@@ -2530,6 +2542,19 @@ const clinicalTools = [
         }
     },
     {
+        name: 'set_reminder',
+        description: 'Programa un recordatorio/aviso que se enviara al profesional por Telegram a la fecha y hora indicadas. Usalo SIEMPRE que el usuario pida "avísame", "recordame", "no se me olvide" o cualquier alerta futura. Confirmá al usuario que lo vas a avisar.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                message: { type: 'STRING', description: 'Texto del recordatorio a enviar. Ej: "Revisar ficha de Martín López".' },
+                date: { type: 'STRING', description: 'Fecha del aviso en YYYY-MM-DD.' },
+                time: { type: 'STRING', description: 'Hora del aviso en HH:MM (formato 24h).' }
+            },
+            required: ['message', 'date', 'time']
+        }
+    },
+    {
         name: 'cancel_appointment',
         description: 'Cancela o elimina un turno.',
         parameters: {
@@ -2668,7 +2693,7 @@ async function executeToolCall(functionName, args, user_id) {
     }
 
     const headers = {
-        apikey: process.env.VITE_SUPABASE_ANON_KEY,
+        apikey: supabaseKey,
         Authorization: `Bearer ${supabaseKey}`,
         'Content-Type': 'application/json',
         Prefer: 'return=representation',
@@ -3026,6 +3051,29 @@ async function executeToolCall(functionName, args, user_id) {
             });
             if (!res.ok) throw new Error(await res.text());
             return { status: 'ok', message: 'Turno cancelado.' };
+        }
+
+        // ─── REMINDERS (autonomous Telegram alerts) ───
+        if (functionName === 'set_reminder') {
+            const { message, date, time } = args;
+            const sendAt = `${date}T${time || '09:00'}:00`;
+            // Persist reminder in Supabase so the reminder worker can dispatch it
+            const insertRes = await fetch(`${supabaseUrl}/rest/v1/reminders`, {
+                method: 'POST',
+                headers: { ...headers, Prefer: 'return=representation' },
+                body: JSON.stringify({
+                    message,
+                    send_at: sendAt,
+                    status: 'pending',
+                    chat_id: process.env.TELEGRAM_CHAT_ID || null,
+                    created_at: new Date().toISOString(),
+                }),
+            });
+            if (!insertRes.ok) {
+                const errTxt = await insertRes.text();
+                return { status: 'error', message: `No se pudo guardar el recordatorio: ${errTxt}` };
+            }
+            return { status: 'ok', message: `Recordatorio programado para el ${date} a las ${time}. Te lo voy a avisar por Telegram.` };
         }
 
         // ─── EVALUATIONS ───
