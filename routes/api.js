@@ -3056,16 +3056,18 @@ async function executeToolCall(functionName, args, user_id) {
         // ─── REMINDERS (autonomous Telegram alerts) ───
         if (functionName === 'set_reminder') {
             const { message, date, time } = args;
-            const sendAt = `${date}T${time || '09:00'}:00`;
-            // Persist reminder in Supabase so the reminder worker can dispatch it
-            const insertRes = await fetch(`${supabaseUrl}/rest/v1/reminders`, {
+            // Store as an appointment of type 'recordatorio' so the reminder worker can dispatch it.
+            // We use the patient_name field to carry the reminder message.
+            const insertRes = await fetch(`${supabaseUrl}/rest/v1/appointments`, {
                 method: 'POST',
                 headers: { ...headers, Prefer: 'return=representation' },
                 body: JSON.stringify({
-                    message,
-                    send_at: sendAt,
+                    patient_name: message || 'Recordatorio FonoAudio-Pro',
+                    date: date,
+                    time: time || '09:00',
+                    type: 'recordatorio',
                     status: 'pending',
-                    chat_id: process.env.TELEGRAM_CHAT_ID || null,
+                    notes: 'Recordatorio autónomo solicitado por el profesional vía asistente.',
                     created_at: new Date().toISOString(),
                 }),
             });
@@ -4125,7 +4127,7 @@ router.get('/worker/check-reminders', async (req, res) => {
         const currentHour = now.getHours();
         const currentMin = now.getMinutes();
 
-        // Get upcoming appointments (pending, within next 2 hours)
+        // Get upcoming appointments (pending) for today, including autonomous reminders
         const { data: appointments, error } = await supabase
             .from('appointments')
             .select('*')
@@ -4143,18 +4145,36 @@ router.get('/worker/check-reminders', async (req, res) => {
             const [aH, aM] = appt.time.split(':').map(Number);
             const diffMin = (aH * 60 + aM) - (currentHour * 60 + currentMin);
 
-            // Send reminder 30 minutes before
-            if (diffMin > 0 && diffMin <= 30) {
-                const reminderMsg = `🔔 *Recordatorio de Cita*\n\n👤 Paciente: ${appt.patient_name || 'Sin nombre'}\n🕐 Hora: ${appt.time} hs\n📋 Tipo: ${appt.type || 'Consulta'}\n📝 Notas: ${appt.notes || 'Sin notas'}\n\n_FonoAudio Pro - Te faltan ${diffMin} minutos_`;
-
-                const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ chat_id: Number(CHAT_ID), text: reminderMsg, parse_mode: 'Markdown' })
-                });
-                const d = await r.json();
-                if (d.ok) sentCount++;
-                else console.warn('[Worker] Failed to send reminder:', d.description);
+            if (appt.type === 'recordatorio') {
+                // Autonomous reminder: send AT the scheduled time (within a 15-min window)
+                if (diffMin >= 0 && diffMin <= 15) {
+                    const reminderMsg = `🔔 *Recordatorio FonoAudio-Pro*\n\n📌 ${appt.patient_name || 'Recordatorio'}\n🕐 Hora: ${appt.time} hs\n\n_FonoAudio Pro AI - Asistente Clínico_`;
+                    const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: Number(CHAT_ID), text: reminderMsg, parse_mode: 'Markdown' })
+                    });
+                    const d = await r.json();
+                    if (d.ok) {
+                        sentCount++;
+                        // Mark as sent so it isn't repeated
+                        await supabase.from('appointments').update({ status: 'completed' }).eq('id', appt.id);
+                    }
+                    else console.warn('[Worker] Failed to send reminder:', d.description);
+                }
+            } else {
+                // Appointment reminder: send 30 minutes before
+                if (diffMin > 0 && diffMin <= 30) {
+                    const reminderMsg = `🔔 *Recordatorio de Cita*\n\n👤 Paciente: ${appt.patient_name || 'Sin nombre'}\n🕐 Hora: ${appt.time} hs\n📋 Tipo: ${appt.type || 'Consulta'}\n📝 Notas: ${appt.notes || 'Sin notas'}\n\n_FonoAudio Pro - Te faltan ${diffMin} minutos_`;
+                    const r = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ chat_id: Number(CHAT_ID), text: reminderMsg, parse_mode: 'Markdown' })
+                    });
+                    const d = await r.json();
+                    if (d.ok) sentCount++;
+                    else console.warn('[Worker] Failed to send reminder:', d.description);
+                }
             }
         }
 
