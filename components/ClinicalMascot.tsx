@@ -26,7 +26,22 @@ function getChatId(): string {
   return "8706264359";
 }
 
-export default function ClinicalMascot() {
+export interface ClinicalMascotProps {
+  redFlags?: unknown[];
+  isAssistantOpen?: boolean;
+  isTextGenerating?: boolean;
+  proactiveSuggestions?: unknown[];
+  /** Permite a la mascota abrir/cerrar el asistente de voz de FonoAudio-Pro */
+  setIsAssistantOpen?: (open: boolean) => void;
+}
+
+export default function ClinicalMascot({
+  redFlags = [],
+  isAssistantOpen = false,
+  isTextGenerating = false,
+  proactiveSuggestions = [],
+  setIsAssistantOpen,
+}: ClinicalMascotProps) {
   const [open, setOpen] = useState(false);
   const [mood, setMood] = useState<Mood>("idle");
   const [messages, setMessages] = useState<{ role: "user" | "pet"; text: string }[]>([]);
@@ -96,13 +111,84 @@ export default function ClinicalMascot() {
     return () => clearTimeout(t);
   }, [react]);
 
+  // 🚨 Reacción autónoma: alertas clínicas (red flags nuevos)
+  const alertedRef = useRef<number>(0);
+  useEffect(() => {
+    const n = Array.isArray(redFlags) ? redFlags.length : 0;
+    if (n > alertedRef.current) {
+      alertedRef.current = n;
+      const r = redFlags[0] as { patientName?: string; issue?: string } | undefined;
+      react("alert");
+      setMessages((m) => [
+        ...m,
+        { role: "pet", text: `⚠️ Revisá la ficha: ${r?.patientName || "un paciente"} — ${r?.issue || "posible incompletitud en datos clínicos"}.` },
+      ]);
+      // ping visual + voz
+      speak("Alerta clínica detectada. Revisá la ficha del paciente.");
+    }
+  }, [redFlags, react, speak]);
+
+  // 💡 Reacción autónoma: sugerencias proactivas
+  const sugRef = useRef<number>(0);
+  useEffect(() => {
+    const n = Array.isArray(proactiveSuggestions) ? proactiveSuggestions.length : 0;
+    if (n > sugRef.current) {
+      sugRef.current = n;
+      react("success");
+      setTimeout(() => setMood("idle"), 2000);
+    }
+  }, [proactiveSuggestions, react]);
+
+  // 👋 Reacción autónoma: cuando el profesional abre el Asistente IA
+  const [welcomedOpen, setWelcomedOpen] = useState(false);
+  useEffect(() => {
+    if (isAssistantOpen && !welcomedOpen) {
+      setWelcomedOpen(true);
+      react("speaking", 2500);
+      setMessages((m) => [
+        ...m,
+        { role: "pet", text: "¡Listo! Estoy aquí para ayudarte con esta sesión. ¿Necesitás algo?" },
+      ]);
+    }
+  }, [isAssistantOpen, welcomedOpen, react]);
+
+  // 🗣️ La mascota "habla" cuando el asistente de voz IA está generando texto
+  useEffect(() => {
+    if (isAssistantOpen && isTextGenerating) {
+      setMood("speaking");
+    } else if (!isTextGenerating) {
+      // vuelve a idle, pero solo si no hay otra reactivación
+    }
+  }, [isAssistantOpen, isTextGenerating]);
+
+  // 📍 Posicionamiento: si el asistente de voz está abierto (overlay bottom-6 right-6),
+  // la mascota se reubica a la esquina inferior-izquierda para no superponerse.
+  const dockedRight = !isAssistantOpen;
+  const positionClass = dockedRight
+    ? "bottom-4 right-4"
+    : "bottom-6 left-4";
+
+  // 🤖 Cuando el asistente de voz está activo, la mascota no abre su mini-chat
+  // (deja paso al overlay de voz de GlobalAssistant) pero sigue mostrando su
+  // avatar reaccionando al estado del asistente de voz.
+  useEffect(() => {
+    if (isAssistantOpen) {
+      setOpen(false);
+    }
+  }, [isAssistantOpen]);
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-3 select-none">
+    <div className={`fixed ${positionClass} z-40 flex flex-col items-end gap-3 select-none`}>
       {open && (
         <div className="w-80 max-w-[calc(100vw-2rem)] h-96 bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-slate-200 dark:border-slate-700 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4">
           <div className="flex items-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-violet-600 text-white">
             <Sparkles size={18} />
             <span className="font-bold text-sm flex-1">Asistente FonoAudio-Pro</span>
+            {setIsAssistantOpen && (
+              <button onClick={() => setIsAssistantOpen(!isAssistantOpen)} className="p-1 hover:bg-white/20 rounded" title={isAssistantOpen ? "Cerrar asistente de voz" : "Abrir asistente de voz"}>
+                {isAssistantOpen ? <MicOff size={15} /> : <Mic size={15} />}
+              </button>
+            )}
             <button onClick={() => setMuted((m) => !m)} className="p-1 hover:bg-white/20 rounded" title={muted ? "Activar voz" : "Silenciar voz"}>
               {muted ? <VolumeX size={15} /> : <Volume2 size={15} />}
             </button>

@@ -565,7 +565,12 @@ const App = () => {
         </ErrorBoundary>
 
         {/* Mascota virtual de FonoAudio-Pro — da vida al asistente dentro de la app */}
-        <ClinicalMascot />
+        <ClinicalMascot
+          redFlags={redFlags}
+          isAssistantOpen={isAssistantOpen}
+          setIsAssistantOpen={setIsAssistantOpen}
+          proactiveSuggestions={proactiveSuggestions}
+        />
 
 
           {showNewPatientModal && (
