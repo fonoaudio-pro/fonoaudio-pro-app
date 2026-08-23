@@ -12,6 +12,7 @@ import ReportsSection from "./components/ReportsSection";
 import SettingsSection from "./components/SettingsSection";
 import PatientSelectorModal from "./components/PatientSelectorModal";
 import GlobalAssistant from "./components/GlobalAssistant";
+import ClinicalMascot from "./components/ClinicalMascot";
 import { TREATMENT_PLAN_TEMPLATE } from "./types/reports";
 
 import { supabase } from "./utils/supabaseClient";
@@ -562,6 +563,9 @@ const App = () => {
             professionalId={session?.user?.id}
           />
         </ErrorBoundary>
+
+        {/* Mascota virtual de FonoAudio-Pro — da vida al asistente dentro de la app */}
+        <ClinicalMascot />
 
 
           {showNewPatientModal && (
