@@ -3721,7 +3721,7 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                             else if (diffMin < 0) timing = '⚡ EN CURSO';
                             else if (diffMin <= 30) timing = '▶️ PRÓXIMA (en ' + diffMin + ' min)';
                             else timing = '🕐 AÚN NO LLEGA';
-                            return `- ${a.time} hs: ${a.patient_name} — ${a.status || 'pending'}, ${a.type || 'consulta'} — ${timing}`;
+                            return `- ${a.time} hs: ${a.patient_name} — ${a.status || 'pending'}, ${a.type || 'consulta'} — ${timing} [ID: ${a.id}]`;
                         }).join('\n');
                     } else {
                         clinicalContext += `\n\nAGENDA DE HOY: Sin citas programadas para hoy.`;
@@ -3730,7 +3730,7 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                     // Upcoming appointments
                     if (upcoming.length > 0) {
                         clinicalContext += `\n\nPRÓXIMOS 7 DÍAS:\n`;
-                        clinicalContext += upcoming.map(a => `- ${a.date} ${a.time} hs: ${a.patient_name}`).join('\n');
+                        clinicalContext += upcoming.map(a => `- ${a.date} ${a.time} hs: ${a.patient_name} [ID: ${a.id}]`).join('\\n');
                     }
 
                     // ─── DATOS FALTANTES: precargar reporte si el usuario pregunta por faltantes/incompletos/alertas ───
