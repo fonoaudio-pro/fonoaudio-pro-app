@@ -2565,6 +2565,19 @@ const clinicalTools = [
             required: ['appointment_id']
         }
     },
+    {
+        name: 'reschedule_appointment',
+        description: 'Reprograma un turno existente a otra fecha y/o hora. Actualiza Supabase y sincroniza con Google Calendar. Solicitá confirmación sobre la nueva fecha/hora si hay dudas.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                appointment_id: { type: 'STRING', description: 'ID del turno a reprogramar.' },
+                new_date: { type: 'STRING', description: 'Nueva fecha en YYYY-MM-DD.' },
+                new_time: { type: 'STRING', description: 'Nueva hora en HH:MM (24h). Si no se indica, conserva la hora original.' }
+            },
+            required: ['appointment_id', 'new_date']
+        }
+    },
     // ─── EVALUATIONS ───
     {
         name: 'add_evaluation',
@@ -3051,6 +3064,89 @@ async function executeToolCall(functionName, args, user_id) {
             });
             if (!res.ok) throw new Error(await res.text());
             return { status: 'ok', message: 'Turno cancelado.' };
+        }
+
+        // ─── RESCHEDULE APPOINTMENT ───
+        // Mueve un turno a otra fecha/hora: actualiza Supabase + sync a Google Calendar.
+        if (functionName === 'reschedule_appointment') {
+            const { appointment_id, new_date, new_time } = args;
+            if (!appointment_id || !new_date) {
+                return { status: 'error', message: 'Requiere appointment_id y new_date' };
+            }
+            try {
+                // 1) Traer el turno actual (incluye google_event_id si existe)
+                const getRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}&select=id,patient_name,date,time,type,status,notes,google_event_id`, {
+                    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+                });
+                const rows = await getRes.json();
+                const row = Array.isArray(rows) && rows[0];
+                if (!row) return { status: 'error', message: 'Turno no encontrado' };
+
+                const updated = {
+                    date: new_date,
+                    time: new_time || (row.time || '09:00'),
+                };
+                if (row.type === 'recordatorio') updated.type = 'recordatorio';
+
+                // 2) Actualizar Supabase
+                const patchRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, {
+                    method: 'PATCH',
+                    headers: { ...headers, Prefer: 'return=representation' },
+                    body: JSON.stringify(updated),
+                });
+                const patchData = await patchRes.json();
+                if (!patchRes.ok) throw new Error(typeof patchData === 'string' ? patchData : (patchData?.message || 'update failed'));
+                const updatedRow = Array.isArray(patchData) ? patchData[0] : row;
+
+                // 3) Sincronizar a Google Calendar si el evento existe (google_event_id)
+                let calendarSynced = false;
+                let calendarError = null;
+                if (updatedRow.google_event_id) {
+                    try {
+                        let accessToken = null;
+                        const { data: gauthRows } = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=access_token,refresh_token,expires_at&limit=1`, {
+                            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}` },
+                        }).then(r => r.json()).then(d => ({ data: Array.isArray(d) ? d : [] })).catch(() => ({ data: [] }));
+                        const gauth = gauthRows[0];
+                        if (gauth && gauth.access_token) {
+                            accessToken = gauth.access_token;
+                            const expiresAt = gauth.expires_at ? new Date(gauth.expires_at).getTime() : 0;
+                            if (Date.now() >= expiresAt - 5 * 60 * 1000 && gauth.refresh_token) {
+                                try {
+                                    const rf = await fetch(`${process.env.BACKEND_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')}/api/google/refresh-token`, {
+                                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ refresh_token: gauth.refresh_token }),
+                                    });
+                                    if (rf.ok) { const rd = await rf.json(); accessToken = rd.access_token || accessToken; }
+                                } catch { /* keep old token */ }
+                            }
+                            const startISO = `${new_date}T${new_time || (row.time || '09:00')}:00`;
+                            const calRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${updatedRow.google_event_id}`, {
+                                method: 'PATCH',
+                                headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ start: { dateTime: startISO, timeZone: 'America/Argentina/Buenos_Aires' } }),
+                            });
+                            if (calRes.ok) calendarSynced = true;
+                            else calendarError = `Google Calendar HTTP ${calRes.status}`;
+                        }
+                    } catch (ce) {
+                        calendarError = ce?.message || String(ce);
+                    }
+                }
+
+                // 4) Notificar al profesional por Telegram
+                try {
+                    const tgMsg = `📅 <b>Turno reprogramado</b>\n<a href="https://fonoaudio-pro.app/ver/cita/${appointment_id}">${row.patient_name || 'Paciente'}</a> → ${new_date}${new_time ? ` ${new_time}` : ''}.`;
+                    await sendTelegramMessage(process.env.TELEGRAM_CHAT_ID || "8706264359", tgMsg, /* parseHtml */ true);
+                } catch { /* non-fatal */ }
+
+                const msg = calendarSynced
+                    ? `✅ Turno de ${row.patient_name} reprogramado a ${new_date}${new_time ? ` a las ${new_time}` : ''} (sincronizado con Google Calendar).`
+                    : `✅ Turno de ${row.patient_name || 'el paciente'} reprogramado a ${new_date}${new_time ? ` a las ${new_time}` : ''} en el sistema.${calendarError ? ` (Google Calendar: ${calendarError})` : ''}`;
+                return { status: 'ok', message: msg, appointment: updatedRow };
+            } catch (e) {
+                return { status: 'error', message: e?.message || String(e) };
+            }
         }
 
         // ─── REMINDERS (autonomous Telegram + Google Calendar sync) ───
@@ -4523,6 +4619,88 @@ router.get('/telegram/setup-webhook', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e.message });
+    }
+});
+
+// ─── REST: Reprogramar turno (consumible desde app, mascota, MCP/Hermes) ───
+// Lee access_token del header (opcional) o refresca el token Google del usuario.
+router.post('/appointments/reschedule', async (req, res) => {
+    const { appointment_id, new_date, new_time } = req.body || {};
+    if (!appointment_id || !new_date) {
+        return res.status(400).json({ status: 'error', message: 'appointment_id y new_date requeridos' });
+    }
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const headers = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
+    try {
+        // 1) Traer turno actual
+        const getRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}&select=id,patient_name,date,time,type,google_event_id`, {
+            headers,
+        });
+        const rows = await getRes.json();
+        const row = Array.isArray(rows) && rows[0];
+        if (!row) return res.status(404).json({ status: 'error', message: 'Turno no encontrado' });
+
+        // 2) Actualizar en Supabase
+        const updated = { date: new_date, time: new_time || (row.time || '09:00') };
+        const patchRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, {
+            method: 'PATCH', headers: { ...headers, Prefer: 'return=representation' },
+            body: JSON.stringify(updated),
+        });
+        const patchData = await patchRes.json();
+        if (!patchRes.ok) throw new Error(typeof patchData === 'string' ? patchData : (patchData?.message || 'update failed'));
+        const updatedRow = Array.isArray(patchData) ? patchData[0] : row;
+
+        // 3) Sincronizar Google Calendar si tiene google_event_id
+        let calendarSynced = false;
+        let calendarError = null;
+        if (updatedRow.google_event_id) {
+            try {
+                let accessToken = null;
+                const { data: gauthRows } = await fetch(`${supabaseUrl}/rest/v1/google_auth?select=access_token,refresh_token,expires_at&limit=1`, {
+                    headers,
+                }).then(r => r.json()).then(d => ({ data: Array.isArray(d) ? d : [] })).catch(() => ({ data: [] }));
+                const gauth = gauthRows[0];
+                if (gauth && gauth.access_token) {
+                    accessToken = gauth.access_token;
+                    const expiresAt = gauth.expires_at ? new Date(gauth.expires_at).getTime() : 0;
+                    if (Date.now() >= expiresAt - 5 * 60 * 1000 && gauth.refresh_token) {
+                        try {
+                            const rf = await fetch(`${process.env.BACKEND_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '')}/api/google/refresh-token`, {
+                                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ refresh_token: gauth.refresh_token }),
+                            });
+                            if (rf.ok) { const rd = await rf.json(); accessToken = rd.access_token || accessToken; }
+                        } catch { /* keep old token */ }
+                    }
+                    const startISO = `${new_date}T${new_time || (row.time || '09:00')}:00`;
+                    const calRes = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${updatedRow.google_event_id}`, {
+                        method: 'PATCH',
+                        headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ start: { dateTime: startISO, timeZone: 'America/Argentina/Buenos_Aires' } }),
+                    });
+                    if (calRes.ok) calendarSynced = true;
+                    else calendarError = `Google Calendar HTTP ${calRes.status}`;
+                }
+            } catch (ce) { calendarError = ce?.message || String(ce); }
+        }
+
+        // 4) Notificar por Telegram
+        try {
+            const tgMsg = `📅 <b>Turno reprogramado</b> — ${row.patient_name || 'Paciente'} → ${new_date}${new_time ? ` ${new_time}` : ''}.`;
+            await sendTelegramMessage(process.env.TELEGRAM_CHAT_ID || "8706264359", tgMsg, /* parseHtml */ true);
+        } catch { /* non-fatal */ }
+
+        res.json({
+            status: 'ok',
+            message: calendarSynced
+                ? `Turno de ${row.patient_name} reprogramado a ${new_date}${new_time ? ` a las ${new_time}` : ''} (sincronizado con Google Calendar).`
+                : `Turno reprogramado en el sistema.${calendarError ? ` (Google Calendar: ${calendarError})` : ''}`,
+            appointment: updatedRow,
+            calendarSynced,
+        });
+    } catch (e) {
+        res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
 });
 
