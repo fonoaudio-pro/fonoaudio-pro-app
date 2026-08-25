@@ -159,6 +159,22 @@ const GlobalAssistant = ({ isOpen, setIsOpen, professionalName, professionalRole
     } catch {}
   }, [chatMessages]);
 
+  // Notificar a la mascota (avatar) cuando el asistente de voz está generando texto
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("fonoaudio:assistant-thinking", { detail: { generating: isTextGenerating } }));
+  }, [isTextGenerating]);
+
+  // Sincronizar el chat del asistente IA al store global (app-first: la mascota es su avatar)
+  const syncedCountRef = useRef(0);
+  const addAssistantMessage = useAppStore((s) => s.addAssistantMessage);
+  useEffect(() => {
+    if (chatMessages.length > syncedCountRef.current) {
+      const diff = chatMessages.slice(syncedCountRef.current);
+      syncedCountRef.current = chatMessages.length;
+      diff.forEach((m) => addAssistantMessage(m));
+    }
+  }, [chatMessages, addAssistantMessage]);
+
   // Prefetch notebook context in background when assistant opens
   useEffect(() => {
     if (!isOpen) return;

@@ -51,7 +51,12 @@ interface AppState {
   // Pending patient (for deferred actions)
   pendingPatientId: string | null;
   setPendingPatientId: (id: string | null) => void;
-}
+
+  // Mensajes compartidos entre GlobalAssistant y ClinicalMascot (app-first: un solo asistente)
+  assistantChat: { role: 'user' | 'assistant'; text: string }[];
+  addAssistantMessage: (msg: { role: 'user' | 'assistant'; text: string }) => void;
+  clearAssistantChat: () => void;
+};
 
 export const useAppStore = create<AppState>((set) => ({
   currentView: 'dashboard',
@@ -102,4 +107,11 @@ export const useAppStore = create<AppState>((set) => ({
 
   pendingPatientId: null,
   setPendingPatientId: (id) => set({ pendingPatientId: id }),
+
+  assistantChat: [],
+  addAssistantMessage: (msg) =>
+    set((state) => ({
+      assistantChat: [...state.assistantChat.slice(-49), msg],
+    })),
+  clearAssistantChat: () => set({ assistantChat: [] }),
 }));

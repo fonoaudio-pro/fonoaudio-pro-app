@@ -1,5 +1,6 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Sparkles, X, Send, Volume2, VolumeX, Mic, MicOff } from "lucide-react";
+import { useAppStore } from "../store/appStore";
 
 /**
  * ClinicalMascot — la mascota virtual de FonoAudio-Pro.
@@ -14,22 +15,9 @@ import { Sparkles, X, Send, Volume2, VolumeX, Mic, MicOff } from "lucide-react";
 
 type Mood = "idle" | "thinking" | "speaking" | "success" | "alert";
 
-function getChatId(): string {
-  try {
-    const raw = localStorage.getItem("fonoaudio-settings");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      const cid = parsed?.integrations?.telegram?.chatId;
-      if (cid) return String(cid);
-    }
-  } catch { /* ignore */ }
-  return "8706264359";
-}
-
 export interface ClinicalMascotProps {
   redFlags?: unknown[];
   isAssistantOpen?: boolean;
-  isTextGenerating?: boolean;
   proactiveSuggestions?: unknown[];
   /** Permite a la mascota abrir/cerrar el asistente de voz de FonoAudio-Pro */
   setIsAssistantOpen?: (open: boolean) => void;
@@ -38,13 +26,11 @@ export interface ClinicalMascotProps {
 export default function ClinicalMascot({
   redFlags = [],
   isAssistantOpen = false,
-  isTextGenerating = false,
   proactiveSuggestions = [],
   setIsAssistantOpen,
 }: ClinicalMascotProps) {
   const [open, setOpen] = useState(false);
   const [mood, setMood] = useState<Mood>("idle");
-  const [messages, setMessages] = useState<{ role: "user" | "pet"; text: string }[]>([]);
   const [input, setInput] = useState("");
   const [muted, setMuted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +45,6 @@ export default function ClinicalMascot({
     const poll = () => {
       const speaking = !!window.speechSynthesis.speaking;
       setIsSpeaking(speaking);
-      // Alterna la boca abierta/cerrada mientras habla (simula habla)
       if (speaking) {
         if (!ticker) ticker = setInterval(() => setMouthOpen((m) => !m), 150);
       } else {
@@ -87,50 +72,42 @@ export default function ClinicalMascot({
     if (ms) setTimeout(() => setMood((cur) => (cur === m ? "idle" : cur)), ms);
   }, []);
 
-  const askBackend = useCallback(async (text: string) => {
-    react("thinking");
-    try {
-      const res = await fetch("https://fonoaudio-pro-app.vercel.app/api/telegram/process-text", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message_text: text, chat_id: getChatId(), user_id: null }),
-      });
-      const data = await res.json();
-      const ans = data?.response || data?.text || "No recibí respuesta.";
-      setMessages((m) => [...m, { role: "pet", text: ans }]);
-      react("speaking");
-      speak(ans.slice(0, 280));
-      setTimeout(() => setMood("idle"), 2500);
-    } catch {
-      setMessages((m) => [...m, { role: "pet", text: "No pude conectar con FonoAudio-Pro ahora." }]);
-      react("alert");
-    }
-  }, [react, speak]);
+  // app-first: la mascota es el avatar del GlobalAssistant. Comparte el chat vía store.
+  const assistantChat = useAppStore((s) => s.assistantChat);
+  const addAssistantMessage = useAppStore((s) => s.addAssistantMessage);
+  const setIsOpenFromStore = useAppStore((s) => s.setIsAssistantOpen);
 
+  // Mensajes combinados: saludo local + historial del asistente
+  const messages = useMemo<{ role: "user" | "assistant" | "pet"; text: string }[]>(() => {
+    const local: { role: "user" | "assistant" | "pet"; text: string }[] = [];
+    // saludo proactivo (solo si no hay historial todavía)
+    if (assistantChat.length === 0) {
+      local.push({ role: "pet", text: "¡Hola! Soy la asistente de FonoAudio-Pro 🐾. Escribí tu consulta y te abro el asistente de IA." });
+    }
+    return [...local, ...(assistantChat as Array<{ role: "user" | "assistant"; text: string }>)];
+  }, [assistantChat]);
+
+  // Enviar: empuja mensaje al store del asistente e ABRE el asistente de voz (app-first)
   const send = useCallback(() => {
     const t = input.trim();
     if (!t) return;
-    setMessages((m) => [...m, { role: "user", text: t }]);
+    addAssistantMessage({ role: "user", text: t });
     setInput("");
-    askBackend(t);
-  }, [input, askBackend]);
+    react("thinking");
+    speak(""); // corta cualquier voz previa
+    setIsOpenFromStore(true); // abre GlobalAssistant con el contexto
+  }, [input, addAssistantMessage, setIsOpenFromStore, react, speak]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages]);
 
   useEffect(() => {
-    if (open && inputRef.current) inputRef.current.focus();
+    if (!open && inputRef.current) inputRef.current.focus();
   }, [open]);
 
-  // Saludo proactivo al montar (solo una vez)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      setMessages([{ role: "pet", text: "¡Hola! Soy la asistente de FonoAudio-Pro 🐾. Si necesitás algo, hacé clic en mí." }]);
-      react("speaking", 3000);
-    }, 1200);
-    return () => clearTimeout(t);
-  }, [react]);
+  // Notificaciones locales de la mascota (no van al store del asistente)
+  const [toast, setToast] = useState<string | null>(null);
 
   // 🚨 Reacción autónoma: alertas clínicas (red flags nuevos)
   const alertedRef = useRef<number>(0);
@@ -140,12 +117,11 @@ export default function ClinicalMascot({
       alertedRef.current = n;
       const r = redFlags[0] as { patientName?: string; issue?: string } | undefined;
       react("alert");
-      setMessages((m) => [
-        ...m,
-        { role: "pet", text: `⚠️ Revisá la ficha: ${r?.patientName || "un paciente"} — ${r?.issue || "posible incompletitud en datos clínicos"}.` },
-      ]);
-      // ping visual + voz
+      const msg = `⚠️ Revisá la ficha: ${r?.patientName || "un paciente"} — ${r?.issue || "posible incompletitud en datos clínicos"}.`;
+      setToast(msg);
       speak("Alerta clínica detectada. Revisá la ficha del paciente.");
+      const t = setTimeout(() => setToast(null), 8000);
+      return () => clearTimeout(t);
     }
   }, [redFlags, react, speak]);
 
@@ -166,32 +142,28 @@ export default function ClinicalMascot({
     if (isAssistantOpen && !welcomedOpen) {
       setWelcomedOpen(true);
       react("speaking", 2500);
-      setMessages((m) => [
-        ...m,
-        { role: "pet", text: "¡Listo! Estoy aquí para ayudarte con esta sesión. ¿Necesitás algo?" },
-      ]);
+      setToast("¡Aquí para ayudarte! Decime qué necesitás mientras trabajamos.");
+      const t = setTimeout(() => setToast(null), 5000);
+      return () => clearTimeout(t);
     }
   }, [isAssistantOpen, welcomedOpen, react]);
 
   // 🗣️ La mascota "habla" cuando el asistente de voz IA está generando texto
+  // (escucha evento global emitido por GlobalAssistant; sin acoplar props)
   useEffect(() => {
-    if (isAssistantOpen && isTextGenerating) {
-      setMood("speaking");
-    } else if (!isTextGenerating) {
-      // vuelve a idle, pero solo si no hay otra reactivación
-    }
-  }, [isAssistantOpen, isTextGenerating]);
+    const onThink = (e: CustomEvent<{ generating: boolean }>) => {
+      if (e.detail?.generating && isAssistantOpen) setMood("speaking");
+    };
+    window.addEventListener("fonoaudio:assistant-thinking", onThink as EventListener);
+    return () => window.removeEventListener("fonoaudio:assistant-thinking", onThink as EventListener);
+  }, [isAssistantOpen]);
 
   // 📍 Posicionamiento: si el asistente de voz está abierto (overlay bottom-6 right-6),
   // la mascota se reubica a la esquina inferior-izquierda para no superponerse.
-  const dockedRight = !isAssistantOpen;
-  const positionClass = dockedRight
-    ? "bottom-4 right-4"
-    : "bottom-6 left-4";
+  const positionClass = !isAssistantOpen ? "bottom-4 right-4" : "bottom-6 left-4";
 
   // 🤖 Cuando el asistente de voz está activo, la mascota no abre su mini-chat
-  // (deja paso al overlay de voz de GlobalAssistant) pero sigue mostrando su
-  // avatar reaccionando al estado del asistente de voz.
+  // (deja paso al overlay de voz) pero sigue mostrando su avatar reaccionando.
   useEffect(() => {
     if (isAssistantOpen) {
       setOpen(false);
@@ -287,6 +259,11 @@ export default function ClinicalMascot({
         </span>
         {mood === "alert" && (
           <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-white animate-ping" />
+        )}
+        {toast && (
+          <span className="absolute -top-14 right-1/2 translate-x-1/2 max-w-[180px] bg-slate-800 text-white text-[10px] px-2.5 py-1.5 rounded-lg shadow-lg animate-in fade-in slide-in-from-bottom-2 text-center">
+            {toast}
+          </span>
         )}
       </button>
     </div>
