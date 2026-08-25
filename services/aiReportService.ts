@@ -325,5 +325,10 @@ Ejemplo: {"motivo_consulta": "<p>...</p>", "antecedentes": "<p>...</p>", "evalua
         } catch {
             return { contenido: result };
         }
-    }
+    },
+
+    /** Pregunta directa a la IA (Groq→fallback Gemini) con system prompt clínico. */
+    async askAI(prompt: string, systemPrompt: string, opts?: GenerateOptions): Promise<string> {
+        return await generateWithFallback(prompt, systemPrompt, opts);
+    },
 };

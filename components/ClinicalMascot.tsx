@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Sparkles, X, Send, Volume2, VolumeX, Mic, MicOff } from "lucide-react";
 import { useAppStore } from "../store/appStore";
+import { useClinicalRecommendations } from "../hooks/useClinicalRecommendations";
 
 /**
  * ClinicalMascot — la mascota virtual de FonoAudio-Pro.
@@ -29,6 +30,14 @@ export default function ClinicalMascot({
   proactiveSuggestions = [],
   setIsAssistantOpen,
 }: ClinicalMascotProps) {
+  // 🤖 Secretario clínico IA: la mascota consume el contexto clínico REAL
+  // del paciente activo (no inventa). source-of-truth unificada con GlobalAssistant.
+  const {
+    recommendations,
+    narrative,
+    isGenerating: isRecommendationsLoading,
+  } = useClinicalRecommendations();
+
   const [open, setOpen] = useState(false);
   const [mood, setMood] = useState<Mood>("idle");
   const [input, setInput] = useState("");
@@ -109,21 +118,20 @@ export default function ClinicalMascot({
   // Notificaciones locales de la mascota (no van al store del asistente)
   const [toast, setToast] = useState<string | null>(null);
 
-  // 🚨 Reacción autónoma: alertas clínicas (red flags nuevos)
+  // 🚨 Reacción autónoma: alertas clínicas del secretario IA (recommendations prioritarias)
   const alertedRef = useRef<number>(0);
   useEffect(() => {
-    const n = Array.isArray(redFlags) ? redFlags.length : 0;
+    const n = Array.isArray(recommendations) ? recommendations.length : 0;
     if (n > alertedRef.current) {
       alertedRef.current = n;
-      const r = redFlags[0] as { patientName?: string; issue?: string } | undefined;
+      const top = recommendations[0];
       react("alert");
-      const msg = `⚠️ Revisá la ficha: ${r?.patientName || "un paciente"} — ${r?.issue || "posible incompletitud en datos clínicos"}.`;
-      setToast(msg);
-      speak("Alerta clínica detectada. Revisá la ficha del paciente.");
-      const t = setTimeout(() => setToast(null), 8000);
+      speak(narrative || top?.message || top?.title || "Alerta clínica detectada.");
+      setToast(top?.message || "Nueva alerta clínica — revisá la ficha del paciente.");
+      const t = setTimeout(() => setToast(null), 9000);
       return () => clearTimeout(t);
     }
-  }, [redFlags, react, speak]);
+  }, [recommendations, react, speak, narrative]);
 
   // 💡 Reacción autónoma: sugerencias proactivas
   const sugRef = useRef<number>(0);
