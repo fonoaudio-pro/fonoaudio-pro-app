@@ -4782,9 +4782,11 @@ router.post('/appointments/move-room', async (req, res) => {
         const rows = await getRes.json();
         const row = Array.isArray(rows) && rows[0];
         if (!row) return res.status(404).json({ status: 'error', message: 'Turno no encontrado' });
-        const pr = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ roomid: room_name }) });
-        const pd = await pr.json();
-        if (!pr.ok) throw new Error(pd?.message || 'update failed');
+        const pr = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, { method: 'PATCH', headers: { ...H, Prefer: 'return=representation' }, body: JSON.stringify({ roomid: room_name }) });
+        let pd;
+        try { pd = await pr.json(); } catch { pd = await pr.text().catch(() => ''); }
+        if (!pr.ok) throw new Error(typeof pd === 'string' ? pd : (pd?.message || 'update failed'));
+        const updatedRow = Array.isArray(pd) ? pd[0] : { ...row, roomid: room_name };
 
         // Sync Google Calendar: actualizar `location` del evento si existe google_event_id
         let calendarSynced = false;
@@ -4808,7 +4810,7 @@ router.post('/appointments/move-room', async (req, res) => {
             }
         } catch (e) { /* non-fatal */ }
 
-        return res.json({ status: 'success', message: `Turno movido al consultorio ${room_name}`, appointment: pd[0] || row, calendarSynced });
+        return res.json({ status: 'success', message: `Turno movido al consultorio ${room_name}`, appointment: updatedRow, calendarSynced });
     } catch (e) {
         console.error('[move-room] error:', e?.message);
         return res.status(500).json({ status: 'error', message: e?.message || String(e) });
