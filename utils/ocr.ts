@@ -100,7 +100,7 @@ export async function ocrWithOCRSpace(imageFile: File): Promise<OCRResult> {
             method: 'POST',
             body: formData,
             headers: {
-                'apikey': 'K87899142388957', // Free API key (public, limited)
+                'apikey': import.meta.env.VITE_OCR_SPACE_KEY || 'K87899142388957',
             },
         });
 
@@ -137,7 +137,7 @@ export async function ocrWithFreeOCR(imageFile: File): Promise<OCRResult> {
         const response = await fetch('https://api.api-ninjas.com/v1/imagetotext', {
             method: 'POST',
             headers: {
-                'X-Api-Key': 'BXKXAG1WHnkqKFlCJdk3fH1gPIyH3y4Ad2MU2FXg',
+                'X-Api-Key': import.meta.env.VITE_API_NINJAS_KEY || 'BXKXAG1WHnkqKFlCJdk3fH1gPIyH3y4Ad2MU2FXg',
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({

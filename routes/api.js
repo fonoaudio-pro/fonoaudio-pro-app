@@ -2084,6 +2084,57 @@ SUGERENCIA: [Guardar como documento | Guardar como sesión | Guardar como inform
             }, 30 * 60 * 1000);
         }
 
+        // Step 8b: Persist to RAG knowledge base for future semantic search
+        try {
+            const supabaseUrl = process.env.VITE_SUPABASE_URL;
+            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+            if (supabaseUrl && supabaseKey && cleanResponse) {
+                // Determine patient_id from auto-matched patient
+                const matchedPatientId = suggestions?.autoMatchedPatient?.id || null;
+
+                // Create source record
+                const sourceRes = await fetch(`${supabaseUrl}/rest/v1/clinical_sources`, {
+                    method: 'POST',
+                    headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+                    body: JSON.stringify({
+                        title: `Análisis: ${fileName}`,
+                        category: 'analisis-externo',
+                        validated_by: 'Gemini OCR',
+                        page_count: 1,
+                    }),
+                });
+                if (sourceRes.ok) {
+                    const source = await sourceRes.json();
+                    // Generate embedding for the analysis text
+                    try {
+                        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+                        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+                        const embedModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+                        const embedResult = await embedModel.embedContent(cleanResponse.slice(0, 2000));
+                        await fetch(`${supabaseUrl}/rest/v1/source_embeddings`, {
+                            method: 'POST',
+                            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                source_id: source[0].id,
+                                content: cleanResponse.slice(0, 3000),
+                                embedding: embedResult.embedding.values,
+                                page_number: 1,
+                                section_title: `Análisis de ${fileName}`,
+                                tags: ['analisis-externo', 'ocr', media_type],
+                                patient_id: matchedPatientId,
+                                confidence_score: 0.9,
+                            }),
+                        });
+                        console.log(`[RAG] Document persisted for semantic search: ${fileName}`);
+                    } catch (embedErr) {
+                        console.warn('[RAG] Embedding failed:', embedErr.message);
+                    }
+                }
+            }
+        } catch (ragErr) {
+            console.warn('[RAG] Persistence failed:', ragErr.message);
+        }
+
         // Step 9: Build response message with action buttons
         let responseMessage = cleanResponse;
 
@@ -3741,6 +3792,32 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
                     });
                     const upcoming = await upcomingRes.json();
 
+                    // ADDED: Semantic search for relevant ingested documents
+                    try {
+                        const { GoogleGenerativeAI } = await import('@google/generative-ai');
+                        const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+                        const embedModel = genAI.getGenerativeModel({ model: 'text-embedding-004' });
+                        const embedResult = await embedModel.embedContent(message_text.slice(0, 1000));
+                        const queryEmbedding = embedResult.embedding.values;
+
+                        const semanticRes = await fetch(`${supabaseUrl}/rest/v1/rpc/match_source_embeddings`, {
+                            method: 'POST',
+                            headers: { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                query_embedding: queryEmbedding,
+                                match_threshold: 0.3,
+                                match_count: 5,
+                            }),
+                        });
+                        if (semanticRes.ok) {
+                            const semanticDocs = await semanticRes.json();
+                            if (semanticDocs && semanticDocs.length > 0) {
+                                clinicalContext += `\n\n═══ ESTUDIOS/ANÁLISIS EXTERNOS RELEVANTES ═══\n`;
+                                clinicalContext += semanticDocs.map(d => `- [${d.source_title}] (relevancia: ${(d.similarity * 100).toFixed(0)}%): ${d.content.slice(0, 400)}...`).join('\n');
+                            }
+                        }
+                    } catch (e) { console.warn('[API Context] Semantic search failed:', e.message); }
+
                     // Build patient list
                     if (patients.length > 0) {
                         clinicalContext += `\nPACIENTES ACTIVOS (${patients.length}):\n`;
@@ -3840,45 +3917,22 @@ Si el usuario menciona un paciente, un tipo de acción (guardar, sesion, informe
             }
         }
 
-        const clinicalPrompt = `Sos FonoAudio, el asistente clinico autonomo y superpoderoso de FonoAudio Pro AI. SOS UN AGENTE COMPLETO con acceso total a la clinica. Sos experto en fonoaudiologia con razonamiento clinico avanzado.
+            const clinicalPrompt = `Sos FonoAudio, el asistente clinico autonomo de FonoAudio Pro AI. SOS UN AGENTE COMPLETO. Expertos en fonoaudiologia.
 
-═══ CAPACIDADES ═══
-GESTION DE PACIENTES: buscar, crear, actualizar, eliminar, ver info completa, listar todos, detectar datos faltantes.
-CLINICA: agregar notas clinicas, evoluciones, sesiones, evaluaciones/ tests estandarizados, planes de tratamiento.
-INFORMES: generar borradores de informes por area (lenguaje, fonacion, deglucion, audologia, motricidad, cognicion), listar informes.
-AGENDA: ver turnos de hoy, proximos 7 dias, crear, modificar, cancelar turnos.
-MATERIALES: listar y buscar materiales terapeuticos.
-CONOCIMIENTO CLINICO: buscar y agregar articulos/protocolos a la base de conocimiento.
-ESTADISTICAS: datos del consultorio, pacientes con datos faltantes, metricas.
-NOTEBOOKLM: listar notebooks, hacer preguntas clinicas investigadas con evidencia.
+═══ MANDATO CLÍNICO-LEGAL (Provincia de Bs As) ═══
+1. Diagnóstico Funcional: NUNCA uses diagnósticos médicos (nosológicos). Usa solo terminología funcional fonoaudiológica (CIE-11, etc).
+2. Diferenciación Epistemológica: Separa siempre: "La madre refiere..." (dato anamnésico) de "Se observa..." (dato clínico objetivo).
+3. Auditoría de Seguridad: Verifica siempre: Firma, matrícula (CFPBA), fecha y estructura formal.
+4. Toque Personal (Elena Zegarra): Debes incluir conducta, motivaciones y ejemplos concretos del habla del paciente. Si no tienes estos datos, NO inventes, PREGÚNTALE al usuario antes de generar el reporte final.
 
-═══ RAZONAMIENTO CLINICO (CRITICO) ═══
-ANTES de ejecutar cualquier tool, PENSÁ paso a paso:
-1. ¿Qué me está pidiendo exactamente el usuario?
-2. ¿Necesito leer datos existentes ANTES de modificar?
-3. ¿Qué datos ya existen que debo preservar?
-4. ¿Cuál es la mejor acción clínica?
+═══ RAZONAMIENTO CLÍNICO (CRITICO) ═══
+ANTES de generar cualquier sección, PENSÁ:
+- ¿Tengo datos objetivos o solo referencias de terceros?
+- ¿He incluido ejemplos del habla del peque?
+- ¿Cumple con la estructura de las plantillas oficiales?
 
-REGLA DE ORO PARA MODIFICACIONES:
-- Si el usuario dice "modificar plan", "agregar al plan", "cambiar frecuencia", PRIMERO leé el plan actual con get_patient_info, DESPUÉS mergeá los cambios preservando todo lo existente.
-- NUNCA borres contenido existente a menos que el usuario lo pida EXPLICITAMENTE.
-- Si dice "agregar", AGREGÁ al final. Si dice "modificar", CAMBIÁ solo lo que indica.
-- Si dice "reemplazar todo", AHÍ sí reemplazá completo.
-
-═══ REGLAS ═══
-- SOS UN AGENTE AUTONOMO. Cuando el usuario te pide algo, LO HACES usando las tools. No preguntes de mas, ejecuta.
-- "Crea un paciente" -> crealo. Extraé el motivo de consulta si lo hay (guardalo en el campo "reason"). "Agrega una nota" -> agregala. "Mostra la agenda" -> mostrala. "Crea un turno" -> crealo.
-- Si el usuario da datos del paciente (edad, diagnostico, motivo, telefono), TODOS van como argumentos al tool create_patient. NO pierdas información.
-- SOS PROFESIONAL y calido. Respondes en espanol argentino rioplatense.
-- SOS CONCISO pero completo. Max 6 oraciones salvo que pida mas detalle.
-- Ante ambiguedades, usa tu juicio clinico con el contexto disponible.
-- Cuando listes datos, resumi la info clave, no solo numeros.
-- Si ves algo anomalo en los datos clinicos, MENCIONALO.
-
-═══ HORA ACTUAL ═══
-Hoy es ${currentDate}. Son las ${currentTime} hs (hora de Buenos Aires, Argentina).
-
-═══ CONTEXTO CLINICO ═══${clinicalContext || '\nNo hay contexto de pacientes disponible.'}
+═══ CONTEXTO CLÍNICO ═══
+${clinicalContext || '\nNo hay contexto disponible.'}
 ${pendingFileContext}
 ${notebookLmContext}
 
@@ -3892,6 +3946,7 @@ SOS un asistente AUTONOMO que ENVIA mensajes por Telegram al profesional en cual
 - Tenés un cron que todos los días a las 8:00 AM envía el resumen matutino (turnos del día + fichas incompletas).
 - Si el usuario pide "avísame", "recordame", "no se me olvide", "decitne mañana", o cualquier alerta futura: DECÍS QUE SÍ y EJECUTÁS la tool set_reminder con la fecha/hora/mensaje indicados. Confirmás que lo vas a avisar.
 - NUNCA digas "no puedo enviar alertas", "soy solo un asistente virtual", "no tengo capacidad" ni nada que niegue tus capacidades de aviso. Esas frases son FALSAS: sí podés y lo hacés.`;
+>>>>>>> 530696e (fix: critical crash fixes + full RAG pipeline + OCR image ingestion + semantic search + report audit)
 
         let aiResponse = '';
         let sentToTelegram = false;

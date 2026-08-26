@@ -94,116 +94,19 @@ class ReportTemplateService {
             if (error.code !== '42P01') {
                 console.error('[ReportTemplateService] Error fetching templates:', error);
             }
-            return this.getFallbackTemplates();
+            return [];
         }
-        if (!data || data.length === 0) return this.getFallbackTemplates();
+        if (!data || data.length === 0) return [];
         return data;
     }
 
     /**
-     * Fallback templates when DB is empty or inaccessible (RLS, table missing, etc.)
+     * Returns empty array — no fallback templates in production.
+     * Templates should be created via the UI or seeded in Supabase.
      */
     private getFallbackTemplates(): ReportTemplate[] {
-        return [
-            {
-                id: 'fallback-1',
-                name: 'Evaluación de Lenguaje - Niño',
-                area: 'lenguaje',
-                type: 'valoracion',
-                target_age: 'pediatrico',
-                author_id: 'system',
-                is_active: true,
-                tags: ['lenguaje', 'pediatria', 'evaluación'],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                sections: [
-                    { id: 's1', title: 'Motivo de Consulta', description: 'Motivo por el que la familia consulta', order: 0, required: true, default_content: '' },
-                    { id: 's2', title: 'Antecedentes', description: 'Historia del desarrollo y antecedentes familiares', order: 1, required: true, default_content: '' },
-                    { id: 's3', title: 'Evaluación', description: 'Resultados de la evaluación logopédica', order: 2, required: true, default_content: '' },
-                    { id: 's4', title: 'Impresión Diagnóstica', description: 'Diagnóstico funcional', order: 3, required: true, default_content: '' },
-                    { id: 's5', title: 'Plan de Tratamiento', description: 'Objetivos y estrategias de intervención', order: 4, required: true, default_content: '' },
-                ],
-                example_paragraphs: [],
-            },
-            {
-                id: 'fallback-2',
-                name: 'Evaluación de Habla - Niño',
-                area: 'habla',
-                type: 'valoracion',
-                target_age: 'pediatrico',
-                author_id: 'system',
-                is_active: true,
-                tags: ['habla', 'pediatria', 'evaluación'],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                sections: [
-                    { id: 's1', title: 'Motivo de Consulta', description: 'Motivo de consulta', order: 0, required: true, default_content: '' },
-                    { id: 's2', title: 'Historia del Desarrollo del Habla', description: 'Hitos del desarrollo del habla y lenguaje', order: 1, required: true, default_content: '' },
-                    { id: 's3', title: 'Evaluación Articulatoria', description: 'Evaluación de fonemas y procesos fonológicos', order: 2, required: true, default_content: '' },
-                    { id: 's4', title: 'Diagnóstico', description: 'Diagnóstico logopédico', order: 3, required: true, default_content: '' },
-                    { id: 's5', title: 'Tratamiento', description: 'Plan de intervención', order: 4, required: true, default_content: '' },
-                ],
-                example_paragraphs: [],
-            },
-            {
-                id: 'fallback-3',
-                name: 'Seguimiento - Adulto',
-                area: 'general',
-                type: 'seguimiento',
-                target_age: 'adulto',
-                author_id: 'system',
-                is_active: true,
-                tags: ['seguimiento', 'adulto'],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                sections: [
-                    { id: 's1', title: 'Evolución desde la Última Sesión', description: 'Cambios observados', order: 0, required: true, default_content: '' },
-                    { id: 's2', title: 'Actividad Realizada', description: 'Intervención aplicada', order: 1, required: true, default_content: '' },
-                    { id: 's3', title: 'Resultados', description: 'Respuesta del paciente', order: 2, required: true, default_content: '' },
-                    { id: 's4', title: 'Próximos Pasos', description: 'Objetivos para la próxima sesión', order: 3, required: true, default_content: '' },
-                ],
-                example_paragraphs: [],
-            },
-            {
-                id: 'fallback-4',
-                name: 'Evaluación de Voz - Adulto',
-                area: 'voz',
-                type: 'valoracion',
-                target_age: 'adulto',
-                author_id: 'system',
-                is_active: true,
-                tags: ['voz', 'adulto', 'evaluación'],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                sections: [
-                    { id: 's1', title: 'Motivo de Consulta', description: 'Motivo de consulta y tiempo de evolución', order: 0, required: true, default_content: '' },
-                    { id: 's2', title: 'Historia Clínica', description: 'Antecedentes médicos y medicación', order: 1, required: true, default_content: '' },
-                    { id: 's3', title: 'Evaluación Foniatrica', description: 'Inspección, audiometría, estudios', order: 2, required: true, default_content: '' },
-                    { id: 's4', title: 'Análisis Acústico de la Voz', description: 'Frecuencia, intensidad, calidad', order: 3, required: true, default_content: '' },
-                    { id: 's5', title: 'Diagnóstico y Tratamiento', description: 'Diagnóstico funcional y plan terapéutico', order: 4, required: true, default_content: '' },
-                ],
-                example_paragraphs: [],
-            },
-            {
-                id: 'fallback-5',
-                name: 'Interconsulta Fonoaudiológica',
-                area: 'general',
-                type: 'interconsulta',
-                target_age: 'all',
-                author_id: 'system',
-                is_active: true,
-                tags: ['interconsulta', 'derivación'],
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                sections: [
-                    { id: 's1', title: 'Datos del Paciente', description: 'Identificación y motivo', order: 0, required: true, default_content: '' },
-                    { id: 's2', title: 'Resumen de Evaluación', description: 'Hallazgos principales', order: 1, required: true, default_content: '' },
-                    { id: 's3', title: 'Diagnóstico Fonoaudiológico', description: 'CIE-10 o descripción', order: 2, required: true, default_content: '' },
-                    { id: 's4', title: 'Recomendaciones', description: 'Derivaciones y pautas', order: 3, required: true, default_content: '' },
-                ],
-                example_paragraphs: [],
-            },
-        ];
+        console.warn('[ReportTemplateService] No templates found in database. Create templates via the UI.');
+        return [];
     }
 
     /**
@@ -457,10 +360,37 @@ class ReportTemplateService {
     }
 
     /**
-     * Build AI context from template examples for smarter generation.
+     * Devuelve el contexto clínico-legal para la IA, 
+     * basado en el manual de PBA y Elena Zegarra.
      */
-    buildTemplateContext(examples: ExampleParagraph[], sectionId: string): string {
-        if (examples.length === 0) return '';
+    getAuditContext(): string {
+        return `
+═══ REGLAS LEGALES (Provincia de Buenos Aires) ═══
+- Diagnóstico funcional fonoaudiológico (Ley 15.052). PROHIBIDO diagnosticar patologías médicas.
+- Distinguir claramente entre "refiere la madre" (dato anamnésico) y "se observa" (hallazgo clínico).
+- Toda copia de historia clínica debe emitirse en <48hs.
+- Firma, sello y matrícula provincial obligatorios.
+
+═══ TOQUE PERSONAL (Elena Zegarra) ═══
+- Incluir siempre: conducta, motivaciones, y ejemplos reales del habla del paciente.
+- Si faltan datos para el "toque personal", el informe está INCOMPLETO. Pregunta al usuario antes de redactar.
+- El lenguaje debe ser comprensible para la familia, traduciendo tecnicismos.
+`;
+    }
+
+    /**
+     * Construye la estructura de auditoría para la IA.
+     */
+    getChecklistContext(): string {
+        return `
+═══ CHECKLIST DE ENTREGA OBLIGATORIA ═══
+1. Identificación y Fecha: Constan nombre completo, DNI, edad cronológica, fecha.
+2. Datos Profesionales: Membrete, firma, aclaración, matrícula (CFPBA).
+3. Diferenciación Epistemológica: Diferenciar lo referido (terceros) de lo observado (clínica).
+4. Resguardo de Incumbencias: Diagnóstico estrictamente fonoaudiológico/funcional.
+5. Coherencia Clínica: Conclusiones derivadas lógicamente de los resultados.
+`;
+    }
 
         const relevant = examples.filter(e => e.section_id === sectionId || !e.section_id);
         if (relevant.length === 0) return '';

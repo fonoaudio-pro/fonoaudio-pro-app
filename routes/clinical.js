@@ -62,6 +62,31 @@ router.post('/ingest-text', async (req, res) => {
   }
 });
 
+// 1c. Endpoint para Ingestión de Imágenes (OCR con Gemini)
+router.post('/ingest-image', async (req, res) => {
+  try {
+    const { fileBase64, fileName, metadata } = req.body;
+
+    if (!fileBase64 || !fileName) {
+      return res.status(400).json({ error: 'Faltan datos requeridos (fileBase64 o fileName)' });
+    }
+
+    const buffer = Buffer.from(fileBase64, 'base64');
+
+    const result = await ingestionService.ingestImage(buffer, {
+      title: metadata?.title || fileName,
+      category: metadata?.category || 'estudio-clinico',
+      patient_id: metadata?.patient_id || null,
+      tags: metadata?.tags || ['ocr', 'estudio-externo']
+    });
+
+    res.json({ status: 'ok', ...result });
+  } catch (error) {
+    console.error('[Clinical Ingest Image Error]:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/history', async (req, res) => {
   try {
     const url = process.env.VITE_SUPABASE_URL;

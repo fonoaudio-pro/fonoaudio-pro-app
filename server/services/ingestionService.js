@@ -1,7 +1,6 @@
 import * as pdf from 'pdf-parse';
 import { supabase } from '../../utils/supabaseClient.js';
 import { GoogleGenerativeAI } from '@google/generative-ai';
-
 // Configuración de chunking
 const CHUNK_SIZE = 1000; // caracteres
 const CHUNK_OVERLAP = 200; // caracteres
@@ -9,7 +8,31 @@ const CHUNK_OVERLAP = 200; // caracteres
 class IngestionService {
   constructor() {
     this.genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+    this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
     this.embeddingModel = this.genAI.getGenerativeModel({ model: "text-embedding-004" });
+  }
+
+  /**
+   * Procesa imágenes (estudios) usando OCR de Gemini
+   */
+  async ingestImage(buffer, metadata) {
+    const { title, patient_id, tags } = metadata;
+    
+    // Convertir imagen a formato que Gemini entienda
+    const imagePart = {
+      inlineData: {
+        data: buffer.toString('base64'),
+        mimeType: 'image/jpeg' // Deberíamos detectar el tipo real
+      }
+    };
+
+    const prompt = "Actúa como un fonoaudiólogo experto. Realiza un OCR preciso de este estudio clínico y extrae los datos más relevantes: qué estudio es, fecha, hallazgos clave, diagnóstico sugerido y cualquier dato relevante para la historia clínica del paciente.";
+
+    const result = await this.model.generateContent([prompt, imagePart]);
+    const extractedText = result.response.text();
+
+    // Guardar como texto ingestado (reutilizando ingestText)
+    return await this.ingestText(extractedText, { ...metadata, title: `OCR: ${title}` });
   }
 
   /**
