@@ -4769,6 +4769,52 @@ router.post('/notifications/save-subscription', async (req, res) => {
     }
 });
 
+// ─── MOVE APPOINTMENT TO ANOTHER ROOM / CONSULTORY (REST, reutilizable app/mascota/MCP) ───
+router.post('/appointments/move-room', async (req, res) => {
+    const { appointment_id, room_name } = req.body || {};
+    if (!appointment_id || !room_name) return res.status(400).json({ status: 'error', message: 'appointment_id y room_name requeridos' });
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseKey) return res.status(500).json({ status: 'error', message: 'Configuracion Supabase incompleta' });
+    const H = { apikey: supabaseKey, Authorization: `Bearer ${supabaseKey}`, 'Content-Type': 'application/json' };
+    try {
+        const getRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}&select=id,patient_name,date,time,roomid,google_event_id`, { headers: H });
+        const rows = await getRes.json();
+        const row = Array.isArray(rows) && rows[0];
+        if (!row) return res.status(404).json({ status: 'error', message: 'Turno no encontrado' });
+        const pr = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, { method: 'PATCH', headers: H, body: JSON.stringify({ roomid: room_name }) });
+        const pd = await pr.json();
+        if (!pr.ok) throw new Error(pd?.message || 'update failed');
+
+        // Sync Google Calendar: actualizar `location` del evento si existe google_event_id
+        let calendarSynced = false;
+        if (row.google_event_id) {
+            try {
+                const ga = new googleService();
+                await ga.refreshIfNeeded();
+                await ga.patchEvent(row.google_event_id, { location: room_name });
+                calendarSynced = true;
+            } catch (e) { console.error('[move-room] Calendar sync error:', e.message); }
+        }
+        // Notificar por Telegram (no branding en el mensaje al paciente)
+        try {
+            const tgToken = process.env.TELEGRAM_BOT_TOKEN;
+            const tgChat = process.env.TELEGRAM_CHAT_ID;
+            if (tgToken && tgChat) {
+                await fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: Number(tgChat), text: `Turno de ${row.patient_name || 'paciente'} (${row.date} ${row.time}) movido al consultorio ${room_name}.` }),
+                });
+            }
+        } catch (e) { /* non-fatal */ }
+
+        return res.json({ status: 'success', message: `Turno movido al consultorio ${room_name}`, appointment: pd[0] || row, calendarSynced });
+    } catch (e) {
+        console.error('[move-room] error:', e?.message);
+        return res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
 export default router;
 
 
