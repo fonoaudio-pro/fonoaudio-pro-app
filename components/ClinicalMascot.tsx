@@ -48,6 +48,35 @@ export default function ClinicalMascot({
   // 🗣️ Detecta cuando la voz (speechSynthesis) está hablando → anima la boca
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [mouthOpen, setMouthOpen] = useState(false);
+
+  // ─── PWA Push registration (para que la mascota avise en el browser via service worker) ───
+  // Graceful: en SSR/no-support/no key → no-op. La notificación push es opcional; el
+  // secretario sigue funcionando vía Telegram. No contiene branding de FonoAudio-Pro.
+  useEffect(() => {
+    if (typeof window === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+    const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined;
+    if (!vapidKey) return;
+    const urlBase64ToUint8Array = (base64String: string) => {
+      const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      const out = new Uint8Array(raw.length);
+      for (let i = 0; i < raw.length; ++i) out[i] = raw.charCodeAt(i);
+      return out;
+    };
+    navigator.serviceWorker.register("/sw.js")
+      .then(async (reg) => {
+        const sub = await reg.pushManager.subscribe({
+          userVisibleProperty: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey),
+        });
+        await fetch("/api/notifications/save-subscription", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(sub),
+        }).catch(() => { /* non-fatal: push opcional */ });
+      })
+      .catch(() => { /* no push support → silent fallback a Telegram */ });
+  }, []);
   useEffect(() => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     let ticker: ReturnType<typeof setInterval> | null = null;
