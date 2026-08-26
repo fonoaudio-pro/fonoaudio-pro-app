@@ -1,4 +1,21 @@
 import { createClient } from '@supabase/supabase-js';
+import webpush from 'web-push';
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
+if (VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails('mailto:clinica@fonoaudio.local', VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+}
+
+async function sendWebPush(supabase, payload) {
+  if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
+  try {
+    const { data: subs } = await supabase.from('push_subscriptions').select('endpoint, keys').not('endpoint', 'is', null);
+    for (const sub of Array.isArray(subs) ? subs : []) {
+      try { await webpush.sendNotification(sub, JSON.stringify(payload)); } catch { /* ignore expired */ }
+    }
+  } catch { /* fallback silencioso: Telegram sigue activo */ }
+}
 
 // In-memory fallback deduplication cache for serverless invocation lifecycle
 const localDeduplicationCache = new Set();
@@ -124,6 +141,7 @@ export default async function handler(req, res) {
               notificationsSent++;
               auditLog.push(`Sent inminent appointment reminder for ${appt.patient_name}`);
             }
+            await sendWebPush(supabase, { title: '⏰ Turno próximo', body: `${appt.patient_name} a las ${appt.time} hs`, tag: `appt_${appt.id}`, url: '/' });
           }
         }
       }

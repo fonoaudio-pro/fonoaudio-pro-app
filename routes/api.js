@@ -365,6 +365,8 @@ REGLAS DE ORO:
 - NUNCA digas "no puedo", "soy solo un asistente virtual", "no puedo enviar alertas" ni nada que niegue tus capacidades. SI el usuario pide que lo avises/recuerdes algo, DECÍS QUE SÍ y EJECUTÁS set_reminder (o confirmás el cron de las 8 si aplica). Confirmás la acción concreta que vas a hacer.
 - Ejecutá las tools cuando el usuario te lo pide. No preguntes demasiado, ejecutá.
 - CUANDO EL USUARIO PIDA ELIMINAR O BORRAR PACIENTES, EJECUTÁ de inmediato con delete_patient (por ID) o delete_patients_by_name (por nombre, elimina TODOS los que coincidan). Nunca te quedes solo con una búsqueda: borrá de verdad y confirmá cuántos eliminaste.
+- SI EL USUARIO PIDE REPROGRAMAR, MOVER O CAMBIAR LA FECHA/HORA DE UN TURNO, usá reschedule_appointment con appointment_id, new_date y new_time. Para identificar el appointment_id, primero consultá la agenda y usá el ID que aparece entre corchetes [ID: ...]. NUNCA uses update_appointment para reprogramar fechas.
+- SI EL USUARIO PIDE MOVER UN TURNO A OTRO CONSULTORIO/SALA, usá move_appointment_room con appointment_id (buscado en la agenda por [ID: ...]) y room_name (nombre del consultorio destino).
 - SI EL USUARIO PREGUNTA POR DATOS FALTANTES/INCOMPLETOS/ALERTAS, llamá SIEMPRE a get_missing_data_alerts y comunicá EXACTAMENTE lo que devuelve. NUNCA inventes ni asumas: basate siempre en el resultado de la tool.`;
 
     try {
@@ -2578,6 +2580,18 @@ const clinicalTools = [
             required: ['appointment_id', 'new_date']
         }
     },
+    {
+        name: 'move_appointment_room',
+        description: 'Mueve un turno a otro consultorio/sala (roomid). Si el turno está sincronizado a Google Calendar, actualiza el campo location del evento. Solicitá confirmation sobre el consultorio destino.',
+        parameters: {
+            type: 'OBJECT',
+            properties: {
+                appointment_id: { type: 'STRING', description: 'ID del turno a mover.' },
+                room_name: { type: 'STRING', description: 'Nombre del consultorio/sala destino.' }
+            },
+            required: ['appointment_id', 'room_name']
+        }
+    },
     // ─── EVALUATIONS ───
     {
         name: 'add_evaluation',
@@ -3149,7 +3163,31 @@ async function executeToolCall(functionName, args, user_id) {
             }
         }
 
-        // ─── REMINDERS (autonomous Telegram + Google Calendar sync) ───
+                // --- MOVE APPOINTMENT ROOM (consultorio/sala) ---
+        if (functionName === 'move_appointment_room') {
+            const { appointment_id, room_name } = args;
+            if (!appointment_id || !room_name) return { status: 'error', message: 'Requiere appointment_id y room_name' };
+            try {
+                const getRes = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}&select=id,patient_name,date,time,type,roomid,google_event_id`, {
+                    headers: { apikey: `Authorization: ${supabaseKey}` },
+                });
+                const rows = await getRes.json();
+                const row = Array.isArray(rows) && rows[0];
+                if (!row) return { status: 'error', message: 'Turno no encontrado' };
+                const pr = await fetch(`${supabaseUrl}/rest/v1/appointments?id=eq.${appointment_id}`, {
+                    method: 'PATCH',
+                    headers: { ...headers, Prefer: 'return=representation' },
+                    body: JSON.stringify({ roomid: room_name }),
+                });
+                const pd = await pr.json();
+                if (!pr.ok) throw new Error(typeof pd === 'string' ? pd : (pd?.message || 'update failed'));
+                const updatedRow = Array.isArray(pd) ? pd[0] : { ...row, roomid: room_name };
+                try { const tg = 'Turno movido a ' + room_name + ' para ' + (row.patient_name || 'paciente'); await sendTelegramMessage(process.env.TELEGRAM_CHAT_ID || '8706264359', tg, true); } catch (e) { /* non-fatal */ }
+                return { status: 'ok', message: 'Turno de ' + (row.patient_name || 'el paciente') + ' movido al consultorio ' + room_name + '.', appointment: updatedRow };
+            } catch (e) { return { status: 'error', message: e?.message || String(e) }; }
+        }
+
+// ─── REMINDERS (autonomous Telegram + Google Calendar sync) ───
         if (functionName === 'set_reminder') {
             const { message, date, time } = args;
             const reminderTime = time || '09:00';
@@ -4701,6 +4739,33 @@ router.post('/appointments/reschedule', async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ status: 'error', message: e?.message || String(e) });
+    }
+});
+
+// ─── NOTIFICATIONS: persistir push subscription del profesional (PWA/service worker) ───
+// El endpoint recibe la subscription del browser (VAPID) y la guarda en Supabase
+// para que el worker cron (check-reminders) envíe push web en paralelo a Telegram.
+router.post('/notifications/save-subscription', async (req, res) => {
+    const supabaseUrl = process.env.VITE_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const headers = { apikey: `Authorization: ${supabaseKey}`, 'Content-Type': 'application/json' };
+    try {
+        const sub = req.body;
+        if (!sub || !sub.endpoint) {
+            return res.status(400).json({ status: 'error', message: 'subscription inválida' });
+        }
+        // Upsert por endpoint (deduplicado) vía REST de Supabase
+        const payload = { endpoint: sub.endpoint, keys: sub.keys || {}, expiration_time: sub.expirationTime, updated_at: new Date().toISOString() };
+        const r = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions`, {
+            method: 'POST',
+            headers: { ...headers, Prefer: 'resolution=merge-duplicates' },
+            body: JSON.stringify(payload),
+        });
+        if (!r.ok) { const t = await r.text().catch(()=>'' ); console.error('[save-subscription] error:', r.status, t); }
+        return res.json({ status: 'ok', message: 'Suscripción guardada' });
+    } catch (e) {
+        console.error('[save-subscription] error:', e?.message);
+        return res.status(500).json({ status: 'error', message: e?.message || String(e) });
     }
 });
 
