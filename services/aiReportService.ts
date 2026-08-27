@@ -342,7 +342,8 @@ Respondé SOLO con el texto reescrito.`;
      * Generar INFORME COMPLETO con toda la inteligencia clínica.
      * Sigue la estructura del manual de PBA y Elena Zegarra.
      */
-    async generateFullReport(patient: Patient, reportType: string): Promise<Record<string, string>> {
+    async generateFullReport(patientData: Partial<Patient> & { name: string }, reportType: string): Promise<Record<string, string>> {
+        const patient = patientData as Patient;
         const clinicalCtx = buildClinicalContext(patient, reportType);
         const diagnosisHint = buildDiagnosisSuggestionContext(patient);
 
@@ -383,7 +384,7 @@ Respondé SOLO con un JSON válido: {"seccion_nombre": "<p>...</p>", ...}
 Las keys deben ser: informacion_general, motivo_consulta, antecedentes, comportamiento, evaluacion_lenguaje, evaluacion_habla, evaluacion_voz, evaluacion_motricidad, evaluacion_pragmatica, resultados_evaluaciones, impresion_diagnostica, pronostico, objetivos, recomendaciones.`;
 
         const result = await generateWithFallback(
-            `Informe completo tipo "${reportType}" para ${patient.name}`,
+            `Informe completo tipo "${reportType}" para ${patientData.name}`,
             systemPrompt
         );
 

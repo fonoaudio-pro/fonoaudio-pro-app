@@ -187,7 +187,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 CANTIDAD_SESIONES: sessionCount > 0 ? `${sessionCount} encuentros` : 'Primera evaluación',
                 FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
                 MODALIDAD: 'presencial',
-                PARENTESCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
+                PARENTESTCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
                 MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
                 DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
                 CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
