@@ -3,6 +3,28 @@ import { Patient } from '../types';
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.GROQ_API_KEY;
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || import.meta.env.GOOGLE_API_KEY;
 
+async function callServerAiReportApi(payload: any): Promise<any> {
+    try {
+        const response = await fetch('/api/reports/ai-generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+            const errJson = await response.json().catch(() => ({}));
+            throw new Error(errJson.message || `Server error ${response.status}`);
+        }
+        const json = await response.json();
+        if (json.status === 'ok') {
+            return json;
+        }
+        throw new Error(json.message || 'Error en respuesta de IA servidor');
+    } catch (e: any) {
+        console.warn('[AI Report Client] Backend call failed, using client fallback:', e.message);
+        return null;
+    }
+}
+
 export interface GenerateOptions {
     prompt: string;
     context?: string;
@@ -231,6 +253,12 @@ export const aiReportService = {
      * Generar texto para una sección con contexto clínico completo + marco legal.
      */
     async generateSectionText(options: GenerateOptions): Promise<string> {
+        const serverRes = await callServerAiReportApi({
+            action: 'generateSectionText',
+            ...options,
+        });
+        if (serverRes?.text) return serverRes.text;
+
         const { prompt, section, tone = 'formal', patient, reportType, sectionDescription, existingContent } = options;
 
         const clinicalCtx = buildClinicalContext(patient, reportType);
@@ -272,6 +300,13 @@ ${prompt}`;
      * Mejorar texto existente con verificación de precisión clínica.
      */
     async improveText(text: string, patientName?: string, patient?: Patient): Promise<string> {
+        const serverRes = await callServerAiReportApi({
+            action: 'improveText',
+            prompt: text,
+            patient,
+        });
+        if (serverRes?.text) return serverRes.text;
+
         const clinicalCtx = buildClinicalContext(patient);
 
         const systemPrompt = `Mejorá este texto para un informe fonoaudiológico profesional.
@@ -295,6 +330,14 @@ ${clinicalCtx || 'No disponible'}`;
      * Sugerir párrafos basados en datos REALES del paciente.
      */
     async suggestBlocks(sectionTitle: string, patient?: Patient, reportType?: string): Promise<string[]> {
+        const serverRes = await callServerAiReportApi({
+            action: 'suggestBlocks',
+            section: sectionTitle,
+            patient,
+            reportType,
+        });
+        if (serverRes?.blocks && Array.isArray(serverRes.blocks)) return serverRes.blocks;
+
         const clinicalCtx = buildClinicalContext(patient, reportType);
 
         const systemPrompt = `Sos un fonoaudiólogo experto. Generá 3-4 párrafos profesionales (3-5 oraciones cada uno) para la sección "${sectionTitle}".
@@ -324,6 +367,14 @@ Ejemplo: ["<p>En la evaluación del lenguaje expresivo, se observó...</p>", "<p
      * Completar texto parcial.
      */
     async completeText(partialText: string, sectionContext: string, patient?: Patient): Promise<string> {
+        const serverRes = await callServerAiReportApi({
+            action: 'completeText',
+            prompt: partialText,
+            section: sectionContext,
+            patient,
+        });
+        if (serverRes?.text) return serverRes.text;
+
         const clinicalCtx = buildClinicalContext(patient);
         const systemPrompt = `Completá este texto de informe fonoaudiológico de manera coherente y profesional.
 Sección: ${sectionContext}.
@@ -340,6 +391,13 @@ ${clinicalCtx || 'No disponible'}`;
      * Cambiar tono preservando precisión clínica.
      */
     async changeTone(text: string, targetTone: 'formal' | 'tecnico' | 'familiar'): Promise<string> {
+        const serverRes = await callServerAiReportApi({
+            action: 'changeTone',
+            prompt: text,
+            tone: targetTone,
+        });
+        if (serverRes?.text) return serverRes.text;
+
         const toneDesc = targetTone === 'formal'
             ? 'formal y profesional, impersonal, tercera persona'
             : targetTone === 'tecnico'
@@ -357,6 +415,17 @@ Respondé SOLO con el texto reescrito.`;
      * Acepta las secciones de la guía para generar keys que coincidan.
      */
     async generateFullReport(patientData: Partial<Patient> & { name: string }, reportType: string, guideSections?: Array<{ id: string; title: string; description?: string }>): Promise<Record<string, string>> {
+        const serverRes = await callServerAiReportApi({
+            action: 'generateFullReport',
+            patient: patientData,
+            reportType,
+            guideSections,
+        });
+
+        if (serverRes?.data && Object.keys(serverRes.data).length > 0) {
+            return serverRes.data;
+        }
+
         const patient = patientData as Patient;
         const clinicalCtx = buildClinicalContext(patient, reportType);
         const diagnosisHint = buildDiagnosisSuggestionContext(patient);
@@ -395,7 +464,8 @@ Ejemplo: {"info_general": "<p>...</p>", "motivo_consulta": "<p>...</p>", ...}`;
 
         try {
             const cleaned = result.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(cleaned);
+            const match = cleaned.match(/\{[\s\S]*\}/);
+            return JSON.parse(match ? match[0] : cleaned);
         } catch {
             return { contenido: result };
         }
@@ -405,6 +475,12 @@ Ejemplo: {"info_general": "<p>...</p>", "motivo_consulta": "<p>...</p>", ...}`;
      * Sugerir diagnóstico funcional basado en evaluaciones.
      */
     async suggestDiagnosis(patient: Patient): Promise<string> {
+        const serverRes = await callServerAiReportApi({
+            action: 'suggestDiagnosis',
+            patient,
+        });
+        if (serverRes?.text) return serverRes.text;
+
         const clinicalCtx = buildClinicalContext(patient);
         const diagnosisHint = buildDiagnosisSuggestionContext(patient);
 

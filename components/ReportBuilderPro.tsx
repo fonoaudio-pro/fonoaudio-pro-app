@@ -113,6 +113,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const [showBgColor, setShowBgColor] = useState(false);
     const [currentUserId, setCurrentUserId] = useState<string | null>(null);
     const [mobileView, setMobileView] = useState<'editor' | 'preview'>('editor');
+    const [generationProgress, setGenerationProgress] = useState<{ step: string; progress: number } | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
 
@@ -383,7 +384,9 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         if (!confirmed) return;
 
         setIsGeneratingFullReport(true);
+        setGenerationProgress({ step: 'Conectando con IA clínica...', progress: 5 });
         try {
+            setGenerationProgress({ step: 'Analizando anamnesis, evaluaciones y sesiones...', progress: 20 });
             const sections = await aiReportService.generateFullReport({
                 name: patient.name,
                 age: patient.age,
@@ -395,12 +398,16 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 treatmentPlan: patient.treatmentPlan,
             }, guide.title, guide.sections.map(s => ({ id: s.id, title: s.title, description: s.explicacion })));
 
+            setGenerationProgress({ step: 'Verificando marco legal PBA (Ley 15.052)...', progress: 50 });
+            await new Promise(r => setTimeout(r, 300)); // Small delay for UX
+
+            setGenerationProgress({ step: 'Redactando secciones con datos reales...', progress: 70 });
+
             const newSectionContent: Record<string, string> = {};
             const newApprovedSections: Record<string, string> = {};
 
             guide.sections.forEach((s, idx) => {
                 const key = `${selectedGuideId}_${idx}`;
-                // Try exact match, then fuzzy match with normalized strings
                 const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
                 const sectionId = normalize(s.id);
                 const content = sections[s.id] ||
@@ -409,7 +416,6 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                         return nk === sectionId ||
                             nk.includes(sectionId) ||
                             sectionId.includes(nk) ||
-                            // Additional fuzzy: match common synonyms
                             (sectionId.includes('info') && nk.includes('info')) ||
                             (sectionId.includes('motivo') && nk.includes('motivo')) ||
                             (sectionId.includes('comportamiento') && (nk.includes('comportamiento') || nk.includes('actitud'))) ||
@@ -434,16 +440,22 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 }
             });
 
+            setGenerationProgress({ step: 'Finalizando y validando contenido...', progress: 90 });
+            await new Promise(r => setTimeout(r, 200));
+
             setSectionContent(prev => ({ ...prev, ...newSectionContent }));
             setApprovedSections(prev => ({ ...prev, ...newApprovedSections }));
 
             const filledCount = Object.keys(newApprovedSections).length;
+            setGenerationProgress({ step: `¡Completado! ${filledCount} secciones generadas`, progress: 100 });
+            await new Promise(r => setTimeout(r, 800));
+            setGenerationProgress(null);
+
             addToast({
-                message: `Informe generado: ${filledCount}/${guide.sections.length} secciones completadas`,
+                message: `Informe generado: ${filledCount}/${guide.sections.length} secciones completadas ✓`,
                 type: filledCount > 0 ? 'success' : 'warning'
             });
 
-            // Navigate to first empty section or keep current
             const firstEmptyIdx = guide.sections.findIndex((_, idx) =>
                 !newApprovedSections[`${selectedGuideId}_${idx}`]
             );
@@ -451,6 +463,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 setCurrentSectionIndex(firstEmptyIdx);
             }
         } catch (err: any) {
+            setGenerationProgress(null);
             addToast({ message: `Error generando informe: ${err.message}`, type: 'error' });
         } finally {
             setIsGeneratingFullReport(false);
@@ -739,6 +752,33 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                             className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-xl text-[9px] font-bold hover:from-emerald-600 hover:to-teal-600 transition-all disabled:opacity-50 shadow-sm">
                             {isGeneratingFullReport ? <Loader2 size={10} className="animate-spin" /> : <Brain size={10} />}
                             {isGeneratingFullReport ? 'Generando informe...' : 'Generar Informe Completo'}
+                        </button>
+
+                        {generationProgress && (
+                            <div className="w-full space-y-1.5 p-2 bg-indigo-50 border border-indigo-200 rounded-xl animate-in fade-in">
+                                <div className="flex items-center justify-between text-[8px]">
+                                    <span className="font-bold text-indigo-700">{generationProgress.step}</span>
+                                    <span className="font-mono text-indigo-600">{generationProgress.progress}%</span>
+                                </div>
+                                <div className="w-full bg-indigo-100 rounded-full h-1.5 overflow-hidden">
+                                    <div className="bg-gradient-to-r from-indigo-500 to-cyan-500 h-1.5 rounded-full transition-all duration-300"
+                                        style={{ width: `${generationProgress.progress}%` }} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* AI Diagnosis Suggestion */}
+                        <button onClick={async () => {
+                            const diag = await aiReportService.suggestDiagnosis(patient);
+                            if (editor) {
+                                const html = `<h3 style="font-size:11pt;font-weight:700;color:#0891b2;border-bottom:1px solid rgba(8,145,178,0.3);padding-bottom:4px;margin:1em 0 0.5em;">Impresión Diagnóstica (Sugerida por IA)</h3>${diag}`;
+                                editor.chain().focus().insertContent(html).run();
+                            }
+                            addToast({ message: 'Diagnóstico funcional sugerido insertado', type: 'success' });
+                        }} disabled={isAiLoading}
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white rounded-xl text-[9px] font-bold hover:from-amber-600 hover:to-orange-600 transition-all disabled:opacity-50 shadow-sm">
+                            {isAiLoading ? <Loader2 size={10} className="animate-spin" /> : <Stethoscope size={10} />}
+                            Sugerir Diagnóstico CIE-11
                         </button>
 
                         {/* Template System */}

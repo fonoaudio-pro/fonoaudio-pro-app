@@ -1130,6 +1130,187 @@ Incluí: diagnóstico, evolución, objetivos alcanzados, próximos pasos y plan 
     }
 });
 
+// ═══ SERVICIO DE IA PARA GENERACIÓN DE INFORMES CLÍNICOS (BACKEND RESILIENTE) ═══
+router.post('/reports/ai-generate', async (req, res) => {
+    try {
+        const { action, patient, reportType, guideSections, section, prompt, existingContent, tone } = req.body;
+
+        const aiModel = req.app?.locals?.aiModel;
+        const fallbackModel = req.app?.locals?.fallbackAiModel;
+        const primaryModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+        const runAiPrompt = async (systemPrompt, userPrompt) => {
+            const parts = [{ text: `${systemPrompt}\n\n${userPrompt}` }];
+            let result = await callGeminiResilient(parts, aiModel, primaryModel);
+            if (result.ok && result.text) return result.text;
+            if (fallbackModel) {
+                result = await callGeminiResilient(parts, fallbackModel, 'gemini-2.0-flash');
+                if (result.ok && result.text) return result.text;
+            }
+            const groqResult = await callGroqFallback(`${systemPrompt}\n\n${userPrompt}`);
+            if (groqResult.ok && groqResult.text) return groqResult.text;
+            throw new Error(result.error?.message || 'Error al comunicarse con la IA');
+        };
+
+        const legalFramework = `
+═══ MARCO LEGAL Y NORMATIVO (Provincia de Buenos Aires - Ley 15.052) ═══
+- Diagnóstico DEBE ser funcional, NO médico (usar CIE-11 fonoaudiológico).
+- Diferenciar SIEMPRE: "La madre refiere..." (dato anamnésico) vs. "Se observa/Se evidencia..." (hallazgo clínico).
+- Membrete, firma, aclaración y matrícula CFPBA son obligatorios.
+- Toque personal: conducta observada, motivaciones, ejemplos reales del habla del paciente.
+`;
+
+        const buildPatientContext = (p, repType) => {
+            if (!p) return 'Sin datos de paciente';
+            const parts = [];
+            parts.push(`PACIENTE: ${p.name || 'Paciente'}, ${p.age || 'N/I'} años.`);
+            if (p.document) parts.push(`DNI: ${p.document}`);
+            if (p.responsable) parts.push(`Responsable: ${p.responsable}`);
+            if (p.obra_social) parts.push(`Obra Social: ${p.obra_social}`);
+            if (p.diagnosis) parts.push(`Diagnóstico actual: ${p.diagnosis}`);
+            if (p.notes) parts.push(`Observaciones: ${p.notes}`);
+
+            if (p.anamnesis) {
+                parts.push(`ANAMNESIS:`);
+                if (typeof p.anamnesis === 'string') parts.push(p.anamnesis.substring(0, 1500));
+                else if (p.anamnesis.sections) {
+                    Object.entries(p.anamnesis.sections).forEach(([k, v]) => {
+                        parts.push(` - ${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`);
+                    });
+                } else {
+                    parts.push(JSON.stringify(p.anamnesis).substring(0, 1500));
+                }
+            }
+
+            if (p.evaluations && p.evaluations.length > 0) {
+                parts.push(`EVALUACIONES ESTANDARIZADAS:`);
+                p.evaluations.forEach(ev => {
+                    const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
+                    parts.push(` - ${ev.testName}: ${ev.score}/${ev.maxScore} (${pct}%) ${ev.notes ? `[${ev.notes}]` : ''}`);
+                });
+            }
+
+            if (p.history && p.history.length > 0) {
+                parts.push(`HISTORIAL DE SESIONES (${p.history.length} sesiones):`);
+                p.history.slice(0, 5).forEach(s => {
+                    parts.push(` - ${s.date} [${s.status}]: ${s.summary || ''} ${s.observations || ''}`);
+                });
+            }
+
+            if (p.treatmentPlan) {
+                parts.push(`PLAN DE TRATAMIENTO:`);
+                if (p.treatmentPlan.general) parts.push(` Objetivo General: ${p.treatmentPlan.general}`);
+                if (p.treatmentPlan.strategies) parts.push(` Estrategias: ${p.treatmentPlan.strategies}`);
+            }
+
+            return parts.join('\n');
+        };
+
+        const patientCtx = buildPatientContext(patient, reportType);
+
+        if (action === 'generateFullReport') {
+            const sectionList = guideSections
+                ? guideSections.map((s, i) => `${i + 1}. KEY: "${s.id}" — Título: "${s.title}" — Explicación: ${s.description || ''}`).join('\n')
+                : `1. KEY: "info_general"\n2. KEY: "motivo_consulta"\n3. KEY: "comportamiento"\n4. KEY: "dba"\n5. KEY: "expresivo_morfosintaxis"\n6. KEY: "expresivo_semantica"\n7. KEY: "impresion_diagnostica"\n8. KEY: "pronostico"\n9. KEY: "objetivos"\n10. KEY: "recomendaciones"`;
+
+            const sysPrompt = `Sos un fonoaudiólogo matriculado (CFPBA) experto en redacción de informes clínicos para la Provincia de Buenos Aires.
+Generá un informe fonoaudiológico COMPLETO tipo "${reportType || 'Valoración'}" en formato JSON.
+
+${legalFramework}
+
+DATOS CLÍNICOS DEL PACIENTE:
+${patientCtx}
+
+SECCIONES DEL INFORME (Usá EXACTAMENTE estas keys en el JSON retornado):
+${sectionList}
+
+REGLAS DE SALIDA:
+1. Respondé ÚNICAMENTE con un objeto JSON válido donde las claves sean EXACTAMENTE los IDs/KEYs especificados arriba.
+2. Cada valor debe ser un string con HTML válido (<p>, <strong>, <em>, <ul>, <li>, <table>).
+3. SIEMPRE basar la redacción en las evaluaciones y datos reales del paciente.
+4. Si falta un dato específico para una sección, redactá una descripción clínica profesional esperable o sugerida acorde al nivel de severidad del paciente.`;
+
+            const rawText = await runAiPrompt(sysPrompt, `Generar informe completo tipo "${reportType}" para ${patient?.name || 'el paciente'}.`);
+            let parsed = {};
+            try {
+                const cleaned = rawText.replace(/```json/gi, '').replace(/```/gi, '').trim();
+                const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+                parsed = JSON.parse(jsonMatch ? jsonMatch[0] : cleaned);
+            } catch (e) {
+                console.warn('[AI Report Server] JSON parse failed, returning raw text inside contenido key:', e.message);
+                parsed = { contenido: rawText };
+            }
+
+            return res.json({ status: 'ok', data: parsed });
+
+        } else if (action === 'generateSectionText') {
+            const sysPrompt = `Sos un fonoaudiólogo matriculado (CFPBA) experto.
+Generá el texto para la sección "${section || 'General'}" de un informe fonoaudiológico.
+
+${legalFramework}
+
+DATOS DEL PACIENTE:
+${patientCtx}
+
+${existingContent ? `CONTENIDO ACTUAL A MEJORAR/EXPANDIR:\n${existingContent}\n` : ''}
+
+INSTRUCCIÓN: ${prompt || 'Generar redacción clínica adecuada.'}
+Respondé SOLO con el contenido HTML (<p>, <strong>, <ul>, <li>).`;
+
+            const text = await runAiPrompt(sysPrompt, `Generar sección ${section}`);
+            return res.json({ status: 'ok', text });
+
+        } else if (action === 'suggestBlocks') {
+            const sysPrompt = `Sos un fonoaudiólogo matriculado.
+Generá 3 a 4 bloques/párrafos sugeridos alternativos para la sección "${section}".
+Usá datos del paciente: ${patientCtx}
+Respondé con un array JSON de strings HTML: ["<p>...</p>", "<p>...</p>"]`;
+
+            const raw = await runAiPrompt(sysPrompt, `Sugerir bloques para ${section}`);
+            let blocks = [];
+            try {
+                const cleaned = raw.replace(/```json/gi, '').replace(/```/gi, '').trim();
+                const match = cleaned.match(/\[[\s\S]*\]/);
+                blocks = JSON.parse(match ? match[0] : cleaned);
+            } catch {
+                blocks = [raw];
+            }
+            return res.json({ status: 'ok', blocks });
+
+        } else if (action === 'improve' || action === 'improveText') {
+            const sysPrompt = `Mejorá este texto clínico fonoaudiológico preservando datos y marco legal PBA:
+${legalFramework}
+DATOS PACIENTE: ${patientCtx}
+Respondé SOLO con el texto mejorado en HTML.`;
+
+            const text = await runAiPrompt(sysPrompt, prompt || existingContent);
+            return res.json({ status: 'ok', text });
+
+        } else if (action === 'suggestDiagnosis') {
+            const sysPrompt = `Sos un fonoaudiólogo experto en diagnóstico funcional CIE-11 (Ley PBA 15.052).
+Basándote en los datos del paciente y sus evaluaciones:
+${patientCtx}
+
+Sugerí un diagnóstico funcional fonoaudiológico completo, fundamentación y severidad. NO usá diagnósticos médicos.
+Respondé en formato HTML.`;
+
+            const text = await runAiPrompt(sysPrompt, `Sugerir diagnóstico funcional para ${patient?.name}`);
+            return res.json({ status: 'ok', text });
+
+        } else {
+            // Default generic prompt
+            const sysPrompt = `Sos un fonoaudiólogo experto. Procesá esta solicitud para el paciente:
+${patientCtx}`;
+            const text = await runAiPrompt(sysPrompt, prompt || 'Procesar solicitud.');
+            return res.json({ status: 'ok', text });
+        }
+
+    } catch (err) {
+        console.error('[AI Report Server] Error:', err);
+        return res.status(500).json({ status: 'error', message: err.message || 'Error en servidor de IA' });
+    }
+});
+
 // --- REAL ACTIONS ---
 
 
