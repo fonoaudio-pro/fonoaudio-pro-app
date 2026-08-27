@@ -232,14 +232,16 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         return processed;
     }, [sectionVariables]);
 
-    // Load section content when switching sections
+    // Load section content when switching sections (no deps on sectionContent/approvedSections to avoid loops)
     useEffect(() => {
-        if (!editor || !section || isLoadingContentRef.current) return;
+        if (!editor || !section) return;
+        if (isLoadingContentRef.current) return;
 
         // Save PREVIOUS section content before switching
         const prevKey = `${selectedGuideId}_${prevSectionIndexRef.current}`;
         if (prevKey !== `${selectedGuideId}_${currentSectionIndex}` && editor.getHTML() && editor.getText().trim().length > 0) {
-            setSectionContent(prev => ({ ...prev, [prevKey]: editor.getHTML() }));
+            const prevContent = editor.getHTML();
+            setSectionContent(prev => ({ ...prev, [prevKey]: prevContent }));
         }
 
         // Update ref to current index
@@ -259,25 +261,9 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
             editor.commands.clearContent();
         }
         
-        // Auto-apply all variables to editor content after loading
-        setTimeout(() => {
-            if (editor) {
-                let html = editor.getHTML();
-                let changed = false;
-                Object.entries(sectionVariables).forEach(([id, value]) => {
-                    const placeholder = `[${id}]`;
-                    const pattern = new RegExp(placeholder.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&'), 'g');
-                    if (html.includes(placeholder) && value) {
-                        html = html.replace(pattern, () => value);
-                        changed = true;
-                    }
-                });
-                if (changed) {
-                    editor.commands.setContent(html);
-                }
-            }
-        }, 100);
-    }, [currentSectionIndex, selectedGuideId, section?.id, sectionContent, approvedSections, editor, processText]);
+        // Reset guard after content is loaded
+        requestAnimationFrame(() => { isLoadingContentRef.current = false; });
+    }, [currentSectionIndex, selectedGuideId, section?.id, editor]);
 
     const insertBlock = useCallback((text: string) => {
         if (!editor) return;
