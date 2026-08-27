@@ -91,13 +91,24 @@ export function useShellUI({ addToast }: UseShellUIOptions): UseShellUIResult {
   const setSelectedPatientId = useAppStore(s => s.setSelectedPatientId);
 
   const handleStartReport = useCallback((type: string) => {
+    // Map report type names to guide IDs
+    const typeMap: Record<string, string> = {
+      'evaluacion': 'valoracion',
+      'seguimiento': 'seguimiento',
+      'proceso': 'proceso',
+      'alta': 'alta',
+      'derivacion': 'derivacion',
+      'interconsulta': 'interconsulta',
+    };
+    const guideId = typeMap[type] || type || 'valoracion';
+    setReportGuideId(guideId);
     if (selectedPatient) {
       setShowReportEditor(true);
     } else {
       setNewReportType(type);
       setShowPatientSelector(true);
     }
-  }, [selectedPatient]);
+  }, [selectedPatient, setReportGuideId]);
 
   const handleSaveReport = useCallback(() => {
     if (!selectedPatient) return;

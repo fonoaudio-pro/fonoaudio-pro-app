@@ -141,7 +141,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         editorProps: { attributes: { class: 'focus:outline-none min-h-[500px] text-slate-800 leading-relaxed' } },
     });
 
-    // Auto-fill variables from patient data
+    // Auto-fill variables from patient data + clinical records
     useEffect(() => {
         if (patient) {
             let profNombre = '';
@@ -157,11 +157,26 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 }
             } catch {}
 
+            // Build dynamic values from actual patient data
+            const sessionCount = patient.history?.length || 0;
+            const lastSession = patient.history?.[0];
+            const evaluationSummary = patient.evaluations?.map(ev => {
+                const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
+                return `${ev.testName}: ${pct}%`;
+            }).join(', ') || '';
+            const avgScore = patient.evaluations?.length
+                ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
+                : 0;
+            const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
+            const motivosFromAnamnesis = patient.anamnesis?.motivo_consulta || patient.anamnesis?.chief_complaint || patient.notes || '';
+            const diagnosticoFx = patient.diagnosis || 'Sin diagnóstico funcional definido';
+            const areasAfectadas = patient.evaluations?.filter(ev => ev.maxScore > 0 && (ev.score / ev.maxScore) < 0.6).map(ev => ev.testName).join(', ') || 'A determinar según evaluación';
+
             setSectionVariables(prev => ({
                 ...prev,
                 NOMBRE: patient.name,
                 EDAD: patient.age?.toString() || '',
-                DIAGNOSTICO: patient.diagnosis || '',
+                DIAGNOSTICO: diagnosticoFx,
                 FECHA: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
                 DOCUMENTO: patient.document || '',
                 RESPONSABLE: (patient as any).responsable || '',
@@ -169,24 +184,23 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 DERIVANTE: (patient as any).derivante || '',
                 GENERO: patient.gender || '',
                 FECHA_NACIMIENTO: patient.date_of_birth || '',
-                CANTIDAD_SESIONES: '3 encuentros',
-                FECHA_VALORACION: new Date().toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' }),
+                CANTIDAD_SESIONES: sessionCount > 0 ? `${sessionCount} encuentros` : 'Primera evaluación',
+                FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
                 MODALIDAD: 'presencial',
-                PARENTESTCO_INFORMANTE: 'la mamá',
-                MOTIVO_TEXTO: 'le cuesta pronunciar algunos sonidos del habla',
-                ESTRUCTURA_EJEMPLO: 'Quiero jugar con el tren',
-                DESCRIPCION_EDAD: 'oraciones complejas coordinadas utilizando nexos y preposiciones',
-                CANTIDAD_PALABRAS: 'alrededor de 50 palabras',
-                HABILIDADES_COMPRENSION: 'identificar objetos cotidianos y seguir órdenes directas',
-                DIFICULTADES_COMPRENSION: 'órdenes complejas y conceptos espaciales',
-                PROCESOS_SIMPLIFICACION: 'sustitución de fonemas líquidos y asimilaciones silábicas',
-                DIAGNOSTICO_FONOAUDIOLOGICO: 'Trastorno del Lenguaje Expresivo (TEL)',
-                AREAS_AFECTADAS: 'morfosintáctica y léxico-semántica expresiva',
-                JUEGO_PREFERIDO: 'bloques de construcción y autitos',
-                JUEGO_MENOR_INTERES: 'rompecabezas y tareas de mesa',
-                FRECUENCIA_TERAPIA: '2 veces',
-                FECHA_INICIO_TRATAMIENTO: 'Marzo de 2025',
-                SESIONES_REALIZADAS: '24 encuentros',
+                PARENTESCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
+                MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
+                DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
+                CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
+                HABILIDADES_COMPRENSION: 'A evaluar en la valoración',
+                DIFICULTADES_COMPRENSION: 'A evaluar en la valoración',
+                PROCESOS_SIMPLIFICACION: 'A determinar según evaluación fonológica',
+                DIAGNOSTICO_FONOAUDIOLOGICO: diagnosticoFx,
+                AREAS_AFECTADAS: areasAfectadas,
+                JUEGO_PREFERIDO: 'A observar en la sesión',
+                JUEGO_MENOR_INTERES: 'A observar en la sesión',
+                FRECUENCIA_TERAPIA: (patient as any).treatmentPlan?.frequency || '2 veces por semana',
+                FECHA_INICIO_TRATAMIENTO: lastSession?.date || 'A definir',
+                SESIONES_REALIZADAS: sessionCount > 0 ? `${sessionCount} encuentros realizados` : 'Sin sesiones previas',
                 PROFESIONAL_NOMBRE: profNombre,
                 PROFESIONAL_TITULO: profTitulo,
                 PROFESIONAL_MATE: profMate,
@@ -712,8 +726,22 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                                     {customTemplates.map(t => (
                                         <button key={t.id}
                                             onClick={() => {
-                                                // TODO: merge template sections into current guide
-                                                addToast({ message: `Plantilla "${t.name}" disponible`, type: 'success' });
+                                                // Apply custom template: merge sections into current content
+                                                if (t.sections && t.sections.length > 0) {
+                                                    const templateContent = t.sections
+                                                        .sort((a: any, b: any) => (a.order || 0) - (b.order || 0))
+                                                        .map((s: any) => {
+                                                            const processedTitle = processText(s.title || '');
+                                                            const processedDesc = processText(s.description || '');
+                                                            const processedDefault = processText(s.default_content || '');
+                                                            return `<h3>${processedTitle}</h3><p>${processedDesc}</p>${processedDefault ? `<p>${processedDefault}</p>` : ''}`;
+                                                        })
+                                                        .join('<br>');
+                                                    editor?.commands.setContent(templateContent);
+                                                    addToast({ message: `Plantilla "${t.name}" aplicada`, type: 'success' });
+                                                } else {
+                                                    addToast({ message: `Plantilla "${t.name}" sin secciones definidas`, type: 'warning' });
+                                                }
                                             }}
                                             className="w-full text-left p-2 bg-slate-50 border border-slate-200 rounded-lg hover:border-indigo-300 transition-all">
                                             <p className="text-[9px] font-bold text-slate-700">{t.name}</p>

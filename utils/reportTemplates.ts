@@ -400,7 +400,7 @@ export const REPORT_GUIDES: Record<string, ReportGuide> = {
           </ol>
           <p>Ante cualquier inquietud u observación, me encuentro a entera disposición.</p>
           <p style="margin-top: 30px;">Saluda atentamente,</p>
-          <p style="margin-top: 40px; line-height: 1.2;"><strong>Matias Perez</strong><br/>Fonoaudiólogo<br/>M.P. 7276</p>
+          <p style="margin-top: 40px; line-height: 1.2;"><strong>[PROFESIONAL_NOMBRE]</strong><br/>[PROFESIONAL_TITULO]<br/>M.P. [PROFESIONAL_MATE]</p>
         `,
         editable: true
       }

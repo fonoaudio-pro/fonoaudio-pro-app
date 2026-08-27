@@ -392,6 +392,12 @@ class ReportTemplateService {
 `;
     }
 
+    /**
+     * Build AI context from template examples for smarter generation.
+     */
+    buildTemplateContext(examples: ExampleParagraph[], sectionId: string): string {
+        if (examples.length === 0) return '';
+
         const relevant = examples.filter(e => e.section_id === sectionId || !e.section_id);
         if (relevant.length === 0) return '';
 
