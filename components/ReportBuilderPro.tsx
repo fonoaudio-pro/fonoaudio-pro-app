@@ -116,6 +116,9 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const [generationProgress, setGenerationProgress] = useState<{ step: string; progress: number } | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const prevSectionIndexRef = useRef(currentSectionIndex);
+    const variablesInitializedRef = useRef(false);
+    const isLoadingContentRef = useRef(false);
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -143,10 +146,12 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         editorProps: { attributes: { class: 'focus:outline-none min-h-[500px] text-slate-800 leading-relaxed' } },
     });
 
-    // Auto-fill variables from patient data + clinical records (only on first load)
+    // Auto-fill variables from patient data + clinical records (reset on patient change)
     useEffect(() => {
-        if (patient && !variablesInitialized.current) {
-            variablesInitialized.current = true;
+        if (patient) {
+            variablesInitializedRef.current = false;
+            if (!variablesInitializedRef.current) {
+                variablesInitializedRef.current = true;
             let profNombre = '';
             let profTitulo = '';
             let profMate = '';
@@ -229,24 +234,50 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
 
     // Load section content when switching sections
     useEffect(() => {
-        if (editor && section) {
-            // Save current content first if there's something
-            const prevKey = `${selectedGuideId}_${currentSectionIndex}`;
-            if (editor.getHTML() && editor.getText().trim().length > 0) {
-                setSectionContent(prev => ({ ...prev, [prevKey]: editor.getHTML() }));
-            }
+        if (!editor || !section || isLoadingContentRef.current) return;
 
-            // Load new section content
-            const newKey = `${selectedGuideId}_${currentSectionIndex}`;
-            if (sectionContent[newKey]) {
-                editor.commands.setContent(sectionContent[newKey]);
-            } else if (section.defaultContent) {
-                editor.commands.setContent(processText(section.defaultContent));
-            } else {
-                editor.commands.clearContent();
-            }
+        // Save PREVIOUS section content before switching
+        const prevKey = `${selectedGuideId}_${prevSectionIndexRef.current}`;
+        if (prevKey !== `${selectedGuideId}_${currentSectionIndex}` && editor.getHTML() && editor.getText().trim().length > 0) {
+            setSectionContent(prev => ({ ...prev, [prevKey]: editor.getHTML() }));
         }
-    }, [currentSectionIndex, selectedGuideId, section?.id]);
+
+        // Update ref to current index
+        prevSectionIndexRef.current = currentSectionIndex;
+
+        // Load NEW section content
+        const newKey = `${selectedGuideId}_${currentSectionIndex}`;
+        isLoadingContentRef.current = true;
+        
+        if (sectionContent[newKey]) {
+            editor.commands.setContent(sectionContent[newKey]);
+        } else if (approvedSections[newKey]) {
+            editor.commands.setContent(approvedSections[newKey]);
+        } else if (section.defaultContent) {
+            editor.commands.setContent(processText(section.defaultContent));
+        } else {
+            editor.commands.clearContent();
+        }
+        
+        // Auto-apply all variables to editor content after loading
+        setTimeout(() => {
+            if (editor) {
+                let html = editor.getHTML();
+                let changed = false;
+                Object.entries(sectionVariables).forEach(([id, value]) => {
+                    const placeholder = `[${id}]`;
+                    const pattern = new RegExp(placeholder.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&'), 'g');
+                    if (html.includes(placeholder) && value) {
+                        html = html.replace(pattern, () => value);
+                        changed = true;
+                    }
+                });
+                if (changed) {
+                    editor.commands.setContent(html);
+                }
+            }
+        }, 100);
+    }, [currentSectionIndex, selectedGuideId, section?.id, sectionContent, approvedSections, editor, processText]);
 
     const insertBlock = useCallback((text: string) => {
         if (!editor) return;
