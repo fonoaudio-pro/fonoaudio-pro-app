@@ -101,6 +101,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const [isGeneratingFullReport, setIsGeneratingFullReport] = useState(false);
     const [signatureImage, setSignatureImage] = useState<string | null>(null);
     const [showSignaturePad, setShowSignaturePad] = useState(false);
+    const variablesInitialized = useRef(false);
     const [activeScenarios, setActiveScenarios] = useState<Record<string, string>>({});
     const [isListening, setIsListening] = useState(false);
     const [isTranscribing, setIsTranscribing] = useState(false);
@@ -141,9 +142,10 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         editorProps: { attributes: { class: 'focus:outline-none min-h-[500px] text-slate-800 leading-relaxed' } },
     });
 
-    // Auto-fill variables from patient data + clinical records
+    // Auto-fill variables from patient data + clinical records (only on first load)
     useEffect(() => {
-        if (patient) {
+        if (patient && !variablesInitialized.current) {
+            variablesInitialized.current = true;
             let profNombre = '';
             let profTitulo = '';
             let profMate = '';
@@ -188,9 +190,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
                 MODALIDAD: 'presencial',
                 PARENTESTCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
-                INFORMANTE_NOMBRE: (patient as any).responsable || patient.responsable || 'A informar',
                 MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
-                ESTRUCTURA_EJEMPLO: 'A evaluar según estructuración morfosintáctica del paciente',
                 DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
                 CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
                 HABILIDADES_COMPRENSION: 'A evaluar en la valoración',
@@ -213,35 +213,16 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const processText = useCallback((text: string): string => {
         let processed = text;
         Object.entries(sectionVariables).forEach(([id, value]) => {
-            const safeValue = value || `[${id}]`;
-            processed = processed.split(`[${id}]`).join(safeValue);
+            const pattern = new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&')}\\]`, 'g');
+            // Use function replacement to avoid $ character misinterpretation
+            processed = processed.replace(pattern, () => value || `[${id}]`);
         });
         return processed;
     }, [sectionVariables]);
 
-    // Re-process editor content when variables change (fixes stale closure)
-    const prevVarsRef = useRef<string>('');
-    useEffect(() => {
-        if (!editor) return;
-        const varsKey = JSON.stringify(sectionVariables);
-        if (varsKey === prevVarsRef.current) return;
-        prevVarsRef.current = varsKey;
-
-        // Only re-process if editor has defaultContent-style placeholders
-        const currentHTML = editor.getHTML();
-        if (currentHTML.includes('[') && currentHTML.includes(']')) {
-            const newKey = `${selectedGuideId}_${currentSectionIndex}`;
-            if (!sectionContent[newKey]) {
-                // Has unresolved variables and no saved content - re-process
-                const reprocessed = processText(currentHTML);
-                editor.commands.setContent(reprocessed);
-            }
-        }
-    }, [sectionVariables, editor, selectedGuideId, currentSectionIndex, processText]);
-
     // Load section content when switching sections
     useEffect(() => {
-        if (editor) {
+        if (editor && section) {
             // Save current content first if there's something
             const prevKey = `${selectedGuideId}_${currentSectionIndex}`;
             if (editor.getHTML() && editor.getText().trim().length > 0) {
@@ -252,13 +233,13 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
             const newKey = `${selectedGuideId}_${currentSectionIndex}`;
             if (sectionContent[newKey]) {
                 editor.commands.setContent(sectionContent[newKey]);
-            } else if (section?.defaultContent) {
+            } else if (section.defaultContent) {
                 editor.commands.setContent(processText(section.defaultContent));
             } else {
                 editor.commands.clearContent();
             }
         }
-    }, [currentSectionIndex, selectedGuideId]);
+    }, [currentSectionIndex, selectedGuideId, section?.id]);
 
     const insertBlock = useCallback((text: string) => {
         if (!editor) return;
@@ -406,19 +387,41 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 anamnesis: patient.anamnesis,
                 notes: patient.notes,
                 treatmentPlan: patient.treatmentPlan,
-            }, guide.title);
+            }, guide.title, guide.sections.map(s => ({ id: s.id, title: s.title, description: s.explicacion })));
 
             const newSectionContent: Record<string, string> = {};
             const newApprovedSections: Record<string, string> = {};
 
             guide.sections.forEach((s, idx) => {
                 const key = `${selectedGuideId}_${idx}`;
-                // Try exact match on section id, then fuzzy match
+                // Try exact match, then fuzzy match with normalized strings
+                const normalize = (str: string) => str.toLowerCase().replace(/[^a-z0-9]/g, '');
+                const sectionId = normalize(s.id);
                 const content = sections[s.id] ||
-                    Object.entries(sections).find(([k]) =>
-                        k.toLowerCase().includes(s.id.toLowerCase()) ||
-                        s.id.toLowerCase().includes(k.toLowerCase())
-                    )?.[1] || '';
+                    Object.entries(sections).find(([k]) => {
+                        const nk = normalize(k);
+                        return nk === sectionId ||
+                            nk.includes(sectionId) ||
+                            sectionId.includes(nk) ||
+                            // Additional fuzzy: match common synonyms
+                            (sectionId.includes('info') && nk.includes('info')) ||
+                            (sectionId.includes('motivo') && nk.includes('motivo')) ||
+                            (sectionId.includes('comportamiento') && (nk.includes('comportamiento') || nk.includes('actitud'))) ||
+                            (sectionId.includes('habla') && nk.includes('habla')) ||
+                            (sectionId.includes('voz') && nk.includes('voz')) ||
+                            (sectionId.includes('juego') && nk.includes('juego')) ||
+                            (sectionId.includes('pragmat') && nk.includes('pragmat')) ||
+                            (sectionId.includes('comprensivo') && (nk.includes('comprens') || nk.includes('receptiv'))) ||
+                            (sectionId.includes('morfosintaxis') && (nk.includes('morfosintaxis') || nk.includes('expresivo_morf'))) ||
+                            (sectionId.includes('semantica') && (nk.includes('semant') || nk.includes('expresivo_sem'))) ||
+                            (sectionId.includes('motricidad') && (nk.includes('motricidad') || nk.includes('orofacial'))) ||
+                            (sectionId.includes('impresion') && nk.includes('impresion')) ||
+                            (sectionId.includes('pronostico') && nk.includes('pronostico')) ||
+                            (sectionId.includes('objetivos') && nk.includes('objetivo')) ||
+                            (sectionId.includes('recomendacion') && nk.includes('recomendacion')) ||
+                            (sectionId.includes('antecedente') && nk.includes('antecedente')) ||
+                            (sectionId.includes('resultados') && (nk.includes('resultado') || nk.includes('evaluacion')));
+                    })?.[1] || '';
                 if (content) {
                     newSectionContent[key] = content;
                     newApprovedSections[key] = content;
@@ -542,13 +545,12 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const handleVariableChange = (varId: string, value: string) => {
         setSectionVariables(prev => {
             const newVars = { ...prev, [varId]: value };
-            // Only update editor if the variable exists as a placeholder in the content
             if (editor) {
                 const html = editor.getHTML();
                 const placeholder = `[${varId}]`;
                 if (html.includes(placeholder)) {
-                    const escaped = value.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                    const newHtml = html.replace(new RegExp(placeholder.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'), 'g'), escaped || placeholder);
+                    const pattern = new RegExp(placeholder.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&'), 'g');
+                    const newHtml = html.replace(pattern, () => value || placeholder);
                     editor.commands.setContent(newHtml);
                 }
             }

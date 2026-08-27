@@ -340,77 +340,39 @@ Respondé SOLO con el texto reescrito.`;
 
     /**
      * Generar INFORME COMPLETO con toda la inteligencia clínica.
-     * Sigue la estructura del manual de PBA y Elena Zegarra.
+     * Acepta las secciones de la guía para generar keys que coincidan.
      */
-    async generateFullReport(patientData: Partial<Patient> & { name: string }, reportType: string): Promise<Record<string, string>> {
+    async generateFullReport(patientData: Partial<Patient> & { name: string }, reportType: string, guideSections?: Array<{ id: string; title: string; description?: string }>): Promise<Record<string, string>> {
         const patient = patientData as Patient;
         const clinicalCtx = buildClinicalContext(patient, reportType);
         const diagnosisHint = buildDiagnosisSuggestionContext(patient);
+
+        // Build section list for the AI prompt
+        const sectionList = guideSections
+            ? guideSections.map((s, i) => `${i + 1}. KEY: "${s.id}" — Título: "${s.title}" — ${s.description || ''}`).join('\n')
+            : `1. KEY: "info_general" — Información General\n2. KEY: "motivo_consulta" — Motivo de Consulta\n3. KEY: "antecedentes" — Antecedentes\n4. KEY: "comportamiento" — Comportamiento\n5. KEY: "evaluacion_lenguaje" — Evaluación del Lenguaje\n6. KEY: "evaluacion_habla" — Evaluación del Habla\n7. KEY: "evaluacion_voz" — Evaluación de la Voz\n8. KEY: "evaluacion_motricidad" — Motricidad Orofacial\n9. KEY: "evaluacion_pragmatica" — Pragmática\n10. KEY: "resultados_evaluaciones" — Resultados de Evaluaciones\n11. KEY: "impresion_diagnostica" — Impresión Diagnóstica\n12. KEY: "pronostico" — Pronóstico\n13. KEY: "objetivos" — Objetivos\n14. KEY: "recomendaciones" — Recomendaciones`;
 
         const systemPrompt = `Sos un fonoaudiólogo matriculado (CFPBA) experto. Generá un informe fonoaudiológico COMPLETO tipo "${reportType}".
 
 ${LEGAL_FRAMEWORK}
 
+SECCIONES DEL INFORME (usá EXACTAMENTE estas keys en el JSON):
+${sectionList}
+
+REGLAS CRÍTICAS:
+- Devolvé un JSON donde cada key es el ID de la sección indicado arriba.
+- El contenido de cada sección debe ser HTML válido: <p>, <strong>, <em>, <ul>, <li>, <table>.
+- SIEMPRE incluir resultados numéricos de evaluaciones.
+- SIEMPRE incluir ejemplos concretos del habla del paciente ("toque personal").
+- Diagnóstico funcional fonoaudiológico, NUNCA diagnóstico médico.
+- Diferenciar "refiere" de "se observa".
+
 DATOS COMPLETOS DEL PACIENTE:
 ${clinicalCtx}
 ${diagnosisHint}
 
-Respondé SOLO con un JSON válido usando EXACTAMENTE estas keys (las secciones del informe):
-${reportType === 'valoracion' ? `{
-  "info_general": "<p>...</p>",
-  "motivo_consulta": "<p>...</p>",
-  "comportamiento": "<p>...</p>",
-  "dba": "<p>Dispositivos Básicos de Aprendizaje...</p>",
-  "interaccion_social": "<p>...</p>",
-  "expresivo_morfosintaxis": "<p>...</p>",
-  "expresivo_semantica": "<p>...</p>",
-  "pragmatico": "<p>...</p>",
-  "comprensivo": "<p>...</p>",
-  "habla": "<p>...</p>",
-  "voz": "<p>...</p>",
-  "juego": "<p>...</p>",
-  "impresion_diagnostica": "<p>...</p>",
-  "pronostico": "<p>...</p>",
-  "objetivos": "<p>...</p>",
-  "recomendaciones": "<p>...</p>"
-}` : reportType === 'seguimiento' ? `{
-  "datos_seguimiento": "<p>...</p>",
-  "estado_actual": "<p>...</p>",
-  "avances_periodo": "<p>...</p>",
-  "objetivos_proximo_periodo": "<p>...</p>",
-  "recomendaciones_seguimiento": "<p>...</p>"
-}` : reportType === 'proceso' ? `{
-  "info_evolucion": "<p>...</p>",
-  "actitud_terapeutica": "<p>...</p>",
-  "logros_alcanzados": "<p>...</p>",
-  "objetivos_pendientes": "<p>...</p>",
-  "pronostico_evolutivo": "<p>...</p>"
-}` : reportType === 'alta' ? `{
-  "datos_alta": "<p>...</p>",
-  "resumen_tratamiento": "<p>...</p>",
-  "estado_final": "<p>...</p>",
-  "controles_futuros": "<p>...</p>"
-}` : reportType === 'derivacion' ? `{
-  "datos_derivacion": "<p>...</p>",
-  "motivo_evaluacion": "<p>...</p>",
-  "resultados_evaluacion": "<p>...</p>",
-  "diagnostico_fono": "<p>...</p>",
-  "tratamiento_sugerido": "<p>...</p>",
-  "cierre_derivacion": "<p>...</p>"
-}` : `{
-  "datos_interconsulta": "<p>...</p>",
-  "resumen_caso": "<p>...</p>",
-  "consulta_especifica": "<p>...</p>",
-  "coordinacion_abordaje": "<p>...</p>",
-  "cierre_interconsulta": "<p>...</p>"
-}`}
-
-REGLAS PARA CADA SECCIÓN:
-- Cada párrafo DEBE incluir datos concretos del paciente (evaluaciones, puntajes, conducta).
-- Incluir el "toque personal": ejemplos reales del habla, conducta observada, motivaciones.
-- Diagnóstico funcional (CIE-11), NUNCA diagnóstico médico.
-- Formato HTML limpio: <p>, <strong>, <em>, <ul>, <li>.
-- SIEMPRE cerrar las comillas y llaves del JSON correctamente.`;
+Respondé SOLO con un JSON válido donde las keys sean los IDs de las secciones indicadas arriba.
+Ejemplo: {"info_general": "<p>...</p>", "motivo_consulta": "<p>...</p>", ...}`;
 
         const result = await generateWithFallback(
             `Informe completo tipo "${reportType}" para ${patientData.name}`,
@@ -421,21 +383,7 @@ REGLAS PARA CADA SECCIÓN:
             const cleaned = result.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(cleaned);
         } catch {
-            // Intelligent fallback: try to extract sections from unstructured text
-            const sections: Record<string, string> = {};
-            const sectionKeys = ['info_general', 'motivo_consulta', 'comportamiento', 'dba', 'interaccion_social',
-                'expresivo_morfosintaxis', 'expresivo_semantica', 'pragmatico', 'comprensivo', 'habla', 'voz',
-                'juego', 'impresion_diagnostica', 'pronostico', 'objetivos', 'recomendaciones'];
-            const paragraphs = result.split(/\n\n+/).filter(p => p.trim().length > 20);
-            // Distribute paragraphs evenly across sections
-            const perSection = Math.max(1, Math.ceil(paragraphs.length / sectionKeys.length));
-            sectionKeys.forEach((key, i) => {
-                const slice = paragraphs.slice(i * perSection, (i + 1) * perSection);
-                if (slice.length > 0) {
-                    sections[key] = '<p>' + slice.join('</p><p>') + '</p>';
-                }
-            });
-            return Object.keys(sections).length > 0 ? sections : { contenido: result };
+            return { contenido: result };
         }
     },
 
