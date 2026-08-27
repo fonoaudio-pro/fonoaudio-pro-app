@@ -3240,25 +3240,97 @@ async function executeToolCall(functionName, args, user_id) {
             const patient = patients.find(p => p.id === patient_id);
             if (!patient) return { status: 'error', message: 'Paciente no encontrado' };
 
-            const draft = `# INFORME CLINICO - ${patient.name}\nArea: ${focus_area}\nDiagnostico: ${patient.diagnosis || 'No especificado'}\nEdad: ${patient.age || 'N/D'}\n\n## Analisis\nSe evalua area de ${focus_area} evidenciando desempeno clinico acorde al plan terapeutico. Se sugiere continuar con los ejercicios pautados y control evolutivo en 4 semanas.\n\nGenerado por Agente FonoAudio Pro AI.`;
+            // Build REAL clinical context (data-driven, not a static stub)
+            const patRes = await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient_id}&select=id,name,age,gender,date_of_birth,diagnosis,obra_social,document,phone,address,responsable,derivation,anamnesis,notes,treatment_plan,evaluations,history,reports`, { method: 'GET', headers });
+            const patRows = await patRes.json();
+            const fullPatient = Array.isArray(patRows) && patRows[0];
+            if (!fullPatient) return { status: 'error', message: 'Paciente no encontrado en detalle' };
+
+            let ficha = null;
+            try {
+                const recRes = await fetch(`${supabaseUrl}/rest/v1/clinical_records?patient_id=eq.${patient_id}&select=*`, { method: 'GET', headers });
+                const recRows = await recRes.json();
+                ficha = Array.isArray(recRows) && recRows[0];
+            } catch { /* ficha optional - non-fatal */ }
+
+            const evalList = Array.isArray(fullPatient.evaluations) ? fullPatient.evaluations : [];
+            const historyList = Array.isArray(fullPatient.history) ? fullPatient.history : [];
+            let evaluationLine = evalList.length > 0
+                ? evalList.map(ev => {
+                    const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
+                    const lvl = pct >= 80 ? 'ADECUADO' : pct >= 60 ? 'LEVE' : pct >= 40 ? 'MODERADO' : 'SEVERO';
+                    return `\u2022 ${ev.testName || 'Evaluaci\u00f3n'}: ${ev.score}/${ev.maxScore} (${pct}%) \u2014 ${lvl}`;
+                }).join('\n')
+                : `\u2022 No hay evaluaciones estandarizadas cargadas a\u00fAn.`;
+
+            let sessionLine = historyList.length > 0
+                ? historyList.slice(0, 3).map((s, i) => {
+                    const d = s.date ? new Date(s.date).toLocaleDateString('es-AR') : 'sin fecha';
+                    return `  Sesi\u00f3n ${i + 1} (${d}): ${s.summary || s.observations || 'Sin resumen'}`;
+                }).join('\n')
+                : '  Sin sesiones registradas a\u00fan.';
+
+            const diag = fullPatient.diagnosis || ficha?.primary_diagnosis_name || patient.diagnosis || 'No especificado';
+            const ageStr = fullPatient.age ? `${fullPatient.age} a\u00f1os` : 'edad no informada';
+
+            // Real LLM reasoning (server-side Groq -> Gemini fallback)
+            const systemPrompt = `Sos un fonoaudi\u00f3logo matriculado (CFPBA) experto en redacci\u00f3n de informes cl\u00ednicos para la Provincia de Buenos Aires. Marco legal: Ley 15.052 CFPBA, CIE-11. Diagn\u00f3stico funcional NO m\u00e9dico. Diferenciar "refiere" (tercero) de "se observa" (hallazgo). Toque personal obligatorio. Estructura: Motivo -> Antecedentes -> Evaluaci\u00f3n -> Impresi\u00f3n Diagn\u00f3stica -> Pron\u00f3stico -> Objetivos -> Recomendaciones. Us\u00e1 \u00fanicamente datos reales. Si falta un dato, marc\u00e1 "[Dato pendiente: X]". NO inventes. Respond\u00e9 SOLO el informe (HTML simple: <p>, <strong>, <ul>, <li>).`;
+
+            const dataPrompt = `Paciente: ${fullPatient.name || 'N/D'}, ${ageStr}, g\u00e9nero: ${fullPatient.gender || 'N/D'}.
+Diagn\u00f3stico funcional actual: ${diag}.
+\u00c1rea de enfoque del informe: ${focus_area || 'general'}.
+Obra social: ${fullPatient.obra_social || 'No informada'}.
+Motivo / anamnesis: ${typeof fullPatient.anamnesis === 'string' ? fullPatient.anamnesis.substring(0, 800) : (ficha?.chief_complaint || 'No registrado')}.
+Evaluaciones estandarizadas:
+${evaluationLine}
+Historial de sesiones:
+${sessionLine}
+Observaciones cl\u00ednicas: ${fullPatient.notes || ficha?.notes || 'Sin observaciones registradas'}.
+Plan de tratamiento: ${fullPatient.treatmentPlan?.general || patient.treatment_plan || 'Sin plan cargado'}.`;
+
+            let draft = null;
+            try {
+                const groqKey = process.env.GROQ_API_KEY;
+                if (groqKey) {
+                    const groqResp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+                        body: JSON.stringify({ model: 'llama-3.3-70b-versatile', messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: dataPrompt }], temperature: 0.4, max_tokens: 4096 }),
+                    });
+                    if (groqResp.ok) { const gd = await groqResp.json(); draft = gd.choices?.[0]?.message?.content || ''; }
+                }
+                if (!draft && process.env.GOOGLE_API_KEY) {
+                    const genResp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`, {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ contents: [{ parts: [{ text: `${systemPrompt}\n\n${dataPrompt}` }] }], generationConfig: { temperature: 0.4, maxOutputTokens: 4096 } }),
+                    });
+                    if (genResp.ok) { const gj = await genResp.json(); draft = gj.candidates?.[0]?.content?.parts?.[0]?.text || ''; }
+                }
+            } catch (llmErr) {
+                console.warn('[generate_report_draft] LLM failed, using enhanced fallback:', llmErr?.message || String(llmErr));
+            }
+
+            if (!draft) {
+                draft = `# INFORME CL\u00cdNICO${fullPatient.name ? ` - ${fullPatient.name}` : ''}\n${diag ? `Diagn\u00f3stico funcional: ${diag}` : 'Diagn\u00f3stico: No especificado'}\nEdad: ${ageStr}\n\u00c1rea de enfoque: ${focus_area || 'general'}\n\n## Evaluaci\u00f3n\n${evaluationLine}\n\n## Historial de sesiones\n${sessionLine}\n\n## Observaciones\n${fullPatient.notes || ficha?.notes || 'Sin observaciones registradas'}\n\n[Este borrador se gener\u00f3 con los datos reales de la ficha. Completar campos marcados [Dato pendiente] antes de aprobar.]`;
+            }
 
             const reportEntry = {
                 id: newId(),
                 date: new Date().toISOString().split('T')[0],
-                title: `Informe (${focus_area}) - ${patient.name}`,
+                title: `Informe (${focus_area || 'general'}) - ${fullPatient.name || 'paciente'}`,
                 content: draft,
-                type: 'generico',
+                type: 'generado_ia',
+                patient_id: patient_id,
             };
 
-            const updatedReports = [...(patient.reports || []), reportEntry];
-            await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient.id}`, {
+            const updatedReports = [...(Array.isArray(fullPatient.reports) ? fullPatient.reports : []), reportEntry];
+            await fetch(`${supabaseUrl}/rest/v1/patients?id=eq.${patient_id}`, {
                 method: 'PATCH',
                 headers: { ...headers, Prefer: 'return=minimal' },
                 body: JSON.stringify({ reports: updatedReports }),
-            });
-            return { status: 'ok', draft, message: `Borrador de informe generado para ${patient.name}.` };
+            }).catch(e => console.warn('[generate_report_draft] save failed:', e.message));
+            return { status: 'ok', draft, message: `Borrador de informe generado para ${fullPatient.name || 'el paciente'} con datos reales (${evalList.length} evaluaciones, ${historyList.length} sesiones).` };
         }
-
         if (functionName === 'list_reports') {
             const patients = await fetchPatientsForUser(actualUserId);
             const patient = patients.find(p => p.id === args.patient_id);
