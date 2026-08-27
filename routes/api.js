@@ -1,6 +1,18 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
-import googleService from '../services/googleService.js';
+// Lazy-load googleService to avoid bundling googleapis/google-auth-library
+// (30MB transitive graph) into the Vercel @vercel/node serverless bundle.
+// google-auth-library's transpiled output contains `>>> ` bitwise ops +
+// import.meta edge-cases that break Vercel Node v20 ESM compile step,
+// causing `SyntaxError: Unexpected token '>>>` on ALL /api/* requests.
+let _googleService = null;
+async function googleService() {
+    if (!_googleService) {
+        const mod = await import('../services/googleService.js');
+        _googleService = mod.default || mod;
+    }
+    return _googleService;
+}
 import notebooklmService from '../services/notebooklmService.js';
 import clinicalPlanningService from '../services/clinicalPlanningService.js';
 import distributionService from '../services/distributionService.js';
@@ -991,7 +1003,8 @@ router.post('/google/meet', async (req, res) => {
     const { patientName, date, time, reason, durationMinutes = 30 } = req.body;
     
     try {
-        const result = await googleService.createGoogleMeetEvent({
+        const gs = await googleService();
+        const result = await gs.createGoogleMeetEvent({
             patientName,
             date,
             time,
@@ -1012,7 +1025,8 @@ router.post('/google/meet', async (req, res) => {
 
 router.post('/google/calendar/sync', async (req, res) => {
     try {
-        const result = await googleService.syncGoogleCalendar();
+        const gs = await googleService();
+        const result = await gs.syncGoogleCalendar();
         res.json(result);
     } catch (error) {
         console.error('[Google Calendar Sync Route] Error:', error);
@@ -1023,7 +1037,8 @@ router.post('/google/calendar/sync', async (req, res) => {
 router.post('/google/drive/sync', async (req, res) => {
     const { folderId } = req.body;
     try {
-        const result = await googleService.syncDriveToMaterials(folderId);
+        const gs = await googleService();
+        const result = await gs.syncDriveToMaterials(folderId);
         res.json(result);
     } catch (error) {
         console.error('[Google Drive Sync Route] Error:', error);
