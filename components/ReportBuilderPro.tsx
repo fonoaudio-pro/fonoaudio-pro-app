@@ -28,6 +28,7 @@ import { voiceService } from '../utils/voiceService';
 import { exportReportToPdf } from '../utils/pdfExport';
 import { aiReportService } from '../services/aiReportService';
 import { supabase } from '../utils/supabaseClient';
+import { computeReportVariables, processReportText } from '../utils/reportVariables';
 import { reportTemplateService, ReportTemplate, ExampleParagraph } from '../services/ReportTemplateService';
 import { VariableHighlight } from './editor/VariableHighlight';
 import { AiAssistantBubble } from './editor/AiAssistantBubble';
@@ -141,7 +142,7 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         editorProps: { attributes: { class: 'focus:outline-none min-h-[500px] text-slate-800 leading-relaxed' } },
     });
 
-    // Auto-fill variables from patient data + clinical records
+    // Auto-fill variables from patient data using centralized engine
     useEffect(() => {
         if (patient) {
             let profNombre = '';
@@ -157,65 +158,13 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 }
             } catch {}
 
-            // Build dynamic values from actual patient data
-            const sessionCount = patient.history?.length || 0;
-            const lastSession = patient.history?.[0];
-            const evaluationSummary = patient.evaluations?.map(ev => {
-                const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
-                return `${ev.testName}: ${pct}%`;
-            }).join(', ') || '';
-            const avgScore = patient.evaluations?.length
-                ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
-                : 0;
-            const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
-            const motivosFromAnamnesis = patient.anamnesis?.motivo_consulta || patient.anamnesis?.chief_complaint || patient.notes || '';
-            const diagnosticoFx = patient.diagnosis || 'Sin diagnóstico funcional definido';
-            const areasAfectadas = patient.evaluations?.filter(ev => ev.maxScore > 0 && (ev.score / ev.maxScore) < 0.6).map(ev => ev.testName).join(', ') || 'A determinar según evaluación';
-
-            setSectionVariables(prev => ({
-                ...prev,
-                NOMBRE: patient.name,
-                EDAD: patient.age?.toString() || '',
-                DIAGNOSTICO: diagnosticoFx,
-                FECHA: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
-                DOCUMENTO: patient.document || '',
-                RESPONSABLE: (patient as any).responsable || '',
-                OBRA_SOCIAL: patient.obra_social || '',
-                DERIVANTE: (patient as any).derivante || '',
-                GENERO: patient.gender || '',
-                FECHA_NACIMIENTO: patient.date_of_birth || '',
-                CANTIDAD_SESIONES: sessionCount > 0 ? `${sessionCount} encuentros` : 'Primera evaluación',
-                FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
-                MODALIDAD: 'presencial',
-                PARENTESTCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
-                MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
-                DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
-                CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
-                HABILIDADES_COMPRENSION: 'A evaluar en la valoración',
-                DIFICULTADES_COMPRENSION: 'A evaluar en la valoración',
-                PROCESOS_SIMPLIFICACION: 'A determinar según evaluación fonológica',
-                DIAGNOSTICO_FONOAUDIOLOGICO: diagnosticoFx,
-                AREAS_AFECTADAS: areasAfectadas,
-                JUEGO_PREFERIDO: 'A observar en la sesión',
-                JUEGO_MENOR_INTERES: 'A observar en la sesión',
-                FRECUENCIA_TERAPIA: (patient as any).treatmentPlan?.frequency || '2 veces por semana',
-                FECHA_INICIO_TRATAMIENTO: lastSession?.date || 'A definir',
-                SESIONES_REALIZADAS: sessionCount > 0 ? `${sessionCount} encuentros realizados` : 'Sin sesiones previas',
-                PROFESIONAL_NOMBRE: profNombre,
-                PROFESIONAL_TITULO: profTitulo,
-                PROFESIONAL_MATE: profMate,
-            }));
+            const computed = computeReportVariables(patient, profNombre, profTitulo, profMate);
+            setSectionVariables(prev => ({ ...prev, ...computed }));
         }
     }, [patient]);
 
     const processText = useCallback((text: string): string => {
-        let processed = text;
-        Object.entries(sectionVariables).forEach(([id, value]) => {
-            // Escape regex special chars in both the pattern and value
-            const escapedValue = (value || `[${id}]`).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-            processed = processed.replace(new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')}\\]`, 'g'), escapedValue);
-        });
-        return processed;
+        return processReportText(text, sectionVariables);
     }, [sectionVariables]);
 
     // Load section content when switching sections
