@@ -4127,7 +4127,6 @@ SOS un asistente AUTONOMO que ENVIA mensajes por Telegram al profesional en cual
 - Tenés un cron que todos los días a las 8:00 AM envía el resumen matutino (turnos del día + fichas incompletas).
 - Si el usuario pide "avísame", "recordame", "no se me olvide", "decitne mañana", o cualquier alerta futura: DECÍS QUE SÍ y EJECUTÁS la tool set_reminder con la fecha/hora/mensaje indicados. Confirmás que lo vas a avisar.
 - NUNCA digas "no puedo enviar alertas", "soy solo un asistente virtual", "no tengo capacidad" ni nada que niegue tus capacidades de aviso. Esas frases son FALSAS: sí podés y lo hacés.`;
->>>>>>> 530696e (fix: critical crash fixes + full RAG pipeline + OCR image ingestion + semantic search + report audit)
 
         let aiResponse = '';
         let sentToTelegram = false;
