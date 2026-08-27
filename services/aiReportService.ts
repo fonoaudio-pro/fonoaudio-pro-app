@@ -351,37 +351,66 @@ Respondé SOLO con el texto reescrito.`;
 
 ${LEGAL_FRAMEWORK}
 
-ESTRUCTURA OBLIGATORIA DEL INFORME:
-1. INFORMACIÓN GENERAL: Datos del paciente (nombre, edad, DNI, fecha, profesional).
-2. MOTIVO DE CONSULTA: Por qué consulta (usar datos de anamnesis si existen).
-3. ANTECEDENTES: Desarrollo del lenguaje/habla, antecedentes familiares, medicalización.
-4. COMPORTAMIENTO Y EQUILIBRIO AFECTIVO-EMOCIONAL: Conducta en la sesión.
-5. EVALUACIÓN POR ÁREAS (con resultados concretos):
-   - Lenguaje Receptivo
-   - Lenguaje Expresivo (Morfosintaxis, Lexico-Semántico)
-   - Habla y Fonética-Fonología
-   - Voz
-   - Motricidad Orofacial
-   - Pragmática
-6. RESULTADOS DE EVALUACIONES ESTANDARIZADAS: Tabla de puntajes.
-7. IMPRESIÓN DIAGNÓSTICA: Diagnóstico funcional (CIE-11), NO médico.
-8. PRONÓSTICO CLÍNICO.
-9. OBJETIVOS DE INTERVENCIÓN.
-10. RECOMENDACIONES.
-
-REGLAS CRÍTICAS:
-- SIEMPRE incluir resultados numéricos de evaluaciones.
-- SIEMPRE incluir ejemplos concretos del habla del paciente ("toque personal").
-- Diagnóstico funcional fonoaudiológico, NUNCA diagnóstico médico.
-- Diferenciar "refiere" de "se observa".
-- Formato HTML limpio: <p>, <strong>, <em>, <ul>, <li>, <table>.
-
 DATOS COMPLETOS DEL PACIENTE:
 ${clinicalCtx}
 ${diagnosisHint}
 
-Respondé SOLO con un JSON válido: {"seccion_nombre": "<p>...</p>", ...}
-Las keys deben ser: informacion_general, motivo_consulta, antecedentes, comportamiento, evaluacion_lenguaje, evaluacion_habla, evaluacion_voz, evaluacion_motricidad, evaluacion_pragmatica, resultados_evaluaciones, impresion_diagnostica, pronostico, objetivos, recomendaciones.`;
+Respondé SOLO con un JSON válido usando EXACTAMENTE estas keys (las secciones del informe):
+${reportType === 'valoracion' ? `{
+  "info_general": "<p>...</p>",
+  "motivo_consulta": "<p>...</p>",
+  "comportamiento": "<p>...</p>",
+  "dba": "<p>Dispositivos Básicos de Aprendizaje...</p>",
+  "interaccion_social": "<p>...</p>",
+  "expresivo_morfosintaxis": "<p>...</p>",
+  "expresivo_semantica": "<p>...</p>",
+  "pragmatico": "<p>...</p>",
+  "comprensivo": "<p>...</p>",
+  "habla": "<p>...</p>",
+  "voz": "<p>...</p>",
+  "juego": "<p>...</p>",
+  "impresion_diagnostica": "<p>...</p>",
+  "pronostico": "<p>...</p>",
+  "objetivos": "<p>...</p>",
+  "recomendaciones": "<p>...</p>"
+}` : reportType === 'seguimiento' ? `{
+  "datos_seguimiento": "<p>...</p>",
+  "estado_actual": "<p>...</p>",
+  "avances_periodo": "<p>...</p>",
+  "objetivos_proximo_periodo": "<p>...</p>",
+  "recomendaciones_seguimiento": "<p>...</p>"
+}` : reportType === 'proceso' ? `{
+  "info_evolucion": "<p>...</p>",
+  "actitud_terapeutica": "<p>...</p>",
+  "logros_alcanzados": "<p>...</p>",
+  "objetivos_pendientes": "<p>...</p>",
+  "pronostico_evolutivo": "<p>...</p>"
+}` : reportType === 'alta' ? `{
+  "datos_alta": "<p>...</p>",
+  "resumen_tratamiento": "<p>...</p>",
+  "estado_final": "<p>...</p>",
+  "controles_futuros": "<p>...</p>"
+}` : reportType === 'derivacion' ? `{
+  "datos_derivacion": "<p>...</p>",
+  "motivo_evaluacion": "<p>...</p>",
+  "resultados_evaluacion": "<p>...</p>",
+  "diagnostico_fono": "<p>...</p>",
+  "tratamiento_sugerido": "<p>...</p>",
+  "cierre_derivacion": "<p>...</p>"
+}` : `{
+  "datos_interconsulta": "<p>...</p>",
+  "resumen_caso": "<p>...</p>",
+  "consulta_especifica": "<p>...</p>",
+  "coordinacion_abordaje": "<p>...</p>",
+  "cierre_interconsulta": "<p>...</p>"
+}`}
+
+REGLAS PARA CADA SECCIÓN:
+- Cada párrafo DEBE incluir datos concretos del paciente (evaluaciones, puntajes, conducta).
+- Incluir el "toque personal": ejemplos reales del habla, conducta observada, motivaciones.
+- Diagnóstico funcional (CIE-11), NUNCA diagnóstico médico.
+- Formato HTML limpio: <p>, <strong>, <em>, <ul>, <li>.
+- SIEMPRE cerrar las comillas y llaves del JSON correctamente.`;
 
         const result = await generateWithFallback(
             `Informe completo tipo "${reportType}" para ${patientData.name}`,
@@ -392,7 +421,21 @@ Las keys deben ser: informacion_general, motivo_consulta, antecedentes, comporta
             const cleaned = result.replace(/```json/g, '').replace(/```/g, '').trim();
             return JSON.parse(cleaned);
         } catch {
-            return { contenido: result };
+            // Intelligent fallback: try to extract sections from unstructured text
+            const sections: Record<string, string> = {};
+            const sectionKeys = ['info_general', 'motivo_consulta', 'comportamiento', 'dba', 'interaccion_social',
+                'expresivo_morfosintaxis', 'expresivo_semantica', 'pragmatico', 'comprensivo', 'habla', 'voz',
+                'juego', 'impresion_diagnostica', 'pronostico', 'objetivos', 'recomendaciones'];
+            const paragraphs = result.split(/\n\n+/).filter(p => p.trim().length > 20);
+            // Distribute paragraphs evenly across sections
+            const perSection = Math.max(1, Math.ceil(paragraphs.length / sectionKeys.length));
+            sectionKeys.forEach((key, i) => {
+                const slice = paragraphs.slice(i * perSection, (i + 1) * perSection);
+                if (slice.length > 0) {
+                    sections[key] = '<p>' + slice.join('</p><p>') + '</p>';
+                }
+            });
+            return Object.keys(sections).length > 0 ? sections : { contenido: result };
         }
     },
 
