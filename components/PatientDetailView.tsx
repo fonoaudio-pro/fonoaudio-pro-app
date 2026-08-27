@@ -34,6 +34,7 @@ import { ReportBuilderPro as ReportBuilder } from './ReportBuilderPro';
 import { FichaClinicaPanel } from './FichaClinica/FichaClinicaPanel';
 import { AnamnesisPanel } from './Anamnesis/AnamnesisPanel';
 import { TreatmentPlanEditor } from './TreatmentPlanEditor';
+import { SessionEditModal } from './SessionEditModal';
 import ClinicalPlanningModule from './ClinicalPlanningModule';
 import { TestScoringPanel } from './TestScoringPanel';
 import { TestResultsService } from '../services/TestResultsService';
@@ -97,6 +98,10 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
     const [formalizeFields, setFormalizeFields] = useState({
         document: '', phone: '', email: '', obra_social: '', responsable: '', derivante: ''
     });
+    // Session editing & filtering
+    const [editingSession, setEditingSession] = useState<Session | null>(null);
+    const [sessionFilter, setSessionFilter] = useState<'all' | 'month' | 'week'>('all');
+    const [sessionSearchDate, setSessionSearchDate] = useState('');
 
     useEffect(() => {
         const fetchReports = async () => {
@@ -445,35 +450,59 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                                         <History size={18} className="text-blue-600" />
                                         Historial de Sesiones
                                     </h3>
-                                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded-full">
-                                        {patient.history.length} sesiones
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <select value={sessionFilter} onChange={(e) => setSessionFilter(e.target.value as any)}
+                                            className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded-full border-0 focus:ring-0">
+                                            <option value="all">Todas</option>
+                                            <option value="week">Última semana</option>
+                                            <option value="month">Último mes</option>
+                                        </select>
+                                        <input type="date" value={sessionSearchDate} onChange={(e) => setSessionSearchDate(e.target.value)}
+                                            className="text-[10px] font-bold text-slate-600 dark:text-slate-300 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded-full border-0 focus:ring-0 w-28" />
+                                        <span className="text-xs font-medium text-slate-500 dark:text-slate-400 bg-slate-200/50 dark:bg-slate-700/50 px-2 py-1 rounded-full">
+                                            {patient.history.length} sesiones
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="divide-y divide-slate-100 dark:divide-slate-800 max-h-[400px] overflow-y-auto">
-                                    {patient.history.length > 0 ? (
-                                        patient.history.map((session) => (
-                                            <div key={session.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group">
+                                    {(() => {
+                                        const now = new Date();
+                                        const filtered = patient.history.filter(s => {
+                                            if (sessionSearchDate) return s.date === sessionSearchDate;
+                                            if (sessionFilter === 'week') {
+                                                const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                                                return new Date(s.date) >= weekAgo;
+                                            }
+                                            if (sessionFilter === 'month') {
+                                                const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                                                return new Date(s.date) >= monthAgo;
+                                            }
+                                            return true;
+                                        }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                                        return filtered.length > 0 ? filtered.map((session) => (
+                                            <div key={session.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors group cursor-pointer"
+                                                onClick={() => setEditingSession(session)}>
                                                 <div className="flex justify-between items-start">
                                                     <div className="space-y-1">
                                                         <div className="flex items-center gap-2">
                                                             <span className="text-sm font-bold text-slate-900 dark:text-white">{session.date}</span>
-                                                             <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
+                                                            <span className="text-[10px] font-black text-blue-600 dark:text-blue-400 uppercase bg-blue-50 dark:bg-blue-900/30 px-1.5 py-0.5 rounded">
                                                                 {session.status}
                                                             </span>
                                                         </div>
                                                         <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2 italic">"{session.summary}"</p>
                                                     </div>
                                                     <button className="p-2 opacity-0 group-hover:opacity-100 text-slate-400 dark:text-slate-500 hover:text-blue-600 transition-all">
-                                                        <ChevronRight size={18} />
+                                                        <Edit3 size={16} />
                                                     </button>
                                                 </div>
                                             </div>
-                                        ))
-                                    ) : (
-                                        <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-sm italic">
-                                            No hay sesiones registradas. Comienza una nueva sesión para documentar el progreso.
-                                        </div>
-                                    )}
+                                        )) : (
+                                            <div className="p-8 text-center text-slate-400 dark:text-slate-500 text-sm italic">
+                                                No hay sesiones registradas para este filtro.
+                                            </div>
+                                        );
+                                    })()}
                                 </div>
                             </div>
 
@@ -490,7 +519,7 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                                             {patient.treatmentPlan.strategies ? (
                                                 <div 
                                                     className="mt-2 border border-slate-100 dark:border-slate-800 rounded-lg p-3 bg-slate-50 dark:bg-slate-800 text-sm prose prose-sm dark:prose-invert max-w-none"
-                                                    dangerouslySetInnerHTML={{ __html: markdownToHtml(patient.treatmentPlan.strategies) }}
+                                                    dangerouslySetInnerHTML={{ __html: patient.treatmentPlan.strategies.trim().startsWith('<') ? patient.treatmentPlan.strategies : markdownToHtml(patient.treatmentPlan.strategies) }}
                                                 />
                                             ) : (
                                                 <p className="text-slate-400 dark:text-slate-500 italic mt-1">Sin plan definido. Hacé clic en editar para comenzar.</p>
@@ -807,6 +836,22 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                     }}
                     onCancel={() => setIsEditingPlan(false)}
                     patientName={patient.name}
+                />
+            )}
+
+            {/* Session Edit Modal */}
+            {editingSession && (
+                <SessionEditModal
+                    session={editingSession}
+                    patientId={patient.id}
+                    onSave={(updatedSession) => {
+                        const newHistory = patient.history.map(s => s.id === updatedSession.id ? updatedSession : s);
+                        handleUpdatePatient({ ...patient, history: newHistory });
+                        supabase.from('patients').update({ history: newHistory }).eq('id', patient.id)
+                            .then(({ error }) => { if (error) console.error('Error saving session:', error); });
+                        setEditingSession(null);
+                    }}
+                    onClose={() => setEditingSession(null)}
                 />
             )}
 

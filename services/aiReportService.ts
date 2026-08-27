@@ -122,8 +122,22 @@ function buildClinicalContext(patient?: Patient, reportType?: string): string {
     // Anamnesis completa
     if (patient.anamnesis) {
         parts.push(`\n═══ ANAMNESIS COMPLETA ═══`);
-        const a = typeof patient.anamnesis === 'string' ? patient.anamnesis : JSON.stringify(patient.anamnesis, null, 2);
-        parts.push(a.substring(0, 2000));
+        const a = patient.anamnesis;
+        if (typeof a === 'string') {
+            parts.push(a.substring(0, 2000));
+        } else if (a.sections) {
+            // Structured format from AdaptiveAnamnesisForm
+            Object.entries(a.sections).forEach(([key, val]) => {
+                if (val && typeof val === 'string') parts.push(`${key}: ${val}`);
+                else if (val && typeof val === 'object') {
+                    Object.entries(val).forEach(([k, v]) => {
+                        if (v) parts.push(`${key}.${k}: ${String(v).substring(0, 300)}`);
+                    });
+                }
+            });
+        } else {
+            parts.push(JSON.stringify(a, null, 2).substring(0, 2000));
+        }
     }
 
     // Observaciones clínicas

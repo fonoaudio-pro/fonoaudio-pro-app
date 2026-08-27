@@ -159,18 +159,24 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
                 }
             } catch {}
 
-            // Build dynamic values from actual patient data
-            const sessionCount = patient.history?.length || 0;
-            const lastSession = patient.history?.[0];
-            const evaluationSummary = patient.evaluations?.map(ev => {
-                const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
-                return `${ev.testName}: ${pct}%`;
-            }).join(', ') || '';
-            const avgScore = patient.evaluations?.length
-                ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
-                : 0;
-            const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
-            const motivosFromAnamnesis = patient.anamnesis?.motivo_consulta || patient.anamnesis?.chief_complaint || patient.notes || '';
+                // Build dynamic values from actual patient data
+                const sessionCount = patient.history?.length || 0;
+                const lastSession = patient.history?.[0];
+                const evaluationSummary = patient.evaluations?.map(ev => {
+                    const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
+                    return `${ev.testName}: ${pct}%`;
+                }).join(', ') || '';
+                const avgScore = patient.evaluations?.length
+                    ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
+                    : 0;
+                const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
+                // Handle both flat and structured anamnesis formats
+                const anamnesis = patient.anamnesis || {};
+                const motivosFromAnamnesis = typeof anamnesis === 'string'
+                    ? anamnesis
+                    : anamnesis.motivo_consulta || anamnesis.chief_complaint
+                    || anamnesis?.sections?.reasonForConsultation || anamnesis?.sections?.motivo_consulta
+                    || patient.notes || '';
             const diagnosticoFx = patient.diagnosis || 'Sin diagnóstico funcional definido';
             const areasAfectadas = patient.evaluations?.filter(ev => ev.maxScore > 0 && (ev.score / ev.maxScore) < 0.6).map(ev => ev.testName).join(', ') || 'A determinar según evaluación';
 
