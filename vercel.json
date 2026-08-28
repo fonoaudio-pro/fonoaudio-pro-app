@@ -8,30 +8,8 @@
   ],
   "builds": [
     {
-      "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "esbuildOptions": {
-          "external": [
-            "googleapis",
-            "google-auth-library",
-            "@google/auth",
-            "@supabase/supabase-js",
-            "@google/generative-ai",
-            "pdf-parse",
-            "pdfjs-dist",
-            "@react-pdf/*",
-            "@react-pdf/renderer",
-            "recharts",
-            "react",
-            "react-dom",
-            "web-push",
-            "nodemailer",
-            "twilio"
-          ],
-          "define": { "import.meta.env": "process.env" }
-        }
-      }
+      "src": "api/index.cjs",
+      "use": "@vercel/node"
     },
     {
       "src": "api/cron/*.js",
