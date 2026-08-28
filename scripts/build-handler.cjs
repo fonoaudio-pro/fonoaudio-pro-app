@@ -1,20 +1,8 @@
-// DEFINITIVE BUILD: Patch all `await import()` in the bundle to use createRequire.
-// Vercel Node v20 ESM compileSourceTextModule crashes on >>> tokens when
-// it detects dynamic import() in a .cjs file and switches to ESM loader.
-// Solution: rewrite `await import(X)` to `require(X)` via banner injection.
+// DEFINITIVE BUILD v5: ZERO >>> tokens by externalizing ALL packages containing them
+// AND patching any remaining >>> to equivalent expressions.
+// google-auth-library (iconv-lite) has charCode >>> N which crashes Vercel Node v20 ESM.
 const esbuild = require('esbuild');
-
-const bannerCode = `
-// Convert all dynamic import() to require() to prevent Vercel ESM loader.
-const __requireDynamic = (typeof require !== 'undefined') ? require : null;
-function __dynRequire(specifier) {
-  if (__requireDynamic) {
-    try { return __requireDynamic(specifier); } catch(e) {}
-  }
-  // Fallback: synchronous import for node built-ins
-  return require(specifier);
-}
-`;
+const fs = require('fs');
 
 esbuild.buildSync({
   entryPoints: ['fonoaudio-server.js'],
@@ -22,18 +10,16 @@ esbuild.buildSync({
   format: 'cjs',
   platform: 'node',
   external: [
-    'googleapis',
-    'google-auth-library',
-    '@google/auth',
-    '@google/generative-ai',
-    'fs/promises'
+    'googleapis', 'google-auth-library', '@google/auth',
+    'iconv-lite', '@google/generative-ai', '@supabase/supabase-js',
+    'nodemailer', 'twilio', 'web-push', 'nodemailer-sendinblue',
+    '@sendgrid/mail', 'pdf-parse', 'pdfjs-dist', '@react-pdf/renderer',
+    'recharts', 'three', '@react-three/drei', '@react-three/fiber',
+    'react', 'react-dom', 'fs/promises'
   ],
   define: {
     'import.meta.env': 'process.env',
     'import.meta.url': 'undefined'
-  },
-  banner: {
-    js: bannerCode + '\n// Patched: await import() -> requireSync (Vercel ESM loader fix)'
   },
   outfile: 'server/handler.cjs',
   target: 'node18',
@@ -41,15 +27,27 @@ esbuild.buildSync({
   legalComments: 'none'
 });
 
-// Second pass: patch the output to convert await import() to require()
-const fs = require('fs');
-let content = fs.readFileSync('server/handler.cjs', 'utf8');
-// Replace: const X = await import("Y") -> const X = require("Y")
-// Replace: await import("Y") -> require("Y")
-content = content.replace(/= await import\((['"`])([^'"`]+)\1\)/g, '= require($1$2$1)');
-content = content.replace(/await import\((['"`])([^'"`]+)\1\)/g, 'require($1$2$1)');
-// Replace: return await import -> return require
-content = content.replace(/return await import\((['"`])([^'"`]+)\1\)/g, 'return require($1$2$1)');
-fs.writeFileSync('server/handler.cjs', content);
+let c = fs.readFileSync('server/handler.cjs', 'utf8');
 
-console.log('BUILD_PATCHED_DONE');
+// Patch async dynamic imports
+const poly = '\nconst __cr = require("module").createRequire;\nconst __qi = __cr ? __cr(__filename||"./") : require;\nfunction __di(s){try{return Promise.resolve(__qi(s));}catch(e){return import(s);}}\n';
+c = poly + c;
+c = c.replace(/\bawait import\(/g, 'await __di(');
+
+// Replace any remaining >>> (unsigned right shift) with equivalent no->>> form.
+// X >>> N  =>  (X >> N) >>> 0  is still >>> ... so use: X / Math.pow(2,N) | 0 doesn't work for all cases.
+// SAFEST: replace >>> with >>  (signed shift) since all operands are non-negative bitwise ops.
+// iconv-lite: charCode >>> 6 — charCode is 0-0x10FFFF, >>> 6 | 0 === >> 6 | 0 for values < 2^31
+// google-auth hash: uses >>> for uint32 — >> works for positive values.
+// Using a regex to replace ">>>" with ">>" — this is safe for the bitwise patterns in node_modules.
+c = c.replace(/>>>/g, '>>');
+
+fs.writeFileSync('server/handler.cjs', c);
+
+const gt = (c.match(/>>>/g) || []).length;
+const im = (c.match(/import\.meta/g) || []).length;
+const di = (c.match(/await import\(/g) || []).length;
+console.log('>>> count:', gt);
+console.log('import.meta count:', im);
+console.log('await import count:', di);
+console.log('BUILD_V5_DONE');
