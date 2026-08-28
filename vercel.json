@@ -7,47 +7,51 @@
     }
   ],
   "builds": [
-      {
-        "src": "api/index.cjs",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/cron/check-reminders.cjs",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/cron/daily-summary.cjs",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "api/cron/process-reminders.cjs",
-        "use": "@vercel/node"
-      },
-      {
-        "src": "package.json",
-        "use": "@vercel/static-build",
-        "config": {
-          "distDir": "dist"
-        }
+    {
+      "src": "api/index.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/cron/check-reminders.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/cron/daily-summary.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "api/cron/process-reminders.cjs",
+      "use": "@vercel/node"
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist"
       }
-    ],
-    "routes": [
-      {
-        "src": "/api/cron/check-reminders",
-        "dest": "/api/cron/check-reminders.cjs"
-      },
-      {
-        "src": "/api/cron/daily-summary",
-        "dest": "/api/cron/daily-summary.cjs"
-      },
-      {
-        "src": "/api/cron/process-reminders",
-        "dest": "/api/cron/process-reminders.cjs"
-      },
-      {
-        "src": "/api/(.*)",
-        "dest": "/api/index.cjs"
-      },
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/cron/check-reminders",
+      "dest": "/api/cron/check-reminders.cjs"
+    },
+    {
+      "src": "/api/cron/daily-summary",
+      "dest": "/api/cron/daily-summary.cjs"
+    },
+    {
+      "src": "/api/cron/process-reminders",
+      "dest": "/api/cron/process-reminders.cjs"
+    },
+    {
+      "src": "/api/telegram/process-text",
+      "dest": "/api/index.cjs"
+    },
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.cjs"
+    },
     {
       "src": "/(.*)",
       "dest": "/$1"
