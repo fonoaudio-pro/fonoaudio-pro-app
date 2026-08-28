@@ -11,13 +11,26 @@
       "src": "api/index.js",
       "use": "@vercel/node",
       "config": {
-        "external": [
-          "googleapis",
-          "google-auth-library",
-          "@google/auth",
-          "@supabase/supabase-js",
-          "@google/generative-ai"
-        ]
+        "esbuildOptions": {
+          "external": [
+            "googleapis",
+            "google-auth-library",
+            "@google/auth",
+            "@supabase/supabase-js",
+            "@google/generative-ai",
+            "pdf-parse",
+            "pdfjs-dist",
+            "@react-pdf/*",
+            "@react-pdf/renderer",
+            "recharts",
+            "react",
+            "react-dom",
+            "web-push",
+            "nodemailer",
+            "twilio"
+          ],
+          "define": { "import.meta.env": "process.env" }
+        }
       }
     },
     {
