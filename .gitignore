@@ -33,7 +33,6 @@ logs
 npm-debug.log*
 
 # Debug/temp scripts - never commit
-*.cjs
 debug-*.cjs
 deploy-*.cjs
 send-*.cjs
