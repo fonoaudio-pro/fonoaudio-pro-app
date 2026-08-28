@@ -12,26 +12,19 @@
       "src": "server/handler.cjs",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["node_modules/**", "routes/**", "services/**", "config/**", "utils/**"]
+        "includeFiles": ["**/*.js", "**/*.cjs", "**/*.json", "!.git/**", "!node_modules/.cache/**"]
       }
-    },
-    {
-      "src": "dist/**/*",
-      "use": "@vercel/static"
-    },
-    {
-      "src": "public/**/*",
-      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
-      "src": "/api/(.*)",
-      "dest": "/server/handler.cjs"
+      "src": "/api/(.+)",
+      "dest": "/server/handler.cjs",
+      "methods": ["POST", "GET", "PUT", "DELETE", "PATCH"]
     },
     {
       "src": "/(.*)",
-      "dest": "/dist/$1"
+      "dest": "/server/handler.cjs"
     }
   ]
 }
