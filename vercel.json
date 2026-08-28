@@ -1,17 +1,27 @@
 {
-  "version": 2,
-  "framework": "vite",
+  "version": 3,
+  "framework": null,
+  "functions": {
+    "server/handler.cjs": {
+      "runtime": "nodejs20.x",
+      "memory": 512
+    }
+  },
   "builds": [
     {
       "src": "server/handler.cjs",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": ["node_modules/**", "routes/**", "services/**", "config/**", "utils/**"]
+      }
     },
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
+      "src": "dist/**/*",
+      "use": "@vercel/static"
+    },
+    {
+      "src": "public/**/*",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
@@ -21,7 +31,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/$1"
+      "dest": "/dist/$1"
     }
   ]
 }
