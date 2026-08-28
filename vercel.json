@@ -12,7 +12,13 @@
       "src": "server/handler.cjs",
       "use": "@vercel/node",
       "config": {
-        "includeFiles": ["**/*.js", "**/*.cjs", "**/*.json", "!.git/**", "!node_modules/.cache/**"]
+        "esbuildOptions": {
+          "format": "cjs",
+          "bundle": false,
+          "define": {
+            "import.meta.env": "process.env"
+          }
+        }
       }
     }
   ],
