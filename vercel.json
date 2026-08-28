@@ -3,7 +3,7 @@
   "framework": "vite",
   "builds": [
     {
-      "src": "api/handler.cjs",
+      "src": "server/handler.cjs",
       "use": "@vercel/node"
     },
     {
@@ -17,7 +17,7 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/handler.cjs"
+      "dest": "/server/handler.cjs"
     },
     {
       "src": "/(.*)",
