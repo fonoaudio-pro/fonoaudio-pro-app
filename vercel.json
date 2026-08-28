@@ -1,26 +1,9 @@
 {
   "version": 2,
-  "crons": [
-    {
-      "path": "/api/cron/daily-summary",
-      "schedule": "0 9 * * *"
-    }
-  ],
+  "framework": "vite",
   "builds": [
     {
-      "src": "api/index.cjs",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/cron/check-reminders.cjs",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/cron/daily-summary.cjs",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/cron/process-reminders.cjs",
+      "src": "api/handler.cjs",
       "use": "@vercel/node"
     },
     {
@@ -33,24 +16,8 @@
   ],
   "routes": [
     {
-      "src": "/api/cron/check-reminders",
-      "dest": "/api/cron/check-reminders.cjs"
-    },
-    {
-      "src": "/api/cron/daily-summary",
-      "dest": "/api/cron/daily-summary.cjs"
-    },
-    {
-      "src": "/api/cron/process-reminders",
-      "dest": "/api/cron/process-reminders.cjs"
-    },
-    {
-      "src": "/api/telegram/process-text",
-      "dest": "/api/index.cjs"
-    },
-    {
       "src": "/api/(.*)",
-      "dest": "/api/index.cjs"
+      "dest": "/api/handler.cjs"
     },
     {
       "src": "/(.*)",
