@@ -2,35 +2,12 @@
   "version": 3,
   "framework": null,
   "functions": {
-    "server/handler.cjs": {
+    "api/index.cjs": {
       "runtime": "nodejs20.x",
-      "memory": 512
+      "maxDuration": 60
     }
   },
-  "builds": [
-    {
-      "src": "server/handler.cjs",
-      "use": "@vercel/node",
-      "config": {
-        "esbuildOptions": {
-          "format": "cjs",
-          "bundle": false,
-          "define": {
-            "import.meta.env": "process.env"
-          }
-        }
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/api/(.+)",
-      "dest": "/server/handler.cjs",
-      "methods": ["POST", "GET", "PUT", "DELETE", "PATCH"]
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/server/handler.cjs"
-    }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
