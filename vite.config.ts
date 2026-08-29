@@ -31,12 +31,12 @@ export default defineConfig(({ mode }) => {
         }
       },
       build: {
+        ssr: false,  // FORCE SPA-only build (no SSR functions that bundle googleapis with >>> tokens)
         rollupOptions: {
           output: {
             manualChunks: {
               vendor: ['react', 'react-dom'],
               supabase: ['@supabase/supabase-js'],
-              google: ['googleapis'],
             },
             chunkFileNames: 'assets/[hash].js',
             entryFileNames: 'assets/[hash].js',

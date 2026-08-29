@@ -3,20 +3,18 @@
   "framework": null,
   "builds": [
     {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
-    },
-    {
       "src": "api/handler.js",
       "use": "@vercel/node",
       "config": {
         "esbuildOptions": {
-          "bundle": false,
-          "format": "cjs",
-          "external": ["*"]
+          "bundle": false
         }
       }
+    },
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
     }
   ],
   "functions": {
@@ -25,6 +23,7 @@
       "maxDuration": 60
     }
   },
+  "cleanOutputs": true,
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api/handler.js" },
     { "source": "/(.*)", "destination": "/index.html" }
