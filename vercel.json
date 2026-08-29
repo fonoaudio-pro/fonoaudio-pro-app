@@ -1,31 +1,13 @@
 {
   "version": 3,
   "framework": null,
-  "builds": [
-    {
-      "src": "api/handler.js",
-      "use": "@vercel/node",
-      "config": {
-        "esbuildOptions": {
-          "bundle": false
-        }
-      }
-    },
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": { "distDir": "dist" }
-    }
-  ],
   "functions": {
-    "api/handler.js": {
+    "api/minimal-test.js": {
       "runtime": "nodejs20.x",
-      "maxDuration": 60
+      "maxDuration": 10
     }
   },
-  "cleanOutputs": true,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/handler.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
