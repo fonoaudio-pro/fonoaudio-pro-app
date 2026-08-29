@@ -1,12 +1,22 @@
 {
   "version": 3,
   "framework": null,
-  "functions": {
-    "api/index.cjs": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 60
+  "builds": [
+    {
+      "src": "api/index.cjs",
+      "use": "@vercel/node",
+      "config": {
+        "esbuildOptions": {
+          "bundle": false,
+          "format": "cjs",
+          "external": ["*"]
+        }
+      },
+      "routes": [
+        { "src": "/api/(.*)", "dest": "/api/index.cjs" }
+      ]
     }
-  },
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
