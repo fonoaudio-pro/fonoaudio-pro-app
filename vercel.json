@@ -1,6 +1,24 @@
 {
   "version": 3,
   "framework": null,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": { "distDir": "dist" }
+    },
+    {
+      "src": "api/handler.js",
+      "use": "@vercel/node",
+      "config": {
+        "esbuildOptions": {
+          "bundle": false,
+          "format": "cjs",
+          "external": ["*"]
+        }
+      }
+    }
+  ],
   "functions": {
     "api/handler.js": {
       "runtime": "nodejs20.x",
@@ -8,6 +26,7 @@
     }
   },
   "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/handler.js" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
