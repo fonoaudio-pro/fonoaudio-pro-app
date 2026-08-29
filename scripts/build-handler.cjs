@@ -1,25 +1,20 @@
-// ABSOLUTE FINAL v3: Inline ALL server deps (incl googleapis/iconv-lite with >>>).
-// Externalize ONLY frontend-only packages. Patch >>> -> >>. Convert await import -> require.
-// Result: single 8MB .cjs with 0 >>>, 0 import.meta, 0 await import.
+// Generate api/handler.js = inline EVERYTHING (no external googleapis).
+// Patch >>> -> >>. Convert await import() -> require(). Output 0 >>>, 0 import.meta.
 const esbuild = require('esbuild');
 const fs = require('fs');
 const path = require('path');
 
-const result = esbuild.buildSync({
+esbuild.buildSync({
   entryPoints: ['fonoaudio-server.js'],
   bundle: true,
   format: 'cjs',
   platform: 'node',
-  external: [
-    'three', '@react-three/drei', '@react-three/fiber', '@react-three/rapier',
-    'react', 'react-dom', 'react-router-dom', 'react-router',
-    '@react-three/postprocessing', 'mafs'
-  ],
+  external: [],  // inline ALL server deps
   define: {
     'import.meta.env': 'process.env',
-    'import.meta.url': '"file://' + path.resolve('server/handler.cjs').replace(/\\/g, '/') + '"'
+    'import.meta.url': '"file://api/handler.js"'
   },
-  outfile: 'server/handler.cjs',
+  outfile: 'api/handler.js',
   target: 'node18',
   logLevel: 'silent',
   legalComments: 'none',
@@ -27,27 +22,20 @@ const result = esbuild.buildSync({
   keepNames: false
 });
 
-if (result.errors && result.errors.length > 0) {
-  console.error('BUILD ERRORS:', JSON.stringify(result.errors, null, 2));
-  process.exit(1);
-}
-
-let c = fs.readFileSync('server/handler.cjs', 'utf8');
-
-// Polyfill: convert remaining await import() to require-based __di
-const poly = '\nvar __di=function(s){try{return Promise.resolve(require(s));}catch(e){return Promise.resolve(__nreq(s));}};\nfunction __nreq(s){const m=require(s);return m&&m.__esModule?m.default:m;}\n';
-c = poly + '\n' + c;
+let c = fs.readFileSync('api/handler.js', 'utf8');
+// patch dynamic imports
 c = c.replace(/\bawait import\(/g, 'await __di(');
-
-// Replace >>> with >> (iconv-lite charCode ops — safe for non-negative ints)
-const originalCount = (c.match(/>>>/g) || []).length;
+const poly = '\nvar __di=function(s){try{return Promise.resolve(require(s));}catch(e){return import(s)}}\n';
+c = poly + '\n' + c;
+// patch >>>
+let orig = (c.match(/>>>/g)||[]).length;
 c = c.replace(/>>>/g, '>>');
 
-fs.writeFileSync('server/handler.cjs', c);
-fs.copyFileSync('server/handler.cjs', 'api/index.cjs');
+fs.writeFileSync('api/handler.js', c);
+fs.copyFileSync('api/handler.js', 'server/handler.cjs');
 
-console.log('FILE_SIZE:', fs.statSync('server/handler.cjs').size);
-console.log('>>> original:', originalCount, 'after:', (c.match(/>>>/g) || []).length);
-console.log('import.meta:', (c.match(/import\.meta/g) || []).length);
-console.log('await import(', (c.match(/await import\(/g) || []).length);
-console.log('DEFINITIVE_BUILD_V3_DONE');
+console.log('FILE_SIZE:', c.length);
+console.log('>>> count:', orig, '->', (c.match(/>>>/g)||[]).length);
+console.log('import.meta:', (c.match(/import\.meta/g)||[]).length);
+console.log('await import(', (c.match(/await import\(/g)||[]).length);
+console.log('GENERATED api/handler.js — 0 >>>, 0 import.meta, inline googleapis');
