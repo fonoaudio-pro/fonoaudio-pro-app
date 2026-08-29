@@ -7,6 +7,21 @@
       "maxDuration": 60
     }
   },
+  "builds": [
+    {
+      "src": "api/index.cjs",
+      "use": "@vercel/node",
+      "config": {
+        "esbuildOptions": {
+          "bundle": true,
+          "format": "cjs",
+          "platform": "node",
+          "external": ["three", "react", "react-dom", "@react-three/*"],
+          "define": { "import.meta.env": "process.env", "import.meta.url": "\"file://api/index.cjs\"" }
+        }
+      }
+    }
+  ],
   "rewrites": [
     { "source": "/(.*)", "destination": "/index.html" }
   ]
