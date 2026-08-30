@@ -227,23 +227,14 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         let processed = text;
         Object.entries(sectionVariables).forEach(([id, value]) => {
             const pattern = new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&')}\\]`, 'g');
-            // Use function replacement to avoid $ character misinterpretation
             processed = processed.replace(pattern, () => value || `[${id}]`);
         });
         return processed;
     }, [sectionVariables]);
 
-    // Local processText that reads from ref (avoids stale closure + no loop risk)
-    const applyVariables = useCallback((text: string): string => {
-        let processed = text;
-        Object.entries(sectionVariablesRef.current).forEach(([id, value]) => {
-            const pattern = new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&')}\\]`, 'g');
-            processed = processed.replace(pattern, () => value || `[${id}]`);
-        });
-        return processed;
-    }, []);
+    const hasAppliedInitialVariablesRef = useRef(false);
 
-    // Load section content when switching sections
+    // Load section content when switching sections (section changes only)
     useEffect(() => {
         if (!editor || !section) return;
         if (isLoadingContentRef.current) return;
@@ -269,14 +260,39 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         } else if (latestApproved[newKey]) {
             editor.commands.setContent(latestApproved[newKey]);
         } else if (section.defaultContent) {
-            editor.commands.setContent(applyVariables(section.defaultContent));
+            // Read fresh variables from ref to avoid stale closure
+            let processed = section.defaultContent;
+            Object.entries(sectionVariablesRef.current).forEach(([id, value]) => {
+                const pattern = new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&')}\\]`, 'g');
+                processed = processed.replace(pattern, () => value || `[${id}]`);
+            });
+            editor.commands.setContent(processed);
         } else {
             editor.commands.clearContent();
         }
         
-        // Reset guard after content is loaded
+        hasAppliedInitialVariablesRef.current = true;
         requestAnimationFrame(() => { isLoadingContentRef.current = false; });
-    }, [currentSectionIndex, selectedGuideId, section?.id, editor, applyVariables]);
+    }, [currentSectionIndex, selectedGuideId, section?.id, editor]);
+
+    // One-shot: re-apply variables to default content when variables first become available
+    useEffect(() => {
+        if (!editor || !section) return;
+        if (hasAppliedInitialVariablesRef.current) return;
+        if (Object.keys(sectionVariables).length === 0) return;
+
+        // Variables just became available — re-load current section with them
+        const newKey = `${selectedGuideId}_${currentSectionIndex}`;
+        const latestSections = sectionContentRef.current;
+        const latestApproved = approvedSectionsRef.current;
+
+        if (!latestSections[newKey] && !latestApproved[newKey] && section.defaultContent) {
+            hasAppliedInitialVariablesRef.current = true;
+            editor.commands.setContent(processText(section.defaultContent));
+        } else {
+            hasAppliedInitialVariablesRef.current = true;
+        }
+    }, [sectionVariables]);
 
     const insertBlock = useCallback((text: string) => {
         if (!editor) return;
