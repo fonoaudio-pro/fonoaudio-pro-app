@@ -119,6 +119,10 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const prevSectionIndexRef = useRef(currentSectionIndex);
     const variablesInitializedRef = useRef(false);
     const isLoadingContentRef = useRef(false);
+    const sectionContentRef = useRef(sectionContent);
+    const approvedSectionsRef = useRef(approvedSections);
+    sectionContentRef.current = sectionContent;
+    approvedSectionsRef.current = approvedSections;
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -148,78 +152,73 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
 
     // Auto-fill variables from patient data + clinical records (reset on patient change)
     useEffect(() => {
-        if (patient) {
-            variablesInitializedRef.current = false;
-            if (!variablesInitializedRef.current) {
-                variablesInitializedRef.current = true;
-            let profNombre = '';
-            let profTitulo = '';
-            let profMate = '';
-            try {
-                const raw = localStorage.getItem('fonoaudio-settings');
-                if (raw) {
-                    const parsed = JSON.parse(raw);
-                    profNombre = parsed?.professional?.name || '';
-                    profTitulo = parsed?.professional?.title || '';
-                    profMate = parsed?.professional?.license || '';
-                }
-            } catch {}
+        if (!patient) return;
 
-                // Build dynamic values from actual patient data
-                const sessionCount = patient.history?.length || 0;
-                const lastSession = patient.history?.[0];
-                const evaluationSummary = patient.evaluations?.map(ev => {
-                    const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
-                    return `${ev.testName}: ${pct}%`;
-                }).join(', ') || '';
-                const avgScore = patient.evaluations?.length
-                    ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
-                    : 0;
-                const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
-                // Handle both flat and structured anamnesis formats
-                const anamnesis = patient.anamnesis || {};
-                const motivosFromAnamnesis = typeof anamnesis === 'string'
-                    ? anamnesis
-                    : anamnesis.motivo_consulta || anamnesis.chief_complaint
-                    || anamnesis?.sections?.reasonForConsultation || anamnesis?.sections?.motivo_consulta
-                    || patient.notes || '';
-            const diagnosticoFx = patient.diagnosis || 'Sin diagnóstico funcional definido';
-            const areasAfectadas = patient.evaluations?.filter(ev => ev.maxScore > 0 && (ev.score / ev.maxScore) < 0.6).map(ev => ev.testName).join(', ') || 'A determinar según evaluación';
+        let profNombre = '';
+        let profTitulo = '';
+        let profMate = '';
+        try {
+            const raw = localStorage.getItem('fonoaudio-settings');
+            if (raw) {
+                const parsed = JSON.parse(raw);
+                profNombre = parsed?.professional?.name || '';
+                profTitulo = parsed?.professional?.title || '';
+                profMate = parsed?.professional?.license || '';
+            }
+        } catch {}
 
-            setSectionVariables(prev => ({
-                ...prev,
-                NOMBRE: patient.name,
-                EDAD: patient.age?.toString() || '',
-                DIAGNOSTICO: diagnosticoFx,
-                FECHA: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
-                DOCUMENTO: patient.document || '',
-                RESPONSABLE: (patient as any).responsable || '',
-                OBRA_SOCIAL: patient.obra_social || '',
-                DERIVANTE: (patient as any).derivante || '',
-                GENERO: patient.gender || '',
-                FECHA_NACIMIENTO: patient.date_of_birth || '',
-                CANTIDAD_SESIONES: sessionCount > 0 ? `${sessionCount} encuentros` : 'Primera evaluación',
-                FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
-                MODALIDAD: 'presencial',
-                PARENTESTCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
-                MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
-                DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
-                CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
-                HABILIDADES_COMPRENSION: 'A evaluar en la valoración',
-                DIFICULTADES_COMPRENSION: 'A evaluar en la valoración',
-                PROCESOS_SIMPLIFICACION: 'A determinar según evaluación fonológica',
-                DIAGNOSTICO_FONOAUDIOLOGICO: diagnosticoFx,
-                AREAS_AFECTADAS: areasAfectadas,
-                JUEGO_PREFERIDO: 'A observar en la sesión',
-                JUEGO_MENOR_INTERES: 'A observar en la sesión',
-                FRECUENCIA_TERAPIA: (patient as any).treatmentPlan?.frequency || '2 veces por semana',
-                FECHA_INICIO_TRATAMIENTO: lastSession?.date || 'A definir',
-                SESIONES_REALIZADAS: sessionCount > 0 ? `${sessionCount} encuentros realizados` : 'Sin sesiones previas',
-                PROFESIONAL_NOMBRE: profNombre,
-                PROFESIONAL_TITULO: profTitulo,
-                PROFESIONAL_MATE: profMate,
-            }));
-        }
+        const sessionCount = patient.history?.length || 0;
+        const lastSession = patient.history?.[0];
+        const evaluationSummary = patient.evaluations?.map(ev => {
+            const pct = ev.maxScore > 0 ? Math.round((ev.score / ev.maxScore) * 100) : 0;
+            return `${ev.testName}: ${pct}%`;
+        }).join(', ') || '';
+        const avgScore = patient.evaluations?.length
+            ? Math.round(patient.evaluations.reduce((acc, ev) => acc + (ev.maxScore > 0 ? (ev.score / ev.maxScore) * 100 : 0), 0) / patient.evaluations.length)
+            : 0;
+        const severityLevel = avgScore >= 80 ? 'adecuado' : avgScore >= 60 ? 'leve' : avgScore >= 40 ? 'moderado' : 'severo';
+        const anamnesis = patient.anamnesis || {};
+        const motivosFromAnamnesis = typeof anamnesis === 'string'
+            ? anamnesis
+            : anamnesis.motivo_consulta || anamnesis.chief_complaint
+            || anamnesis?.sections?.reasonForConsultation || anamnesis?.sections?.motivo_consulta
+            || patient.notes || '';
+        const diagnosticoFx = patient.diagnosis || 'Sin diagnóstico funcional definido';
+        const areasAfectadas = patient.evaluations?.filter(ev => ev.maxScore > 0 && (ev.score / ev.maxScore) < 0.6).map(ev => ev.testName).join(', ') || 'A determinar según evaluación';
+
+        setSectionVariables(prev => ({
+            ...prev,
+            NOMBRE: patient.name,
+            EDAD: patient.age?.toString() || '',
+            DIAGNOSTICO: diagnosticoFx,
+            FECHA: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
+            DOCUMENTO: patient.document || '',
+            RESPONSABLE: (patient as any).responsable || '',
+            OBRA_SOCIAL: patient.obra_social || '',
+            DERIVANTE: (patient as any).derivante || '',
+            GENERO: patient.gender || '',
+            FECHA_NACIMIENTO: patient.date_of_birth || '',
+            CANTIDAD_SESIONES: sessionCount > 0 ? `${sessionCount} encuentros` : 'Primera evaluación',
+            FECHA_VALORACION: new Date().toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' }),
+            MODALIDAD: 'presencial',
+            PARENTESTCO_INFORMANTE: (patient as any).responsable ? 'el/la responsable legal' : 'la mamá',
+            MOTIVO_TEXTO: motivosFromAnamnesis || 'A completar según anamnesis',
+            DESCRIPCION_EDAD: `lenguaje expresivo de nivel ${severityLevel} para su edad cronológica`,
+            CANTIDAD_PALABRAS: patient.evaluations?.length ? `Evaluaciones disponibles: ${evaluationSummary}` : 'Pendiente de evaluación',
+            HABILIDADES_COMPRENSION: 'A evaluar en la valoración',
+            DIFICULTADES_COMPRENSION: 'A evaluar en la valoración',
+            PROCESOS_SIMPLIFICACION: 'A determinar según evaluación fonológica',
+            DIAGNOSTICO_FONOAUDIOLOGICO: diagnosticoFx,
+            AREAS_AFECTADAS: areasAfectadas,
+            JUEGO_PREFERIDO: 'A observar en la sesión',
+            JUEGO_MENOR_INTERES: 'A observar en la sesión',
+            FRECUENCIA_TERAPIA: (patient as any).treatmentPlan?.frequency || '2 veces por semana',
+            FECHA_INICIO_TRATAMIENTO: lastSession?.date || 'A definir',
+            SESIONES_REALIZADAS: sessionCount > 0 ? `${sessionCount} encuentros realizados` : 'Sin sesiones previas',
+            PROFESIONAL_NOMBRE: profNombre,
+            PROFESIONAL_TITULO: profTitulo,
+            PROFESIONAL_MATE: profMate,
+        }));
     }, [patient]);
 
     const processText = useCallback((text: string): string => {
@@ -247,14 +246,16 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         // Update ref to current index
         prevSectionIndexRef.current = currentSectionIndex;
 
-        // Load NEW section content
+        // Load NEW section content (read from refs for latest values)
         const newKey = `${selectedGuideId}_${currentSectionIndex}`;
         isLoadingContentRef.current = true;
+        const latestSections = sectionContentRef.current;
+        const latestApproved = approvedSectionsRef.current;
         
-        if (sectionContent[newKey]) {
-            editor.commands.setContent(sectionContent[newKey]);
-        } else if (approvedSections[newKey]) {
-            editor.commands.setContent(approvedSections[newKey]);
+        if (latestSections[newKey]) {
+            editor.commands.setContent(latestSections[newKey]);
+        } else if (latestApproved[newKey]) {
+            editor.commands.setContent(latestApproved[newKey]);
         } else if (section.defaultContent) {
             editor.commands.setContent(processText(section.defaultContent));
         } else {
