@@ -121,8 +121,10 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     const isLoadingContentRef = useRef(false);
     const sectionContentRef = useRef(sectionContent);
     const approvedSectionsRef = useRef(approvedSections);
+    const sectionVariablesRef = useRef(sectionVariables);
     sectionContentRef.current = sectionContent;
     approvedSectionsRef.current = approvedSections;
+    sectionVariablesRef.current = sectionVariables;
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -231,7 +233,17 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         return processed;
     }, [sectionVariables]);
 
-    // Load section content when switching sections (no deps on sectionContent/approvedSections to avoid loops)
+    // Local processText that reads from ref (avoids stale closure + no loop risk)
+    const applyVariables = useCallback((text: string): string => {
+        let processed = text;
+        Object.entries(sectionVariablesRef.current).forEach(([id, value]) => {
+            const pattern = new RegExp(`\\[${id.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&')}\\]`, 'g');
+            processed = processed.replace(pattern, () => value || `[${id}]`);
+        });
+        return processed;
+    }, []);
+
+    // Load section content when switching sections
     useEffect(() => {
         if (!editor || !section) return;
         if (isLoadingContentRef.current) return;
@@ -257,14 +269,14 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
         } else if (latestApproved[newKey]) {
             editor.commands.setContent(latestApproved[newKey]);
         } else if (section.defaultContent) {
-            editor.commands.setContent(processText(section.defaultContent));
+            editor.commands.setContent(applyVariables(section.defaultContent));
         } else {
             editor.commands.clearContent();
         }
         
         // Reset guard after content is loaded
         requestAnimationFrame(() => { isLoadingContentRef.current = false; });
-    }, [currentSectionIndex, selectedGuideId, section?.id, editor]);
+    }, [currentSectionIndex, selectedGuideId, section?.id, editor, applyVariables]);
 
     const insertBlock = useCallback((text: string) => {
         if (!editor) return;
@@ -580,19 +592,16 @@ export const ReportBuilderPro: React.FC<ReportBuilderProProps> = ({ patient, onC
     };
 
     const handleVariableChange = (varId: string, value: string) => {
-        setSectionVariables(prev => {
-            const newVars = { ...prev, [varId]: value };
-            if (editor) {
-                const html = editor.getHTML();
-                const placeholder = `[${varId}]`;
-                if (html.includes(placeholder)) {
-                    const pattern = new RegExp(placeholder.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&'), 'g');
-                    const newHtml = html.replace(pattern, () => value || placeholder);
-                    editor.commands.setContent(newHtml);
-                }
+        setSectionVariables(prev => ({ ...prev, [varId]: value }));
+        if (editor) {
+            const html = editor.getHTML();
+            const placeholder = `[${varId}]`;
+            if (html.includes(placeholder)) {
+                const pattern = new RegExp(placeholder.replace(/[-\/\\^$*+?.()|\\[\\]{}]/g, '\\$&'), 'g');
+                const newHtml = html.replace(pattern, () => value || placeholder);
+                editor.commands.setContent(newHtml);
             }
-            return newVars;
-        });
+        }
     };
 
     // Load a custom report template
