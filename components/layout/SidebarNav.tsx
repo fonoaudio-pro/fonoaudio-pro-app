@@ -50,6 +50,7 @@ const SidebarNav = ({
     { view: 'reports', icon: <FileBarChart size={20} />, label: 'Informes' },
     { view: 'library', icon: <BookOpen size={20} />, label: 'Biblioteca' },
     { view: 'multimedia', icon: <Sparkles size={20} />, label: 'Multimedia' },
+    { view: 'vocalislab', icon: <Mic size={20} />, label: 'VocalisLab' },
   ];
 
   return (

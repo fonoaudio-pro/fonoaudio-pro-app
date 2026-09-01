@@ -1,13 +1,23 @@
 {
   "version": 3,
-  "framework": null,
-  "functions": {
-    "api/minimal-test.js": {
-      "runtime": "nodejs20.x",
-      "maxDuration": 10
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build"
+    },
+    {
+      "src": "api/index.py",
+      "use": "@vercel/python"
     }
-  },
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/index.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/$1"
+    }
   ]
 }

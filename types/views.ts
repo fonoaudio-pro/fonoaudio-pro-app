@@ -15,7 +15,8 @@ export type ViewType =
   | 'sources'
   | 'notebooklm'
   | 'comunicacion'
-  | 'diario';
+  | 'diario'
+  | 'vocalislab';
 
 export type ReportType =
   | 'evaluacion'

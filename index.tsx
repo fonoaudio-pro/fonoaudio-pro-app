@@ -61,6 +61,7 @@ import AgendaSincronizada from "./components/AgendaSincronizada";
 import { ReportBuilderPro } from "./components/ReportBuilderPro";
 import NBADashboard from "./components/NBADashboard";
 import { ThemeToggle } from "./components/ThemeToggle";
+import VocalisLabModule from "./components/VocalisLabModule";
 
 
 // --- Main App Component ---
@@ -250,6 +251,10 @@ const App = () => {
 
           <button onClick={() => navigate("multimedia")} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-all ${currentView === "multimedia" ? "bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium" : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
             <Sparkles size={20} /> Multimedia
+          </button>
+
+          <button onClick={() => navigate("vocalislab")} className={`flex items-center gap-3 w-full p-3 rounded-lg transition-all ${currentView === "vocalislab" ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-medium" : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"}`}>
+            <Mic size={20} /> VocalisLab
           </button>
 
           {(dbProfile?.role === 'admin' || session?.user?.id === '00000000-0000-0000-0000-000000000001') && (
@@ -504,6 +509,12 @@ const App = () => {
                   />
                 </React.Suspense>
               </div>
+            </ErrorBoundary>
+          )}
+
+          {currentView === "vocalislab" && (
+            <ErrorBoundary moduleName="VocalisLab">
+              <VocalisLabModule />
             </ErrorBoundary>
           )}
  
