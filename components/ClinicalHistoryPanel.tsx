@@ -412,18 +412,45 @@ export default function ClinicalHistoryPanel({
       birthDate = now.toISOString().split('T')[0];
     }
 
+    // Sin plantillas: mostrar igual el escáner de documentos ORL + formulario de anamnesis
     return (
-      <AdaptiveAnamnesisForm
-        patientId={patientId}
-        patientName={patient.name}
-        birthDate={birthDate}
-        motivoConsulta={patient.diagnosis || ''}
-        onSave={async (response: AdaptiveAnamnesisResponse) => {
-          console.log('[ClinicalHistoryPanel] AdaptiveAnamnesisForm saved:', response);
-          if (onSaved) onSaved();
-          return true;
-        }}
-      />
+      <div className="flex flex-col h-full">
+        <div className="p-4 border-b border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <FileText size={20} className="text-blue-600" />
+            <div>
+              <h3 className="font-bold text-slate-800 dark:text-white text-sm">Historia Clínica</h3>
+              <p className="text-xs text-slate-400 dark:text-slate-500">{patient.name}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <ChannelActions
+              patientId={patientId}
+              patientName={patient.name}
+              userId={currentUserId}
+              userName="Profesional"
+              clinicId={consultorioId}
+              onDocumentScanned={(doc) => setScannedDocs(prev => [doc, ...prev])}
+              onMessageSent={(msg) => console.log('[ClinicalHistoryPanel] Telegram message sent:', msg.id)}
+              onOCRDataReady={handleOCRDataReady}
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          <ScannedDocumentsList key={scannedDocs.length} patientId={patientId} />
+          <AdaptiveAnamnesisForm
+            patientId={patientId}
+            patientName={patient.name}
+            birthDate={birthDate}
+            motivoConsulta={patient.diagnosis || ''}
+            onSave={async (response: AdaptiveAnamnesisResponse) => {
+              console.log('[ClinicalHistoryPanel] AdaptiveAnamnesisForm saved:', response);
+              if (onSaved) onSaved();
+              return true;
+            }}
+          />
+        </div>
+      </div>
     );
   }
 
@@ -526,8 +553,8 @@ export default function ClinicalHistoryPanel({
 
       {/* Sections */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* Scanned Documents */}
-        <ScannedDocumentsList patientId={patientId} />
+        {/* Scanned Documents (recarga al agregar uno nuevo) */}
+        <ScannedDocumentsList key={scannedDocs.length} patientId={patientId} />
 
         {/* Material Request Form */}
         <MaterialRequestForm
