@@ -1,0 +1,189 @@
+/* Fonoaudio-Pro main styles */
+:root {
+  --primary-color: #2563eb;
+}
+
+/* ========================================
+   Variable Placeholder Highlighting
+   Colors match the extracted guide system:
+   - Red: unfilled variables that MUST be replaced
+   - Green: filled/replaced variables
+   ======================================== */
+
+.variable-placeholder {
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-weight: 600;
+  cursor: help;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.variable-unfilled {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fca5a5;
+  border-bottom: 2px dashed #ef4444;
+}
+
+.variable-unfilled:hover {
+  background-color: #fecaca;
+  box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.3);
+}
+
+.variable-unfilled::after {
+  content: attr(data-label);
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 10;
+}
+
+.variable-unfilled:hover::after {
+  opacity: 1;
+}
+
+.variable-filled {
+  background-color: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+
+.variable-filled:hover {
+  background-color: #bbf7d0;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+}
+
+/* ========================================
+   ProseMirror Editor Styles
+   ======================================== */
+
+.ProseMirror {
+  outline: none;
+  min-height: 500px;
+}
+
+.ProseMirror p {
+  margin-bottom: 0.75em;
+  line-height: 1.6;
+}
+
+.ProseMirror h1 {
+  font-size: 1.25em;
+  font-weight: 700;
+  color: #0891b2;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid rgba(8, 145, 178, 0.3);
+  padding-bottom: 0.25em;
+}
+
+.ProseMirror h2 {
+  font-size: 1.1em;
+  font-weight: 700;
+  color: #0891b2;
+  margin-top: 0.75em;
+  margin-bottom: 0.5em;
+}
+
+.ProseMirror h3 {
+  font-size: 1em;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 0.5em;
+  margin-bottom: 0.25em;
+}
+
+.ProseMirror ul,
+.ProseMirror ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.75em;
+}
+
+.ProseMirror li {
+  margin-bottom: 0.25em;
+  line-height: 1.5;
+}
+
+.ProseMirror strong {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ProseMirror em {
+  font-style: italic;
+}
+
+.ProseMirror u {
+  text-decoration: underline;
+}
+
+.ProseMirror s {
+  text-decoration: line-through;
+}
+
+.ProseMirror mark {
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+.ProseMirror table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+}
+
+.ProseMirror th,
+.ProseMirror td {
+  border: 1px solid #cbd5e1;
+  padding: 6px 10px;
+  text-align: left;
+}
+
+.ProseMirror th {
+  background-color: #f1f5f9;
+  font-weight: 700;
+  font-size: 0.9em;
+  color: #334155;
+}
+
+.ProseMirror td {
+  font-size: 0.9em;
+}
+
+.ProseMirror .is-empty::before {
+  content: attr(data-placeholder);
+  float: left;
+  color: #94a3b8;
+  pointer-events: none;
+  height: 0;
+}
+
+/* ProseMirror gapcursor */
+.ProseMirror-gapcursor::after {
+  border-top: 1px solid #0891b2;
+}
+
+/* ========================================
+   Scrollbar utilities
+   ======================================== */
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}

@@ -1,0 +1,15 @@
+{
+  "short_name": "FonoPro",
+  "name": "FonoAudio-Pro AI",
+  "icons": [
+    {
+      "src": "favicon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any"
+    }
+  ],
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#0f172a"
+}

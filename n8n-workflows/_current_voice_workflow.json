@@ -1,0 +1,584 @@
+{
+    "updatedAt":  "2026-05-23T17:20:36.603Z",
+    "createdAt":  "2026-05-23T16:05:48.887Z",
+    "id":  "PZO7GKb2yEADk8Jp",
+    "name":  "Asistente de Voz y Procesamiento IA - Full App Manager",
+    "description":  null,
+    "active":  true,
+    "isArchived":  false,
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "fonoaudio-voice-assistant",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "a4ab116e-06e4-41db-8625-7805d652b6cd",
+                      "name":  "Webhook Voice POST",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       48,
+                                       656
+                                   ],
+                      "webhookId":  "voice-assistant-webhook"
+                  },
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "OPTIONS",
+                                         "path":  "fonoaudio-voice-assistant",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "24a4253e-4f45-4985-b331-d9c1ec0c0837",
+                      "name":  "Webhook Voice OPTIONS (CORS)",
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       48,
+                                       448
+                                   ],
+                      "webhookId":  "cb0d4ac7-9e6b-4f90-9495-73341febb66e"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "{}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Methods",
+                                                                                                     "value":  "POST, OPTIONS"
+                                                                                                 },
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Headers",
+                                                                                                     "value":  "Content-Type"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "f3cfa07d-928a-47ca-9911-7e537bdc5f16",
+                      "name":  "Respond CORS Options",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       256,
+                                       448
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "text":  "={{ $json.body.text }}",
+                                         "options":  {
+                                                         "systemMessage":  "Eres Jarvis, el asistente de IA clínico experto de FonoAudio-Pro. Tu objetivo es interactuar con el fonoaudiólogo de manera natural. Tienes acceso a herramientas para consultar la base de datos de pacientes y citas. Utiliza estas herramientas cuando sea necesario para cumplir las solicitudes del usuario. Responde de forma clara y conversacional."
+                                                     }
+                                     },
+                      "id":  "a241ce4a-e5fe-4205-815b-ad108a81128e",
+                      "name":  "AI Agent",
+                      "type":  "@n8n/n8n-nodes-langchain.agent",
+                      "typeVersion":  1,
+                      "position":  [
+                                       352,
+                                       656
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "61fd1379-f094-45a1-b2aa-f1c87cda9ccf",
+                      "name":  "Google Gemini Model",
+                      "type":  "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+                      "typeVersion":  1,
+                      "position":  [
+                                       352,
+                                       848
+                                   ],
+                      "credentials":  {
+                                          "googlePalmApi":  {
+                                                                "id":  "z5ZBLd6Cn2qtAc9Q",
+                                                                "name":  "Google Gemini(PaLM) Api account"
+                                                            }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+
+                                     },
+                      "id":  "6c3e5630-3ab6-4f4e-9c3f-a75c6a82f473",
+                      "name":  "Window Buffer Memory",
+                      "type":  "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+                      "typeVersion":  1,
+                      "position":  [
+                                       512,
+                                       848
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "url":  "https://luaslntosuyzpolrxduv.supabase.co/rest/v1/patients",
+                                         "authentication":  "predefinedCredentialType",
+                                         "nodeCredentialType":  "supabaseApi",
+                                         "sendHeaders":  true,
+                                         "parametersHeaders":  {
+                                                                   "values":  [
+                                                                                  {
+
+                                                                                  }
+                                                                              ]
+                                                               }
+                                     },
+                      "id":  "bdb6b752-4399-452b-a758-0a525893a49f",
+                      "name":  "Tool: Get Patients",
+                      "type":  "@n8n/n8n-nodes-langchain.toolHttpRequest",
+                      "typeVersion":  1,
+                      "position":  [
+                                       656,
+                                       848
+                                   ],
+                      "credentials":  {
+                                          "supabaseApi":  {
+                                                              "id":  "CFaW2Qv9t8sHvC5k",
+                                                              "name":  "Supabase account 2"
+                                                          }
+                                      }
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={\n  \"response\": \"{{ $json.output }}\"\n}",
+                                         "options":  {
+                                                         "responseHeaders":  {
+                                                                                 "entries":  [
+                                                                                                 {
+                                                                                                     "name":  "Access-Control-Allow-Origin",
+                                                                                                     "value":  "*"
+                                                                                                 }
+                                                                                             ]
+                                                                             }
+                                                     }
+                                     },
+                      "id":  "e2087941-ab78-446c-9d29-e5afd0ba5e96",
+                      "name":  "Respond to Webhook POST",
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1,
+                      "position":  [
+                                       752,
+                                       656
+                                   ]
+                  }
+              ],
+    "connections":  {
+                        "Webhook Voice POST":  {
+                                                   "main":  [
+                                                                [
+                                                                    {
+                                                                        "node":  "AI Agent",
+                                                                        "type":  "main",
+                                                                        "index":  0
+                                                                    }
+                                                                ]
+                                                            ]
+                                               },
+                        "Webhook Voice OPTIONS (CORS)":  {
+                                                             "main":  [
+                                                                          [
+                                                                              {
+                                                                                  "node":  "Respond CORS Options",
+                                                                                  "type":  "main",
+                                                                                  "index":  0
+                                                                              }
+                                                                          ]
+                                                                      ]
+                                                         },
+                        "AI Agent":  {
+                                         "main":  [
+                                                      [
+                                                          {
+                                                              "node":  "Respond to Webhook POST",
+                                                              "type":  "main",
+                                                              "index":  0
+                                                          }
+                                                      ]
+                                                  ]
+                                     },
+                        "Google Gemini Model":  {
+                                                    "ai_languageModel":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "AI Agent",
+                                                                                     "type":  "ai_languageModel",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                },
+                        "Window Buffer Memory":  {
+                                                     "ai_memory":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "AI Agent",
+                                                                               "type":  "ai_memory",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                 },
+                        "Tool: Get Patients":  {
+                                                   "ai_tool":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "AI Agent",
+                                                                           "type":  "ai_tool",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                               }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "callerPolicy":  "workflowsFromSameOwner",
+                     "availableInMCP":  false
+                 },
+    "staticData":  null,
+    "meta":  {
+                 "templateCredsSetupCompleted":  true
+             },
+    "pinData":  {
+
+                },
+    "versionId":  "6bf5998a-6835-47c5-b14f-ea329e728e9b",
+    "activeVersionId":  "6bf5998a-6835-47c5-b14f-ea329e728e9b",
+    "versionCounter":  13,
+    "triggerCount":  2,
+    "shared":  [
+                   {
+                       "updatedAt":  "2026-05-23T16:05:48.892Z",
+                       "createdAt":  "2026-05-23T16:05:48.892Z",
+                       "role":  "workflow:owner",
+                       "workflowId":  "PZO7GKb2yEADk8Jp",
+                       "projectId":  "BtP4x4Qcg2X6DL1M",
+                       "project":  {
+                                       "updatedAt":  "2026-01-25T05:04:53.430Z",
+                                       "createdAt":  "2026-01-25T05:02:57.042Z",
+                                       "id":  "BtP4x4Qcg2X6DL1M",
+                                       "name":  "Matias Perez \u003cmatiasignacioperez@gmail.com\u003e",
+                                       "type":  "personal",
+                                       "icon":  null,
+                                       "description":  null,
+                                       "creatorId":  "0215e5fa-b607-4fea-9d26-4e77e8a16e85",
+                                       "projectRelations":  [
+                                                                {
+                                                                    "updatedAt":  "2026-01-25T05:02:57.043Z",
+                                                                    "createdAt":  "2026-01-25T05:02:57.043Z",
+                                                                    "userId":  "0215e5fa-b607-4fea-9d26-4e77e8a16e85",
+                                                                    "projectId":  "BtP4x4Qcg2X6DL1M",
+                                                                    "user":  {
+                                                                                 "updatedAt":  "2026-05-23T16:00:57.000Z",
+                                                                                 "createdAt":  "2026-01-25T05:02:56.672Z",
+                                                                                 "id":  "0215e5fa-b607-4fea-9d26-4e77e8a16e85",
+                                                                                 "email":  "matiasignacioperez@gmail.com",
+                                                                                 "firstName":  "Matias",
+                                                                                 "lastName":  "Perez",
+                                                                                 "personalizationAnswers":  {
+                                                                                                                "version":  "v4",
+                                                                                                                "personalization_survey_submitted_at":  "2026-01-25T05:05:09.662Z",
+                                                                                                                "personalization_survey_n8n_version":  "2.4.6"
+                                                                                                            },
+                                                                                 "settings":  {
+                                                                                                  "userActivated":  true,
+                                                                                                  "easyAIWorkflowOnboarded":  true,
+                                                                                                  "firstSuccessfulWorkflowId":  "QLXeo6XRKhFqQnKA-fIQ4",
+                                                                                                  "userActivatedAt":  1769361582200,
+                                                                                                  "npsSurvey":  {
+                                                                                                                    "responded":  true,
+                                                                                                                    "lastShownAt":  1771278364010
+                                                                                                                }
+                                                                                              },
+                                                                                 "disabled":  false,
+                                                                                 "mfaEnabled":  false,
+                                                                                 "lastActiveAt":  "2026-05-23",
+                                                                                 "isPending":  false
+                                                                             }
+                                                                }
+                                                            ]
+                                   }
+                   }
+               ],
+    "tags":  [
+
+             ],
+    "activeVersion":  {
+                          "updatedAt":  "2026-05-23T17:20:55.000Z",
+                          "createdAt":  "2026-05-23T17:20:36.614Z",
+                          "versionId":  "6bf5998a-6835-47c5-b14f-ea329e728e9b",
+                          "workflowId":  "PZO7GKb2yEADk8Jp",
+                          "nodes":  [
+                                        {
+                                            "parameters":  {
+                                                               "httpMethod":  "POST",
+                                                               "path":  "fonoaudio-voice-assistant",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "a4ab116e-06e4-41db-8625-7805d652b6cd",
+                                            "name":  "Webhook Voice POST",
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             48,
+                                                             656
+                                                         ],
+                                            "webhookId":  "voice-assistant-webhook"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "httpMethod":  "OPTIONS",
+                                                               "path":  "fonoaudio-voice-assistant",
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "24a4253e-4f45-4985-b331-d9c1ec0c0837",
+                                            "name":  "Webhook Voice OPTIONS (CORS)",
+                                            "type":  "n8n-nodes-base.webhook",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             48,
+                                                             448
+                                                         ],
+                                            "webhookId":  "cb0d4ac7-9e6b-4f90-9495-73341febb66e"
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "respondWith":  "json",
+                                                               "responseBody":  "{}",
+                                                               "options":  {
+                                                                               "responseHeaders":  {
+                                                                                                       "entries":  [
+                                                                                                                       {
+                                                                                                                           "name":  "Access-Control-Allow-Origin",
+                                                                                                                           "value":  "*"
+                                                                                                                       },
+                                                                                                                       {
+                                                                                                                           "name":  "Access-Control-Allow-Methods",
+                                                                                                                           "value":  "POST, OPTIONS"
+                                                                                                                       },
+                                                                                                                       {
+                                                                                                                           "name":  "Access-Control-Allow-Headers",
+                                                                                                                           "value":  "Content-Type"
+                                                                                                                       }
+                                                                                                                   ]
+                                                                                                   }
+                                                                           }
+                                                           },
+                                            "id":  "f3cfa07d-928a-47ca-9911-7e537bdc5f16",
+                                            "name":  "Respond CORS Options",
+                                            "type":  "n8n-nodes-base.respondToWebhook",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             256,
+                                                             448
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "text":  "={{ $json.body.text }}",
+                                                               "options":  {
+                                                                               "systemMessage":  "Eres Jarvis, el asistente de IA clínico experto de FonoAudio-Pro. Tu objetivo es interactuar con el fonoaudiólogo de manera natural. Tienes acceso a herramientas para consultar la base de datos de pacientes y citas. Utiliza estas herramientas cuando sea necesario para cumplir las solicitudes del usuario. Responde de forma clara y conversacional."
+                                                                           }
+                                                           },
+                                            "id":  "a241ce4a-e5fe-4205-815b-ad108a81128e",
+                                            "name":  "AI Agent",
+                                            "type":  "@n8n/n8n-nodes-langchain.agent",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             352,
+                                                             656
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "options":  {
+
+                                                                           }
+                                                           },
+                                            "id":  "61fd1379-f094-45a1-b2aa-f1c87cda9ccf",
+                                            "name":  "Google Gemini Model",
+                                            "type":  "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             352,
+                                                             848
+                                                         ],
+                                            "credentials":  {
+                                                                "googlePalmApi":  {
+                                                                                      "id":  "z5ZBLd6Cn2qtAc9Q",
+                                                                                      "name":  "Google Gemini(PaLM) Api account"
+                                                                                  }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+
+                                                           },
+                                            "id":  "6c3e5630-3ab6-4f4e-9c3f-a75c6a82f473",
+                                            "name":  "Window Buffer Memory",
+                                            "type":  "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             512,
+                                                             848
+                                                         ]
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "url":  "https://luaslntosuyzpolrxduv.supabase.co/rest/v1/patients",
+                                                               "authentication":  "predefinedCredentialType",
+                                                               "nodeCredentialType":  "supabaseApi",
+                                                               "sendHeaders":  true,
+                                                               "parametersHeaders":  {
+                                                                                         "values":  [
+                                                                                                        {
+
+                                                                                                        }
+                                                                                                    ]
+                                                                                     }
+                                                           },
+                                            "id":  "bdb6b752-4399-452b-a758-0a525893a49f",
+                                            "name":  "Tool: Get Patients",
+                                            "type":  "@n8n/n8n-nodes-langchain.toolHttpRequest",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             656,
+                                                             848
+                                                         ],
+                                            "credentials":  {
+                                                                "supabaseApi":  {
+                                                                                    "id":  "CFaW2Qv9t8sHvC5k",
+                                                                                    "name":  "Supabase account 2"
+                                                                                }
+                                                            }
+                                        },
+                                        {
+                                            "parameters":  {
+                                                               "respondWith":  "json",
+                                                               "responseBody":  "={\n  \"response\": \"{{ $json.output }}\"\n}",
+                                                               "options":  {
+                                                                               "responseHeaders":  {
+                                                                                                       "entries":  [
+                                                                                                                       {
+                                                                                                                           "name":  "Access-Control-Allow-Origin",
+                                                                                                                           "value":  "*"
+                                                                                                                       }
+                                                                                                                   ]
+                                                                                                   }
+                                                                           }
+                                                           },
+                                            "id":  "e2087941-ab78-446c-9d29-e5afd0ba5e96",
+                                            "name":  "Respond to Webhook POST",
+                                            "type":  "n8n-nodes-base.respondToWebhook",
+                                            "typeVersion":  1,
+                                            "position":  [
+                                                             752,
+                                                             656
+                                                         ]
+                                        }
+                                    ],
+                          "connections":  {
+                                              "Webhook Voice POST":  {
+                                                                         "main":  [
+                                                                                      [
+                                                                                          {
+                                                                                              "node":  "AI Agent",
+                                                                                              "type":  "main",
+                                                                                              "index":  0
+                                                                                          }
+                                                                                      ]
+                                                                                  ]
+                                                                     },
+                                              "Webhook Voice OPTIONS (CORS)":  {
+                                                                                   "main":  [
+                                                                                                [
+                                                                                                    {
+                                                                                                        "node":  "Respond CORS Options",
+                                                                                                        "type":  "main",
+                                                                                                        "index":  0
+                                                                                                    }
+                                                                                                ]
+                                                                                            ]
+                                                                               },
+                                              "AI Agent":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Respond to Webhook POST",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                                              "Google Gemini Model":  {
+                                                                          "ai_languageModel":  [
+                                                                                                   [
+                                                                                                       {
+                                                                                                           "node":  "AI Agent",
+                                                                                                           "type":  "ai_languageModel",
+                                                                                                           "index":  0
+                                                                                                       }
+                                                                                                   ]
+                                                                                               ]
+                                                                      },
+                                              "Window Buffer Memory":  {
+                                                                           "ai_memory":  [
+                                                                                             [
+                                                                                                 {
+                                                                                                     "node":  "AI Agent",
+                                                                                                     "type":  "ai_memory",
+                                                                                                     "index":  0
+                                                                                                 }
+                                                                                             ]
+                                                                                         ]
+                                                                       },
+                                              "Tool: Get Patients":  {
+                                                                         "ai_tool":  [
+                                                                                         [
+                                                                                             {
+                                                                                                 "node":  "AI Agent",
+                                                                                                 "type":  "ai_tool",
+                                                                                                 "index":  0
+                                                                                             }
+                                                                                         ]
+                                                                                     ]
+                                                                     }
+                                          },
+                          "authors":  "Matias Perez",
+                          "name":  "Version 6bf5998a",
+                          "description":  "",
+                          "autosaved":  true,
+                          "workflowPublishHistory":  [
+                                                         {
+                                                             "createdAt":  "2026-05-23T17:20:55.794Z",
+                                                             "id":  146,
+                                                             "workflowId":  "PZO7GKb2yEADk8Jp",
+                                                             "versionId":  "6bf5998a-6835-47c5-b14f-ea329e728e9b",
+                                                             "event":  "activated",
+                                                             "userId":  "0215e5fa-b607-4fea-9d26-4e77e8a16e85"
+                                                         }
+                                                     ]
+                      }
+}
