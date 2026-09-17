@@ -79,7 +79,7 @@ export const QuickModePanel: React.FC<QuickModeProps> = ({ isOpen, onClose, onSa
                                 <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm mb-3 flex items-center gap-2">
                                     <User size={16} /> Datos Rápidos (opcional)
                                 </h3>
-                                <div className="grid grid-cols-3 gap-3">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div>
                                         <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase">Nombre</label>
                                         <input
@@ -115,7 +115,7 @@ export const QuickModePanel: React.FC<QuickModeProps> = ({ isOpen, onClose, onSa
 
                             {/* Tool Grid */}
                             <h3 className="font-bold text-slate-700 dark:text-slate-200 text-sm">Elegí una herramienta:</h3>
-                            <div className="grid grid-cols-3 gap-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                                 <button
                                     onClick={() => setActiveTool('summary')}
                                     className="p-6 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl hover:border-blue-300 dark:hover:border-blue-700 hover:bg-blue-50/30 dark:hover:bg-blue-900/10 transition-all text-left group"

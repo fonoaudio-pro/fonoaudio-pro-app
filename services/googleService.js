@@ -49,12 +49,12 @@ export async function createGoogleMeetEvent(appointment) {
     const { patientName, date, time, durationMinutes = 30, description = 'Teleatención Fonoaudiológica' } = appointment;
 
     if (!calendarService) {
-        console.warn('[Google Service] Calendar service not configured. Returning simulated link.');
+        console.warn('[Google Service] Calendar service not configured. Refusing to fabricate a link.');
         return {
-            status: 'ok',
-            meetLink: `https://meet.google.com/${Math.random().toString(36).substring(7)}-${Math.random().toString(36).substring(7)}-${Math.random().toString(36).substring(7).toUpperCase()}`,
-            eventId: null,
-            simulated: true,
+            status: 'error',
+            message: 'Google no está configurado en el servidor (faltan GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN o Service Account). Conectá tu cuenta desde el botón "Conectar Google" o configurá las variables en el backend.',
+            hint: 'google_unconfigured',
+            simulated: false,
         };
     }
 
@@ -108,14 +108,13 @@ export async function createGoogleMeetEvent(appointment) {
 
 export async function syncGoogleCalendar() {
     if (!calendarService) {
-        console.warn('[Google Service] Calendar service not configured. Returning simulated sync.');
+        console.warn('[Google Service] Calendar service not configured. Returning explicit error.');
         return {
-            status: 'ok',
-            appointments: [
-                { patient: "Mateo Rodríguez", date: "2026-05-28", time: "10:00", type: "Consulta Virtual", meetLink: "https://meet.google.com/abc-defg-hij" },
-                { patient: "Sofía Martínez", date: "2026-05-29", time: "14:30", type: "Terapia de Voz", meetLink: "https://meet.google.com/xyz-wvu-ts" },
-            ],
-            simulated: true,
+            status: 'error',
+            message: 'Google no está configurado en el servidor. Conectá tu cuenta desde el botón "Conectar Google" o configurá GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REFRESH_TOKEN en el backend.',
+            hint: 'google_unconfigured',
+            appointments: [],
+            simulated: false,
         };
     }
 

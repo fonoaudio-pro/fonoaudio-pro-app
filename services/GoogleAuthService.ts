@@ -105,6 +105,22 @@ export const GoogleAuthService = {
     }
   },
 
+  /** Diagnóstico completo contra el backend: env + tokens del usuario. */
+  async getConnectionStatus(userId: string): Promise<{
+    envConfigured: boolean;
+    envDetail: string;
+    user: { connected: boolean; hasRefreshToken: boolean; expired: boolean; detail: string };
+  } | null> {
+    if (!BACKEND_URL) return null;
+    try {
+      const resp = await fetch(`${BACKEND_URL}/api/google/status?userId=${encodeURIComponent(userId)}`);
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
   async getValidTokens(userId: string): Promise<GoogleTokens | null> {
     const tokens = await this.getTokens(userId);
     if (!tokens) return null;

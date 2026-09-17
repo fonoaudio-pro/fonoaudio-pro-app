@@ -250,11 +250,14 @@ export class SessionService {
         }
 
         // 5. Trigger HomeGuide draft generation via backend
+        // (el backend hidrata ficha/anamnesis/sesiones/evaluaciones; acá se manda el detalle de la sesión)
         try {
             await callBackend('/api/guides/generate-home-guide-draft', {
                 patientId: patient.id,
                 patientName: patient.name,
                 lastSessionSummary: session.summary,
+                sessionObjectives: session.objectives,
+                sessionObservations: session.observations,
                 diagnosis: patient.diagnosis,
                 age: patient.age
             });

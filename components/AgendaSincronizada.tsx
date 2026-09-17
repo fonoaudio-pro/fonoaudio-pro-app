@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Calendar, Clock, User, Link, AlertCircle, Loader2, ChevronLeft, ChevronRight, CheckCircle2, Search, Sparkles, Plus, Edit2, X, Trash2, Video, Copy, MessageSquare, Phone, MapPin, Repeat, Bell, FileText, Palette } from 'lucide-react';
 import { GoogleCalendarService, CalendarEvent } from '../services/GoogleCalendarService';
 import { GoogleAuthService } from '../services/GoogleAuthService';
+import { ZoomService } from '../services/ZoomService';
 import { CalendarMappingService, CalendarMapping } from '../services/CalendarMappingService';
 import { SessionService } from '../services/SessionService';
 import { AppointmentService } from '../src/services/AppointmentService';
@@ -40,6 +41,8 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, ap
     });
     const [isTeleconsulta, setIsTeleconsulta] = useState(false);
     const [isGeneratingMeet, setIsGeneratingMeet] = useState(false);
+    const [isGeneratingZoom, setIsGeneratingZoom] = useState(false);
+    const [zoomConfigured, setZoomConfigured] = useState<boolean | null>(null);
     const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
     const [showColorPicker, setShowColorPicker] = useState(false);
     const [selectedConsultorio, setSelectedConsultorio] = useState<string>('');
@@ -93,6 +96,35 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, ap
             addToast({ message: `Error generando Meet: ${error.message}`, type: "error" });
         } finally {
             setIsGeneratingMeet(false);
+        }
+    };
+
+    const handleGenerateZoom = async () => {
+        setIsGeneratingZoom(true);
+        try {
+            const st = await ZoomService.getStatus();
+            setZoomConfigured(st.configured);
+            if (!st.configured) throw new Error(st.detail);
+            const timeStr = formData.time || '09:00';
+            const seconds = timeStr.split(':').length === 3 ? '' : ':00';
+            const start = new Date(`${formData.date}T${timeStr}${seconds}`);
+            if (isNaN(start.getTime())) throw new Error('Fecha/hora inválida para la reunión');
+            const meeting = await ZoomService.createMeeting({
+                topic: `Teleconsulta: ${formData.patient_name || 'Paciente'}`,
+                start_time: start.toISOString(),
+                duration: formData.duration || 30,
+                agenda: `Teleconsulta fonoaudiológica${formData.notes ? ` — ${formData.notes}` : ''}`,
+            });
+            if (appointment?.id) {
+                const svc = new AppointmentService();
+                await svc.updateAppointment(appointment.id, { meetLink: meeting.join_url } as Partial<Appointment>);
+            }
+            setFormData(prev => ({ ...prev, meetLink: meeting.join_url }));
+            addToast({ message: 'Reunión de Zoom creada y guardada', type: 'success' });
+        } catch (error: any) {
+            addToast({ message: `Error con Zoom: ${error.message}`, type: 'error' });
+        } finally {
+            setIsGeneratingZoom(false);
         }
     };
 
@@ -207,7 +239,7 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, ap
                     </div>
 
                     {/* Date and Time */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <div className="space-y-2">
                             <label className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase">Fecha</label>
                             <input 
@@ -429,6 +461,25 @@ const AppointmentModal: React.FC<AppointmentModalProps> = ({ isOpen, onClose, ap
                                 <><Video size={16} /> Generar enlace de Meet</>
                             )}
                         </button>
+                    )}
+
+                    {isTeleconsulta && !formData.meetLink && (
+                        <button
+                            onClick={handleGenerateZoom}
+                            disabled={isGeneratingZoom}
+                            className="w-full p-3 bg-indigo-600 text-white rounded-xl font-bold text-sm hover:bg-indigo-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                        >
+                            {isGeneratingZoom ? (
+                                <><Loader2 size={16} className="animate-spin" /> Creando reunión...</>
+                            ) : (
+                                <><Video size={16} /> Generar enlace de Zoom</>
+                            )}
+                        </button>
+                    )}
+                    {isTeleconsulta && !formData.meetLink && zoomConfigured === false && (
+                        <p className="text-[11px] text-amber-700 dark:text-amber-400">
+                            Zoom no configurado en el servidor (ZOOM_ACCOUNT_ID / ZOOM_CLIENT_ID / ZOOM_CLIENT_SECRET).
+                        </p>
                     )}
 
                     {isTeleconsulta && !formData.meetLink && !appointment?.google_event_id && (

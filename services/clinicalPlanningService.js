@@ -5,6 +5,83 @@ import { createClient } from '@supabase/supabase-js';
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
+/** Corta un texto a N caracteres sin romper palabras cuando es posible. */
+function truncate(text, max = 1500) {
+    if (text == null) return '';
+    const s = typeof text === 'string' ? text : JSON.stringify(text);
+    if (s.length <= max) return s;
+    const cut = s.lastIndexOf(' ', max);
+    return (cut > max * 0.5 ? s.slice(0, cut) : s.slice(0, max)) + '…';
+}
+
+/** Resume una lista en líneas legibles con tope de ítems y caracteres. */
+function summarizeList(items, maxItems = 8, maxChars = 1500) {
+    if (!Array.isArray(items) || items.length === 0) return '';
+    const lines = items.slice(0, maxItems).map((it, i) => {
+        if (typeof it === 'string') return `- ${it}`;
+        if (it && typeof it === 'object') {
+            const label = it.testName || it.title || it.name || it.fact || it.category || `Ítem ${i + 1}`;
+            const detail = it.score != null && it.maxScore != null
+                ? ` (${it.score}/${it.maxScore})`
+                : it.fact && it.evidence ? `: ${it.fact} (evidencia: ${it.evidence})` : '';
+            return `- ${label}${detail}`;
+        }
+        return `- ${String(it)}`;
+    });
+    return truncate(lines.join('\n'), maxChars);
+}
+
+/** Fallback a Groq cuando Gemini falla o no hay API key de Google. */
+async function generateWithGroqFallback(prompt, contextTexts) {
+    const groqKey = process.env.GROQ_API_KEY;
+    if (!groqKey) throw new Error('GROQ_API_KEY no configurada para fallback');
+    const fullPrompt = `${prompt}\n\n${contextTexts.join('\n\n')}`;
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${groqKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: 'qwen/qwen3-32b',
+            messages: [
+                { role: 'system', content: 'Sos un asistente fonoaudiológico experto. Respondés SOLO con el objeto JSON pedido, sin markdown ni texto adicional.' },
+                { role: 'user', content: fullPrompt },
+            ],
+            max_tokens: 2500,
+            temperature: 0.3,
+        }),
+    });
+    if (!resp.ok) throw new Error(`Groq API error: ${resp.status}`);
+    const data = await resp.json();
+    return data.choices?.[0]?.message?.content || '';
+}
+
+/** Extrae el objeto JSON de una respuesta del LLM sin romper si viene con texto extra. */
+function safeParseAnalysis(responseText, rawFallbackField = 'borrador_de_plan') {
+    const cleaned = String(responseText || '').replace(/```json/g, '').replace(/```/g, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+        try {
+            return { ok: true, parsed: JSON.parse(cleaned.slice(start, end + 1)) };
+        } catch { /* cae al fallback */ }
+    }
+    return {
+        ok: false,
+        parsed: {
+            motivo_de_consulta_resumido: 'No se pudo estructurar la respuesta del modelo.',
+            datos_clinicos_relevantes: '',
+            hipotesis_o_focos_de_trabajo: '',
+            evaluaciones_o_baterias_sugeridas: [],
+            que_observar_en_sesion: '',
+            objetivos_inmediatos: [],
+            materiales_necesarios: [],
+            estructura_de_sesion_30_min: '',
+            riesgos_o_alertas: [],
+            preguntas_para_profundizar: [],
+            [rawFallbackField]: cleaned.slice(0, 4000),
+        },
+    };
+}
+
 /**
  * Clinical Planning Service
  * Handles AI-assisted clinical reasoning based on patient data and documents.
@@ -16,8 +93,10 @@ class ClinicalPlanningService {
 
     async _getSupabase() {
         if (!this.supabase) {
-            const url = process.env.VITE_SUPABASE_URL;
-            const key = process.env.VITE_SUPABASE_ANON_KEY;
+            const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+            const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+                || process.env.VITE_SUPABASE_ANON_KEY
+                || process.env.SUPABASE_ANON_KEY;
 
             if (!url || !key) {
                 throw new Error('Supabase credentials (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are not configured in environment variables.');
@@ -61,17 +140,19 @@ class ClinicalPlanningService {
                 // clinical_records table may not exist yet
             }
 
-            // 3. Fetch Anamnesis
+            // 3. Fetch Anamnesis (tabla real: patient_anamnesis, última versión final o draft)
             let anamnesisData = null;
             try {
-                const { data: anData } = await supabase
-                    .from('anamnesis')
-                    .select('*')
+                const { data: anList } = await supabase
+                    .from('patient_anamnesis')
+                    .select('version, status, sections, notes, updated_at')
                     .eq('patient_id', patientId)
-                    .maybeSingle();
-                anamnesisData = anData;
+                    .order('version', { ascending: false })
+                    .limit(2);
+                const rows = anList || [];
+                anamnesisData = rows.find(r => r.status === 'final') || rows[0] || null;
             } catch {
-                // anamnesis table may not exist yet
+                // patient_anamnesis table may not exist yet
             }
 
             // 4. Fetch recent analysis history
@@ -88,20 +169,68 @@ class ClinicalPlanningService {
                 // analysis_history table may not exist yet
             }
 
+            // 4b. Fetch recent sessions (últimas 5, con objetivos y observaciones)
+            let recentSessions = [];
+            try {
+                const { data: sData } = await supabase
+                    .from('sessions')
+                    .select('date, type, status, objectives, observations, summary, plan_updates, next_action, homework')
+                    .eq('patient_id', patientId)
+                    .order('date', { ascending: false })
+                    .limit(5);
+                recentSessions = sData || [];
+            } catch {
+                // sessions table may not exist yet
+            }
+
+            // 4c. Fetch unresolved clinical facts (hechos objetivos ya extraídos)
+            let clinicalFacts = [];
+            try {
+                const { data: fData } = await supabase
+                    .from('clinical_facts')
+                    .select('category, fact, evidence, confidence')
+                    .eq('patient_id', patientId)
+                    .eq('isResolved', false)
+                    .order('created_at', { ascending: false })
+                    .limit(15);
+                clinicalFacts = fData || [];
+            } catch {
+                // clinical_facts table may not exist yet
+            }
+
+            // 4d. Fetch standardized test results
+            let testResults = [];
+            try {
+                const { data: tData } = await supabase
+                    .from('test_results')
+                    .select('*')
+                    .eq('patient_id', patientId)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+                testResults = tData || [];
+            } catch {
+                // test_results table may not exist yet
+            }
+
             // 5. Prepare the context
             let contextParts = [];
             
-            // Structured data
+            // Structured data (con truncado para no exceder la ventana del modelo)
+            const plan = patient.treatmentPlan || {};
+            const planSummary = plan.summary || plan.strategies || plan.general || '';
             contextParts.push({
                 text: `[DATOS DEL PACIENTE]
 Nombre: ${patient.name}
-Edad: ${patient.age} años
-Diagnóstico: ${patient.diagnosis}
-Notas: ${patient.notes || 'Sin notas'}
-Historial de sesiones: ${JSON.stringify(patient.history || [])}
-Evaluaciones: ${JSON.stringify(patient.evaluations || [])}
-Plan de tratamiento actual: ${JSON.stringify(patient.treatmentPlan || {})}
-Alertas: ${patient.alerts?.join(', ') || 'Ninguna'}`
+Edad: ${patient.age ?? 'N/D'} años
+Diagnóstico: ${patient.diagnosis || 'En evaluación'}
+Teléfono: ${patient.phone || 'N/D'} | Email: ${patient.email || 'N/D'}
+Notas: ${truncate(patient.notes || 'Sin notas', 800)}
+Historial (resumen en ficha): ${truncate(patient.history || [], 800)}
+Evaluaciones estandarizadas:
+${summarizeList(patient.evaluations || [], 10, 1200) || '(sin evaluaciones cargadas)'}
+Plan de tratamiento actual: ${truncate(typeof planSummary === 'string' ? planSummary : JSON.stringify(planSummary), 1200) || '(sin plan)'}
+Frecuencia: ${plan.frequency || 'N/D'}
+Alertas: ${Array.isArray(patient.alerts) ? patient.alerts.join(', ') : (patient.alerts || 'Ninguna')}`
             });
 
             // Clinical Record (Ficha Clínica) - datos ricos
@@ -133,23 +262,53 @@ Alertas: ${patient.alerts?.join(', ') || 'Ninguna'}`
                 contextParts.push({ text: crParts.join('\n') });
             }
 
-            // Anamnesis - datos ricos
+            // Anamnesis - tabla real patient_anamnesis {version, status, sections, notes}
             if (anamnesisData) {
-                const anParts = [`[ANAMNESIS]`];
-                if (anamnesisData.chief_complaint) anParts.push(`Motivo de consulta (anamnesis): ${anamnesisData.chief_complaint}`);
-                if (anamnesisData.personal_history) {
-                    const ph = typeof anamnesisData.personal_history === 'string' 
-                        ? anamnesisData.personal_history 
-                        : JSON.stringify(anamnesisData.personal_history);
-                    anParts.push(`Historia personal: ${ph}`);
+                const anParts = [`[ANAMNESIS v${anamnesisData.version ?? '?'} (${anamnesisData.status || 's/estado'})]`];
+                const sections = anamnesisData.sections || {};
+                if (typeof sections === 'string') {
+                    if (sections.trim()) anParts.push(truncate(sections, 2000));
+                } else if (typeof sections === 'object') {
+                    for (const [key, value] of Object.entries(sections)) {
+                        if (value == null || value === '' || (typeof value === 'object' && Object.keys(value).length === 0)) continue;
+                        const rendered = typeof value === 'string' ? value : JSON.stringify(value);
+                        if (rendered && rendered !== '{}' && rendered !== '[]') {
+                            anParts.push(`${key}: ${truncate(rendered, 600)}`);
+                        }
+                    }
                 }
-                if (anamnesisData.family_history) {
-                    const fh = typeof anamnesisData.family_history === 'string'
-                        ? anamnesisData.family_history
-                        : JSON.stringify(anamnesisData.family_history);
-                    anParts.push(`Historia familiar: ${fh}`);
+                if (anamnesisData.notes) anParts.push(`Notas de anamnesis: ${truncate(anamnesisData.notes, 600)}`);
+                if (anParts.length > 1) contextParts.push({ text: anParts.join('\n') });
+            }
+
+            // Sesiones recientes - qué se trabajó y qué sigue
+            if (recentSessions.length > 0) {
+                const sParts = [`[ÚLTIMAS SESIONES (${recentSessions.length})]`];
+                for (const s of recentSessions) {
+                    const bits = [`Fecha: ${s.date || 's/fecha'} (${s.type || 'sesión'}, ${s.status || ''})`];
+                    if (s.objectives) bits.push(`Objetivos: ${truncate(s.objectives, 400)}`);
+                    if (s.observations) bits.push(`Observaciones: ${truncate(s.observations, 500)}`);
+                    if (s.summary) bits.push(`Resumen: ${truncate(s.summary, 400)}`);
+                    if (s.plan_updates) bits.push(`Ajustes al plan: ${truncate(s.plan_updates, 300)}`);
+                    if (s.next_action) bits.push(`Próximo paso: ${truncate(s.next_action, 300)}`);
+                    if (s.homework) bits.push(`Tarea hogar: ${truncate(s.homework, 300)}`);
+                    sParts.push(`\n• ${bits.join(' | ')}`);
                 }
-                contextParts.push({ text: anParts.join('\n') });
+                contextParts.push({ text: sParts.join('\n') });
+            }
+
+            // Hechos clínicos ya validados por el sistema
+            if (clinicalFacts.length > 0) {
+                contextParts.push({
+                    text: `[HECHOS CLÍNICOS VALIDADOS]\n${summarizeList(clinicalFacts, 15, 1500)}`,
+                });
+            }
+
+            // Tests estandarizados (tabla test_results)
+            if (testResults.length > 0) {
+                contextParts.push({
+                    text: `[TESTS ESTANDARIZADOS]\n${summarizeList(testResults, 10, 1500)}`,
+                });
             }
 
             // Analysis History - tendencia
@@ -226,19 +385,23 @@ Alertas: ${patient.alerts?.join(', ') || 'Ninguna'}`
             Sos un asistente clínico altamente experimentado y profesional, especializado en Fonoaudiología.
             Tu tarea es realizar un análisis de razonamiento clínico profundo para el paciente descrito arriba.
             
-            CONTEXTO DISPONIBLE:
+            CONTEXTO DISPONIBLE (usá TODO lo que venga a continuación, no solo el diagnóstico):
             Tenés acceso a:
-            - Datos estructurados del paciente (nombre, edad, diagnóstico)
+            - Datos estructurados del paciente (incluye evaluaciones estandarizadas, plan de tratamiento vigente y alertas)
             - Ficha Clínica completa (motivo de consulta, antecedentes, áreas afectadas, observaciones)
-            - Anamnesis (historia personal y familiar)
+            - Anamnesis versionada (secciones + notas)
+            - Últimas sesiones (objetivos trabajados, observaciones, ajustes al plan, tarea para el hogar)
+            - Hechos clínicos validados y tests estandarizados
             - Historial de análisis previos (tendencia de riesgo)
             - Documentos escaneados: informes ORL, audiometrías, ecografías, análisis de laboratorio, etc. (con texto OCR extraído)
             - Documentos adjuntos (imágenes, PDFs)
-            
+
             MISIÓN:
             Analizá TODA la información disponible para proveer un razonamiento clínico profesional, prudente y basado en evidencia.
             NO inventes diagnósticos. En cambio, sugerí hipótesis basadas en la evidencia disponible.
-            PRIORIZÁ la información de la Ficha Clínica y la Anamnesis para fundamentar tus respuestas.
+            PRIORIZÁ la información de la Ficha Clínica, la Anamnesis y las últimas sesiones para fundamentar tus respuestas.
+            CITÁ datos concretos del contexto (ej: "en la sesión del 12/08 se observó...", "las evaluaciones muestran...").
+            Si una sección del contexto viene vacía, indicalo en "preguntas_para_profundizar" en lugar de inventar.
             
             FORMATO DE SALIDA:
             Deberías responder SOLO con un objeto JSON válido. No incluyas backticks de markdown ni texto adicional.
@@ -265,16 +428,35 @@ Alertas: ${patient.alerts?.join(', ') || 'Ninguna'}`
             - Referencianá datos específicos de la ficha clínica cuando los haya (ej: "Según el motivo de consulta:...", "Dado que las áreas afectadas son...").
             `;
 
-            // 5. Generate Content
-            const result = await model.generateContent([prompt, ...contextParts]);
-            const responseText = result.response.text();
-            
-            // Clean potential markdown from Gemini response
-            const cleanedResponse = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
-            const jsonAnalysis = JSON.parse(cleanedResponse);
+            // 5. Generate Content (Gemini primero, Groq como fallback)
+            const contextTexts = contextParts.map(p => (p && p.text ? p.text : '')).filter(Boolean);
+            let responseText = '';
+            let engine = 'gemini-2.0-flash';
+            try {
+                if (!process.env.GOOGLE_API_KEY) throw new Error('GOOGLE_API_KEY no configurada');
+                const result = await model.generateContent([prompt, ...contextParts]);
+                responseText = result.response.text();
+            } catch (geminiError) {
+                console.warn('[ClinicalPlanningService] Gemini falló, probando Groq:', geminiError.message);
+                responseText = await generateWithGroqFallback(prompt, contextTexts);
+                engine = 'groq-fallback';
+            }
+
+            // Parseo seguro: nunca rompe aunque el modelo devuelva texto extra
+            const { ok, parsed: jsonAnalysis } = safeParseAnalysis(responseText);
+            if (!ok) console.warn('[ClinicalPlanningService] Respuesta no-JSON, se devuelve texto crudo en borrador_de_plan.');
 
             return {
                 status: 'ok',
+                engine,
+                contextSources: {
+                    sessions: recentSessions.length,
+                    clinicalFacts: clinicalFacts.length,
+                    testResults: testResults.length,
+                    documents: patientDocuments.length,
+                    hasClinicalRecord: !!clinicalRecord,
+                    hasAnamnesis: !!anamnesisData,
+                },
                 analysis: jsonAnalysis
             };
 

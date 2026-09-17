@@ -253,7 +253,7 @@ export const PublicBookingPortal: React.FC = () => {
                         {loading ? (
                             <div className="flex items-center justify-center py-8"><Loader2 size={24} className="animate-spin text-blue-600" /></div>
                         ) : (
-                            <div className="grid grid-cols-4 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                                 {availableSlots.map(slot => (
                                     <button key={slot.time} disabled={!slot.available}
                                         onClick={() => { setSelectedTime(slot.time); setStep('form'); }}

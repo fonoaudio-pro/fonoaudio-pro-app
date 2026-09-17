@@ -895,7 +895,7 @@ SÉ PRECISO, PROFESIONAL Y PRÁCTICO. Usá formato markdown para que sea legible
       </div>
 
       {/* Mode Tabs */}
-      <div className="grid grid-cols-3 md:flex md:flex-wrap gap-1 md:gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+      <div className="grid grid-cols-1 sm:grid-cols-3 md:flex md:flex-wrap gap-1 md:gap-2 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
         {[
           { key: 'canva' as const, label: 'Editor Visual', icon: Palette },
           { key: 'ai_prompt' as const, label: 'IA Generativa', icon: Brain },

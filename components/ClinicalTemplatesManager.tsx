@@ -324,7 +324,7 @@ function TemplateEditor({ template, onSave, onCancel }: {
               <div className="grid grid-cols-1 gap-3 pl-6">
                 {section.fields.map((field, fIdx) => (
                   <div key={field.id} className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex items-center gap-3 group">
-                    <div className="flex-1 grid grid-cols-3 gap-3 items-center">
+                    <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center">
                       <input 
                         value={field.label} 
                         onChange={e => updateField(section.section_id, field.id, { label: e.target.value })} 
