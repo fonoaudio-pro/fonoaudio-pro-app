@@ -27,10 +27,9 @@ interface SessionWizardProps {
     onCancel: () => void;
 }
 
-type WizardStep = 'voz' | 'objectives' | 'notes' | 'plan' | 'review';
+type WizardStep = 'objectives' | 'notes' | 'plan' | 'review';
 
 const STEPS: { id: WizardStep; label: string; icon: React.ReactNode }[] = [
-    { id: 'voz', label: 'Mi voz hoy', icon: <Mic size={18} /> },
     { id: 'objectives', label: 'Objetivos', icon: <Target size={18} /> },
     { id: 'notes', label: 'Notas', icon: <ClipboardList size={18} /> },
     { id: 'plan', label: 'Plan', icon: <FileText size={18} /> },
@@ -104,7 +103,6 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ patientId, onCompl
         planUpdates: '',
         nextAction: '',
         associatedMaterialIds: [],
-        voice_self_rating: null,
     });
 
     const currentStep = STEPS[currentStepIndex].id;
@@ -170,10 +168,6 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ patientId, onCompl
     };
 
     const validateStep = (): boolean => {
-        if (currentStep === 'voz' && draft.voice_self_rating == null) {
-            setError('Pedile al paciente que puntúe su voz hoy (1-10) antes de empezar.');
-            return false;
-        }
         if (currentStep === 'objectives' && !draft.objectives?.trim()) {
             setError('Por favor, define los objetivos de la sesión.');
             return false;
@@ -208,37 +202,6 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ patientId, onCompl
 
     const renderStepContent = () => {
         switch (currentStep) {
-            case 'voz':
-                return (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <div className="space-y-2">
-                            <label className="text-sm font-bold text-slate-700 dark:text-slate-300">¿Cómo sentís tu voz hoy? (1-10)</label>
-                            <p className="text-xs text-slate-500">Autovaloración del paciente al inicio. 1 = lo peor, 10 = mi mejor voz. La sesión 1 es la línea de base y se compara con la sesión 8.</p>
-                            <div className="flex flex-wrap gap-2 pt-2">
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
-                                    <button
-                                        key={n}
-                                        type="button"
-                                        onClick={() => setDraft({ ...draft, voice_self_rating: n })}
-                                        className={`w-11 h-11 rounded-xl font-black text-sm transition-all ${
-                                            draft.voice_self_rating === n
-                                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105'
-                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-                                        }`}
-                                    >
-                                        {n}
-                                    </button>
-                                ))}
-                            </div>
-                            {draft.voice_self_rating != null && (
-                                <p className="text-xs font-bold text-blue-600 dark:text-blue-400 pt-1">
-                                    Valor registrado: {draft.voice_self_rating}/10
-                                    {draft.voice_self_rating <= 3 ? ' — voz muy afectada, priorizar descarga y SOVTE suave.' : draft.voice_self_rating >= 8 ? ' — muy buena percepción, avanzar con transferencia.' : ' — percepción intermedia, seguir plan.'}
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                );
             case 'objectives':
                 return (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
@@ -364,10 +327,6 @@ export const SessionWizard: React.FC<SessionWizardProps> = ({ patientId, onCompl
                                 <h3 className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-widest">Revisión Final y Aprobación</h3>
                             </div>
                             <div className="space-y-4 text-sm">
-                                <div>
-                                    <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Autovaloración de la voz</p>
-                                    <p className="text-slate-700 dark:text-slate-300 leading-relaxed font-bold">{draft.voice_self_rating != null ? `${draft.voice_self_rating}/10` : 'Sin registrar'}</p>
-                                </div>
                                 <div>
                                     <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider mb-1">Objetivos</p>
                                     <p className="text-slate-700 dark:text-slate-300 leading-relaxed">{draft.objectives}</p>

@@ -19,10 +19,7 @@ import {
     Calendar,
     Printer,
     Trash2,
-    CheckCircle2,
-    MessageCircle,
-    Phone,
-    Mail
+    CheckCircle2
 } from 'lucide-react';
 import { Patient, Session, HomeGuide } from '../types';
 import { AffectedAreaKey } from '../types/clinical';
@@ -230,40 +227,12 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                     <button onClick={() => setIsReportOpen(true)} className="border border-slate-300 dark:border-slate-600 px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 transition-all text-sm">
                         <FilePlus size={16} /> Informe
                     </button>
-                    <button
-                        onClick={() => onGenerateHomeGuideDraft(patient)}
+                    <button 
+                        onClick={() => onGenerateHomeGuideDraft(patient)} 
                         className="bg-purple-600 text-white px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-purple-700 flex items-center gap-2 shadow-sm transition-all text-sm"
                     >
                         <Sparkles size={16} /> Guía
                     </button>
-                    {patient.phone && (
-                        <a
-                            href={`https://wa.me/${patient.phone.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${patient.name}, te escribo desde el consultorio fonoaudiológico.`)}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="border border-green-300 dark:border-green-800 text-green-700 dark:text-green-400 px-3 sm:px-4 py-2 min-h-[44px] rounded-lg hover:bg-green-50 dark:hover:bg-green-900/20 flex items-center gap-2 transition-all text-sm"
-                            title="Enviar WhatsApp al paciente"
-                        >
-                            <MessageCircle size={16} /> <span className="hidden sm:inline">WhatsApp</span>
-                        </a>
-                    )}
-                    {patient.phone && (
-                        <a
-                            href={`tel:${patient.phone.replace(/\D/g, '')}`}
-                            className="border border-slate-300 dark:border-slate-600 px-3 py-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center transition-all text-sm"
-                            title={`Llamar a ${patient.phone}`}
-                        >
-                            <Phone size={16} /> <span className="hidden sm:inline">Llamar</span>
-                        </a>
-                    )}
-                    {patient.email && (
-                        <a
-                            href={`mailto:${patient.email}?subject=${encodeURIComponent(`Seguimiento fonoaudiológico — ${patient.name}`)}`}
-                            className="border border-slate-300 dark:border-slate-600 px-3 py-2 min-h-[44px] min-w-[44px] rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-center transition-all text-sm"
-                            title={`Escribir a ${patient.email}`}
-                        >
-                            <Mail size={16} /> <span className="hidden sm:inline">Email</span>
-                        </a>
-                    )}
                      {onDeletePatient && patient.quick_status !== 'active_quick' && (
                      <button 
                          onClick={() => { if (window.confirm(`¿Eliminar al paciente ${patient.name}?`)) onDeletePatient(patient.id); }} 
@@ -414,48 +383,6 @@ const PatientDetailView: React.FC<PatientDetailViewProps> = ({
                                     </div>
                                 </div>
                             </div>
-
-                            {/* Evolución autovaloración de la voz: sesión 1 (base) vs sesión 8 / última */}
-                            {(() => {
-                                const rated = (patient.history || [])
-                                    .filter((s: any) => s.voice_self_rating != null)
-                                    .slice()
-                                    .sort((a: any, b: any) => String(a.date || '').localeCompare(String(b.date || '')));
-                                if (rated.length === 0) return null;
-                                const base = rated[0];
-                                const idx8 = rated.length >= 8 ? rated[7] : rated[rated.length - 1];
-                                const delta = (idx8.voice_self_rating ?? 0) - (base.voice_self_rating ?? 0);
-                                return (
-                                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-6">
-                                        <h3 className="font-bold text-slate-800 dark:text-white mb-1 flex items-center gap-2">
-                                            <Target size={18} className="text-emerald-600" />
-                                            Autovaloración de la voz (1-10)
-                                        </h3>
-                                        <p className="text-[11px] text-slate-400 mb-3">Línea de base (sesión 1) vs {rated.length >= 8 ? 'sesión 8' : `última (sesión ${rated.length})`}</p>
-                                        <div className="flex items-center gap-4">
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Sesión 1 · {base.date || ''}</p>
-                                                <p className="text-3xl font-black text-slate-500">{base.voice_self_rating}</p>
-                                            </div>
-                                            <div className="text-2xl text-slate-300">→</div>
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-bold text-slate-400 uppercase">{rated.length >= 8 ? 'Sesión 8' : 'Última'} · {idx8.date || ''}</p>
-                                                <p className={`text-3xl font-black ${delta > 0 ? 'text-emerald-600' : delta < 0 ? 'text-rose-500' : 'text-slate-500'}`}>{idx8.voice_self_rating}</p>
-                                            </div>
-                                            <div className={`ml-auto px-3 py-1.5 rounded-xl text-sm font-black ${delta > 0 ? 'bg-emerald-50 text-emerald-600' : delta < 0 ? 'bg-rose-50 text-rose-500' : 'bg-slate-100 text-slate-500'}`}>
-                                                {delta > 0 ? `+${delta}` : `${delta}`}
-                                            </div>
-                                        </div>
-                                        {rated.length > 2 && (
-                                            <div className="flex items-end gap-1 mt-3 h-12">
-                                                {rated.map((s: any, i: number) => (
-                                                    <div key={s.id || i} title={`${s.date || ''}: ${s.voice_self_rating}/10`} className="flex-1 bg-blue-500/70 rounded-t" style={{ height: `${(s.voice_self_rating / 10) * 100}%` }} />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
 
                             {/* Ficha Clínica & Anamnesis Summary - Data Interconnection */}
                             {(clinicalRecord || anamnesisData) && (

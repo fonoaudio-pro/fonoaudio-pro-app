@@ -863,102 +863,13 @@ router.post('/process', async (req, res) => {
 
 // --- HOME GUIDE GENERATION ---
 
-// Corta texto para no exceder la ventana del modelo.
-function truncateCtx(text, max = 1200) {
-    if (text == null) return '';
-    const s = typeof text === 'string' ? text : JSON.stringify(text);
-    if (s.length <= max) return s;
-    const cut = s.lastIndexOf(' ', max);
-    return (cut > max * 0.5 ? s.slice(0, cut) : s.slice(0, max)) + '…';
-}
-
-// Enriquece el borrador con TODO el contexto disponible del paciente (server-side).
-// El frontend solo manda IDs/resúmenes; acá se hidrata ficha, anamnesis, sesiones,
-// evaluaciones, plan vigente y hechos clínicos para que la guía salga personalizada.
-async function buildHomeGuideContext(patientId, body) {
-    const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-    if (!supabaseUrl || !supabaseKey || !patientId) return '';
-    try {
-        const sb = createClient(supabaseUrl, supabaseKey);
-        const blocks = [];
-
-        const { data: patient } = await sb.from('patients').select('*').eq('id', patientId).maybeSingle();
-        if (patient) {
-            const evals = Array.isArray(patient.evaluations) ? patient.evaluations.slice(0, 8).map(e =>
-                typeof e === 'string' ? `- ${e}` : `- ${e.testName || e.title || e.name || 'Evaluación'}${e.score != null && e.maxScore != null ? ` (${e.score}/${e.maxScore})` : ''}`
-            ).join('\n') : '';
-            const plan = patient.treatmentPlan || {};
-            blocks.push([
-                '[PACIENTE]',
-                `Nombre: ${patient.name || body.patientName || ''} | Edad: ${patient.age ?? body.age ?? 'N/D'} | Diagnóstico: ${patient.diagnosis || body.diagnosis || 'En evaluación'}`,
-                patient.notes ? `Notas: ${truncateCtx(patient.notes, 500)}` : '',
-                evals ? `Evaluaciones:\n${truncateCtx(evals, 900)}` : '',
-                (plan.summary || plan.strategies || plan.general) ? `Plan vigente: ${truncateCtx(plan.summary || plan.strategies || plan.general, 800)}` : '',
-                Array.isArray(patient.alerts) && patient.alerts.length ? `Alertas: ${patient.alerts.join(', ')}` : '',
-            ].filter(Boolean).join('\n'));
-        }
-
-        const { data: cr } = await sb.from('clinical_records').select('chief_complaint, primary_diagnosis_name, affected_areas, clinical_observations').eq('patient_id', patientId).maybeSingle();
-        if (cr) {
-            const affected = Array.isArray(cr.affected_areas) ? cr.affected_areas.filter(a => a && a.affected).map(a => `${a.name}${a.level ? ` (${a.level})` : ''}`).join(', ') : '';
-            blocks.push([
-                '[FICHA CLÍNICA]',
-                cr.chief_complaint ? `Motivo: ${truncateCtx(cr.chief_complaint, 400)}` : '',
-                cr.primary_diagnosis_name ? `Diagnóstico principal: ${cr.primary_diagnosis_name}` : '',
-                affected ? `Áreas afectadas: ${affected}` : '',
-                cr.clinical_observations ? `Observaciones: ${truncateCtx(cr.clinical_observations, 500)}` : '',
-            ].filter(Boolean).join('\n'));
-        }
-
-        const { data: anList } = await sb.from('patient_anamnesis').select('sections, notes').eq('patient_id', patientId).order('version', { ascending: false }).limit(1);
-        const an = (anList || [])[0];
-        if (an && (an.sections || an.notes)) {
-            blocks.push(`[ANAMNESIS]\n${truncateCtx(typeof an.sections === 'string' ? an.sections : JSON.stringify(an.sections || {}), 900)}${an.notes ? `\nNotas: ${truncateCtx(an.notes, 400)}` : ''}`);
-        }
-
-        let sess = null;
-        try {
-            const r = await sb.from('sessions').select('*').eq('patient_id', patientId).order('date', { ascending: false }).limit(3);
-            sess = r.data;
-        } catch { sess = null; }
-        if ((!sess || !sess.length) && patient && Array.isArray(patient.history)) {
-            sess = patient.history.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 3);
-        }
-        if (sess && sess.length) {
-            blocks.push('[ÚLTIMAS SESIONES]\n' + sess.map(s => {
-                const rating = s.voice_self_rating != null ? ` | autovaloración voz=${s.voice_self_rating}/10` : '';
-                return `• ${s.date || 's/fecha'}${rating}: obj=${truncateCtx(s.objectives || '', 250)} | obs=${truncateCtx(s.observations || s.summary || '', 300)} | hogar=${truncateCtx(s.homework || '', 200)}`;
-            }).join('\n'));
-        }
-
-        const { data: facts } = await sb.from('clinical_facts').select('category, fact').eq('patient_id', patientId).eq('isResolved', false).limit(8);
-        if (facts && facts.length) {
-            blocks.push('[HECHOS CLÍNICOS]\n' + facts.map(f => `• [${f.category}] ${truncateCtx(f.fact, 250)}`).join('\n'));
-        }
-
-        return blocks.filter(Boolean).join('\n\n');
-    } catch (e) {
-        console.warn('[HomeGuide] No se pudo hidratar contexto:', e.message);
-        return '';
-    }
-}
-
 router.post('/guides/generate-home-guide-draft', async (req, res) => {
-    const { patientId, patientName, lastSessionSummary, diagnosis, age, sessionObjectives, sessionObservations } = req.body;
-
+    const { patientId, patientName, lastSessionSummary, diagnosis, age } = req.body;
+    
     try {
-        const hydrated = await buildHomeGuideContext(patientId, req.body);
-        const prompt = `Actúa como un experto fonoaudiólogo. Genera una Guía de Hogar para el paciente ${patientName} (${age} años), diagnóstico: ${diagnosis}.
+        const prompt = `Actúa como un experto fonoaudiólogo. Genera una Guía de Hogar para el paciente ${patientName} (${age} años), diagnóstico: ${diagnosis}. 
         ${lastSessionSummary ? `Resumen de la última sesión: ${lastSessionSummary}.` : 'No hay resumen de sesión previo.'}
-        ${sessionObjectives ? `Objetivos trabajados: ${sessionObjectives}.` : ''}
-        ${sessionObservations ? `Observaciones de sesión: ${sessionObservations}.` : ''}
-        ${hydrated ? `\nCONTEXTO CLÍNICO REAL DEL PACIENTE (úsalo para personalizar actividades, ejemplos y materiales — citá datos concretos):\n${hydrated}\n` : ''}
-        REGLAS DE PERSONALIZACIÓN:
-        - Las actividades deben apuntar a las áreas afectadas y al diagnóstico real, no genéricos.
-        - Usá el vocabulario y ejemplos de la vida del paciente cuando el contexto los mencione.
-        - Si el contexto trae tarea para el hogar previa, dale continuidad en vez de repetir.
-
+        
         Responde SOLO con markdown plano. NO uses JSON ni objetos. Usa este formato exacto:
 
 Guía de Hogar para ${patientName}
@@ -1089,48 +1000,8 @@ router.post('/google/refresh-token', async (req, res) => {
 });
 
 router.post('/google/meet', async (req, res) => {
-    const { patientName, date, time, reason, durationMinutes = 30, access_token } = req.body;
-
-    // 1) Camino por usuario: si el frontend manda su access_token, se crea el
-    // evento con conferenceData (Meet real) en SU calendario. Sin links falsos.
-    if (access_token) {
-        try {
-            const start = date && time ? new Date(`${date}T${time}:00`) : new Date(Date.now() + 5 * 60000);
-            const end = new Date(start.getTime() + (durationMinutes || 30) * 60000);
-            const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1', {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${access_token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    summary: `Teleconsulta: ${patientName || 'Paciente'}`,
-                    description: `${reason || 'Teleatención Fonoaudiológica'}\n\nPaciente: ${patientName || ''}`,
-                    start: { dateTime: start.toISOString(), timeZone: 'America/Argentina/Buenos_Aires' },
-                    end: { dateTime: end.toISOString(), timeZone: 'America/Argentina/Buenos_Aires' },
-                    conferenceData: {
-                        createRequest: {
-                            requestId: `meet-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-                            conferenceSolutionKey: { type: 'hangoutsMeet' },
-                        },
-                    },
-                }),
-            });
-            const data = await response.json();
-            if (!response.ok) {
-                return res.status(response.status).json({ status: 'error', message: data.error?.message || 'Google rechazó la creación del evento', details: data, hint: 'google_api_rejected' });
-            }
-            return res.json({
-                status: 'ok',
-                meetLink: data.hangoutLink || data.conferenceData?.entryPoints?.[0]?.uri || null,
-                eventId: data.id,
-                simulated: false,
-            });
-        } catch (error) {
-            console.error('[Google Meet Route] Error (per-user):', error);
-            return res.status(500).json({ status: 'error', message: error.message });
-        }
-    }
-
-    // 2) Camino servidor (cuenta única del consultorio vía env). Si no está
-    // configurado, googleService devuelve error explícito — nunca un link falso.
+    const { patientName, date, time, reason, durationMinutes = 30 } = req.body;
+    
     try {
         const gs = await googleService();
         const result = await gs.createGoogleMeetEvent({
@@ -1144,138 +1015,12 @@ router.post('/google/meet', async (req, res) => {
         if (result.status === 'ok') {
             res.json(result);
         } else {
-            res.status(503).json(result);
+            res.status(500).json(result);
         }
     } catch (error) {
         console.error('[Google Meet Route] Error:', error);
         res.status(500).json({ status: 'error', message: error.message });
     }
-});
-
-// ══════════════════════════════════════════════════════════════════
-// ZOOM (Server-to-Server OAuth): crea reuniones reales de teleconsulta.
-// Env requeridas: ZOOM_ACCOUNT_ID, ZOOM_CLIENT_ID, ZOOM_CLIENT_SECRET.
-// ══════════════════════════════════════════════════════════════════
-
-let _zoomTokenCache = { token: null, expiresAt: 0 };
-
-async function getZoomAccessToken() {
-    const accountId = process.env.ZOOM_ACCOUNT_ID;
-    const clientId = process.env.ZOOM_CLIENT_ID;
-    const clientSecret = process.env.ZOOM_CLIENT_SECRET;
-    if (!accountId || !clientId || !clientSecret) {
-        throw new Error('Zoom no configurado: faltan ZOOM_ACCOUNT_ID / ZOOM_CLIENT_ID / ZOOM_CLIENT_SECRET en el backend.');
-    }
-    if (_zoomTokenCache.token && Date.now() < _zoomTokenCache.expiresAt - 60000) {
-        return _zoomTokenCache.token;
-    }
-    const basic = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
-    const resp = await fetch(`https://zoom.us/oauth/token?grant_type=account_credentials&account_id=${encodeURIComponent(accountId)}`, {
-        method: 'POST',
-        headers: { 'Authorization': `Basic ${basic}` },
-    });
-    const data = await resp.json();
-    if (!resp.ok || !data.access_token) {
-        throw new Error(data.reason || data.error || 'Zoom OAuth falló: verificá credenciales Server-to-Server.');
-    }
-    _zoomTokenCache = { token: data.access_token, expiresAt: Date.now() + (data.expires_in || 3600) * 1000 };
-    return _zoomTokenCache.token;
-}
-
-router.get('/zoom/status', async (req, res) => {
-    const configured = Boolean(process.env.ZOOM_ACCOUNT_ID && process.env.ZOOM_CLIENT_ID && process.env.ZOOM_CLIENT_SECRET);
-    res.json({
-        status: 'ok',
-        configured,
-        detail: configured
-            ? 'Credenciales Zoom presentes. Se pueden crear reuniones.'
-            : 'Faltan ZOOM_ACCOUNT_ID / ZOOM_CLIENT_ID / ZOOM_CLIENT_SECRET en el backend. Creá una app Server-to-Server OAuth en Zoom Marketplace y cargá las credenciales.',
-    });
-});
-
-router.post('/zoom/meetings', async (req, res) => {
-    const { topic, start_time, duration = 30, agenda } = req.body;
-    try {
-        const token = await getZoomAccessToken();
-        const resp = await fetch('https://api.zoom.us/v2/users/me/meetings', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                topic: topic || 'Teleconsulta Fonoaudiológica',
-                type: 2,
-                start_time: start_time || undefined,
-                duration,
-                agenda: agenda || undefined,
-                settings: {
-                    join_before_host: true,
-                    waiting_room: false,
-                    mute_upon_entry: true,
-                    approval_type: 2,
-                },
-            }),
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-            return res.status(response_status(resp.status)).json({ status: 'error', message: data.message || 'Zoom rechazó la creación de la reunión', details: data });
-        }
-        res.json({
-            status: 'ok',
-            id: data.id,
-            join_url: data.join_url,
-            start_url: data.start_url,
-            password: data.password || null,
-            simulated: false,
-        });
-    } catch (e) {
-        console.error('[Zoom] Error:', e.message);
-        res.status(503).json({ status: 'error', message: e.message, hint: 'zoom_unconfigured' });
-    }
-});
-
-function response_status(s) { return (s >= 200 && s < 600) ? s : 500; }
-
-// Diagnóstico de la integración Google: dice QUÉ falta (env, tokens, refresh).
-router.get('/google/status', async (req, res) => {
-    const { userId } = req.query;
-    const envConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
-    const out = {
-        status: 'ok',
-        envConfigured,
-        envDetail: envConfigured
-            ? 'GOOGLE_CLIENT_ID/SECRET presentes (refresh de tokens habilitado).'
-            : 'Faltan GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET en el backend: el refresh automático de tokens NO va a funcionar.',
-        user: { connected: false, hasRefreshToken: false, expired: true, detail: 'Sin userId o sin fila en google_auth.' },
-    };
-    try {
-        if (userId) {
-            const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-            const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-            if (supabaseUrl && supabaseKey) {
-                const sb = createClient(supabaseUrl, supabaseKey);
-                const { data } = await sb.from('google_auth').select('access_token, refresh_token, expires_at').eq('user_id', userId).maybeSingle();
-                if (data?.access_token) {
-                    const expired = !data.expires_at || Date.now() >= new Date(data.expires_at).getTime() - 5 * 60 * 1000;
-                    out.user = {
-                        connected: true,
-                        hasRefreshToken: Boolean(data.refresh_token),
-                        expired,
-                        detail: !data.refresh_token
-                            ? 'Hay access_token pero SIN refresh_token: la conexión muere al expirar (~1h). Desconectá y volvé a conectar con "prompt=consent" para obtenerlo.'
-                            : expired && !envConfigured
-                                ? 'Token expirado y sin env para refrescar: reconectá tu cuenta de Google.'
-                                : expired
-                                    ? 'Token expirado pero refrescable.'
-                                    : 'Conectado y vigente.',
-                    };
-                } else {
-                    out.user.detail = 'No hay tokens guardados: tocá "Conectar Google" y aceptá los permisos de Calendar y Gmail.';
-                }
-            }
-        }
-    } catch (e) {
-        out.user.detail = `No se pudo leer google_auth: ${e.message}`;
-    }
-    res.json(out);
 });
 
 router.post('/google/calendar/sync', async (req, res) => {

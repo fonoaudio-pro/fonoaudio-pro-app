@@ -36,33 +36,18 @@ export class SessionService {
 
         // 2. Insert into the dedicated sessions table (Primary Source of Truth)
         const { data: { user } } = await supabase.auth.getUser();
-        const tableRow: Record<string, unknown> = {
-            id: newSession.id,
-            patient_id: newSession.patientId,
-            date: newSession.date,
-            summary: newSession.summary,
-            observations: newSession.observations,
-            next_action: newSession.nextAction,
-            status: newSession.status,
-            owner_id: user?.id || null,
-        };
-        // voice_self_rating vive en patients.history (jsonb) siempre; en la
-        // tabla sessions solo si la migración 20260919000000 ya corrió.
-        if (newSession.voice_self_rating != null) {
-            tableRow.voice_self_rating = newSession.voice_self_rating;
-        }
-        let { error: insertError } = await supabase
+        const { error: insertError } = await supabase
             .from('sessions')
-            .insert(tableRow);
-
-        // Si la columna voice_self_rating aún no existe (migración pendiente),
-        // reintentar sin ella: el dato queda igual en patients.history.
-        if (insertError && tableRow.voice_self_rating !== undefined) {
-            console.warn('[SessionService] voice_self_rating sin columna en sessions, reintentando sin ella:', insertError.message);
-            delete tableRow.voice_self_rating;
-            const retry = await supabase.from('sessions').insert(tableRow);
-            insertError = retry.error;
-        }
+            .insert({
+                id: newSession.id,
+                patient_id: newSession.patientId,
+                date: newSession.date,
+                summary: newSession.summary,
+                observations: newSession.observations,
+                next_action: newSession.nextAction,
+                status: newSession.status,
+                owner_id: user?.id || null,
+            });
 
         if (insertError) {
             console.error('Error inserting session into sessions table:', insertError);
@@ -265,14 +250,11 @@ export class SessionService {
         }
 
         // 5. Trigger HomeGuide draft generation via backend
-        // (el backend hidrata ficha/anamnesis/sesiones/evaluaciones; acá se manda el detalle de la sesión)
         try {
             await callBackend('/api/guides/generate-home-guide-draft', {
                 patientId: patient.id,
                 patientName: patient.name,
                 lastSessionSummary: session.summary,
-                sessionObjectives: session.objectives,
-                sessionObservations: session.observations,
                 diagnosis: patient.diagnosis,
                 age: patient.age
             });
