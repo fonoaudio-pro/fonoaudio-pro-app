@@ -13,6 +13,9 @@ const ClinicalPlanningModule: React.FC<Props> = ({ patient, onAnalysisComplete, 
     const [isLoading, setIsLoading] = useState(false);
     const [analysis, setAnalysis] = useState<ClinicalPlanningAnalysis | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [sources, setSources] = useState<Record<string, any> | null>(null);
+    const [rlsLimited, setRlsLimited] = useState(false);
+    const [engine, setEngine] = useState('');
 
     const runAnalysis = async () => {
         setIsLoading(true);
@@ -37,6 +40,9 @@ const ClinicalPlanningModule: React.FC<Props> = ({ patient, onAnalysisComplete, 
 
             const analysisData = result.analysis || result;
             setAnalysis(analysisData);
+            setSources(result.contextSources || null);
+            setRlsLimited(Boolean(result.rlsLimited));
+            setEngine(result.engine || '');
             onAnalysisComplete(analysisData);
             addToast?.({ message: 'Análisis clínico generado correctamente.', type: 'success' });
         } catch (err: any) {
@@ -137,6 +143,25 @@ const ClinicalPlanningModule: React.FC<Props> = ({ patient, onAnalysisComplete, 
 
             {analysis && (
                 <div className="space-y-6 animate-in zoom-in-95 duration-300">
+                    {/* Fuentes inyectadas al modelo: auditoría visible */}
+                    {(sources || engine) && (
+                        <div className="bg-slate-50 dark:bg-slate-800/60 p-3 rounded-xl border border-slate-200 dark:border-slate-700 text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="font-black uppercase tracking-wider">Datos usados por la IA{engine ? ` · ${engine}` : ''}:</span>
+                            {sources ? (
+                                <>
+                                    <span className={sources.hasAnamnesis ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>Anamnesis: {sources.hasAnamnesis ? 'sí' : 'NO'}</span>
+                                    <span className={sources.hasClinicalRecord ? 'text-emerald-600 font-bold' : 'text-rose-500 font-bold'}>Ficha: {sources.hasClinicalRecord ? 'sí' : 'NO'}</span>
+                                    <span>Sesiones: {sources.sessions ?? 0}</span>
+                                    <span>Documentos/estudios: {sources.documents ?? 0}</span>
+                                    <span>Hechos: {sources.clinicalFacts ?? 0}</span>
+                                    <span>Tests: {sources.testResults ?? 0}</span>
+                                </>
+                            ) : <span>análisis heredado (sin auditoría)</span>}
+                            {rlsLimited && (
+                                <span className="text-amber-600 font-bold">⚠ Sin SERVICE_ROLE en el backend: algunas fuentes pueden venir vacías por RLS.</span>
+                            )}
+                        </div>
+                    )}
                     <div className="flex justify-between items-center">
                         <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
                             <BrainCircuit className="text-blue-500" /> Resultado del Análisis Clínico

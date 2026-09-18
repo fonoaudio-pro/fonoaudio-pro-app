@@ -304,6 +304,12 @@ export interface Session {
   nextSteps?: string;
   homework?: string;
   materials?: string;
+  /**
+   * Autovaloración de la voz del paciente (1-10, 10 = mi mejor voz).
+   * Se toma al inicio de cada sesión; la sesión 1 es la línea de base
+   * y se compara con la sesión 8 (o la última) para medir evolución.
+   */
+  voice_self_rating?: number | null;
 }
 
 export interface Evaluation {

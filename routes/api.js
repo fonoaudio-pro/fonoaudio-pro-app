@@ -917,11 +917,19 @@ async function buildHomeGuideContext(patientId, body) {
             blocks.push(`[ANAMNESIS]\n${truncateCtx(typeof an.sections === 'string' ? an.sections : JSON.stringify(an.sections || {}), 900)}${an.notes ? `\nNotas: ${truncateCtx(an.notes, 400)}` : ''}`);
         }
 
-        const { data: sess } = await sb.from('sessions').select('date, objectives, observations, summary, homework').eq('patient_id', patientId).order('date', { ascending: false }).limit(3);
+        let sess = null;
+        try {
+            const r = await sb.from('sessions').select('*').eq('patient_id', patientId).order('date', { ascending: false }).limit(3);
+            sess = r.data;
+        } catch { sess = null; }
+        if ((!sess || !sess.length) && patient && Array.isArray(patient.history)) {
+            sess = patient.history.slice().sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))).slice(0, 3);
+        }
         if (sess && sess.length) {
-            blocks.push('[ÚLTIMAS SESIONES]\n' + sess.map(s =>
-                `• ${s.date || 's/fecha'}: obj=${truncateCtx(s.objectives || '', 250)} | obs=${truncateCtx(s.observations || s.summary || '', 300)} | hogar=${truncateCtx(s.homework || '', 200)}`
-            ).join('\n'));
+            blocks.push('[ÚLTIMAS SESIONES]\n' + sess.map(s => {
+                const rating = s.voice_self_rating != null ? ` | autovaloración voz=${s.voice_self_rating}/10` : '';
+                return `• ${s.date || 's/fecha'}${rating}: obj=${truncateCtx(s.objectives || '', 250)} | obs=${truncateCtx(s.observations || s.summary || '', 300)} | hogar=${truncateCtx(s.homework || '', 200)}`;
+            }).join('\n'));
         }
 
         const { data: facts } = await sb.from('clinical_facts').select('category, fact').eq('patient_id', patientId).eq('isResolved', false).limit(8);

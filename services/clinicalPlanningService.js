@@ -94,12 +94,18 @@ class ClinicalPlanningService {
     async _getSupabase() {
         if (!this.supabase) {
             const url = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+            // Service-role BYPASEA el RLS: sin ella, tablas como
+            // patient_documents (SELECT solo a authenticated) vuelven vacías.
+            this.usingServiceRole = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
             const key = process.env.SUPABASE_SERVICE_ROLE_KEY
                 || process.env.VITE_SUPABASE_ANON_KEY
                 || process.env.SUPABASE_ANON_KEY;
 
             if (!url || !key) {
                 throw new Error('Supabase credentials (VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY) are not configured in environment variables.');
+            }
+            if (!this.usingServiceRole) {
+                console.warn('[ClinicalPlanningService] Sin SUPABASE_SERVICE_ROLE_KEY: las lecturas caen bajo RLS y varias fuentes pueden venir vacías (documentos, anamnesis, hechos).');
             }
 
             this.supabase = createClient(url, key);
@@ -169,18 +175,26 @@ class ClinicalPlanningService {
                 // analysis_history table may not exist yet
             }
 
-            // 4b. Fetch recent sessions (últimas 5, con objetivos y observaciones)
+            // 4b. Fetch recent sessions (select * a propósito: sobrevive a
+            // columnas nuevas como voice_self_rating aunque falte migración)
             let recentSessions = [];
             try {
                 const { data: sData } = await supabase
                     .from('sessions')
-                    .select('date, type, status, objectives, observations, summary, plan_updates, next_action, homework')
+                    .select('*')
                     .eq('patient_id', patientId)
                     .order('date', { ascending: false })
                     .limit(5);
                 recentSessions = sData || [];
             } catch {
-                // sessions table may not exist yet
+                // sessions table may not exist yet → fallback a history del paciente
+                try {
+                    const hist = Array.isArray(patient.history) ? patient.history : [];
+                    recentSessions = hist
+                        .slice()
+                        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || '')))
+                        .slice(0, 5);
+                } catch { /* sin sesiones */ }
             }
 
             // 4c. Fetch unresolved clinical facts (hechos objetivos ya extraídos)
@@ -284,8 +298,16 @@ Alertas: ${Array.isArray(patient.alerts) ? patient.alerts.join(', ') : (patient.
             // Sesiones recientes - qué se trabajó y qué sigue
             if (recentSessions.length > 0) {
                 const sParts = [`[ÚLTIMAS SESIONES (${recentSessions.length})]`];
+                const ratings = recentSessions
+                    .filter(s => s.voice_self_rating != null)
+                    .map(s => `${s.date || '?'}: ${s.voice_self_rating}/10`)
+                    .reverse();
+                if (ratings.length > 0) {
+                    sParts.push(`Autovaloración de la voz (tendencia): ${ratings.join(' → ')}`);
+                }
                 for (const s of recentSessions) {
                     const bits = [`Fecha: ${s.date || 's/fecha'} (${s.type || 'sesión'}, ${s.status || ''})`];
+                    if (s.voice_self_rating != null) bits.push(`Autovaloración voz: ${s.voice_self_rating}/10`);
                     if (s.objectives) bits.push(`Objetivos: ${truncate(s.objectives, 400)}`);
                     if (s.observations) bits.push(`Observaciones: ${truncate(s.observations, 500)}`);
                     if (s.summary) bits.push(`Resumen: ${truncate(s.summary, 400)}`);
@@ -449,6 +471,7 @@ Alertas: ${Array.isArray(patient.alerts) ? patient.alerts.join(', ') : (patient.
             return {
                 status: 'ok',
                 engine,
+                rlsLimited: !this.usingServiceRole,
                 contextSources: {
                     sessions: recentSessions.length,
                     clinicalFacts: clinicalFacts.length,
